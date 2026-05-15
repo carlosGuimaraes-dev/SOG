@@ -1,0 +1,28 @@
+version: 1
+agent:
+  name: ceo
+  system_prompt_path: ../prompts/ceo.md
+  tools:
+    - "kimi_cli.tools.agent:Agent"
+    - "kimi_cli.tools.ask_user:AskUserQuestion"
+    - "kimi_cli.tools.todo:SetTodoList"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:WriteFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.think:Think"
+  subagents:
+    cto:
+      path: ../agents/cto.yaml
+      description: "Arquitetura, decisões técnicas e decomposição de tarefas em plano executável"
+    dev_senior:
+      path: ../agents/dev-senior.yaml
+      description: "Implementação de código: features, correções, refatorações"
+    qa:
+      path: ../agents/qa.yaml
+      description: "Validação funcional, execução de testes e relatório de bugs"
+    reviewer:
+      path: ../agents/reviewer.yaml
+      description: "Code review: qualidade, segurança, consistência e padrões do projeto"
+    docs_writer:
+      path: ../agents/docs-writer.yaml
+      description: "Redação de documentação técnica: README, API, changelog, docstrings"

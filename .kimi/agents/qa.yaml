@@ -1,0 +1,10 @@
+version: 1
+agent:
+  name: qa
+  system_prompt_path: ../prompts/qa.md
+  tools:
+    - "kimi_cli.tools.shell:Shell"
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:Glob"
+    - "kimi_cli.tools.file:Grep"
+    - "kimi_cli.tools.think:Think"
