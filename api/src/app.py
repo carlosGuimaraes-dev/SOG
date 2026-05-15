@@ -71,7 +71,17 @@ async def generic_exception_handler(request: Request, exc: Exception):
 # Health check (público, sem auth)
 @app.get("/health", tags=["health"])
 def health():
-    return {"status": "ok", "version": "1.1.0"}
+    db_ok = True
+    try:
+        with db.get_conn() as conn:
+            conn.execute("SELECT 1").fetchone()
+    except Exception:
+        db_ok = False
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "version": "1.1.0",
+        "database": "ok" if db_ok else "error",
+    }
 
 
 # Registro de rotas

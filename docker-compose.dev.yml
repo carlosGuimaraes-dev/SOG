@@ -1,0 +1,45 @@
+version: "3.8"
+
+# Ambiente de desenvolvimento local
+# Uso: docker-compose -f docker-compose.dev.yml up
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: custas-api-dev
+    env_file: .env
+    volumes:
+      - ./dados:/dados
+      - ./api/src:/app/src:ro
+      - ./agente/src:/app/agente_src:ro
+    ports:
+      - "8000:8000"
+    command: uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  frontend:
+    image: node:20-alpine
+    container_name: custas-frontend-dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev -- --host"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: custas-nginx-dev
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./dados/screenshots:/usr/share/nginx/html/screenshots:ro
+    depends_on:
+      - api
+      - frontend
+    restart: unless-stopped

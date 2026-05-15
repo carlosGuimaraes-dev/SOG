@@ -15,7 +15,9 @@ class TestHealth:
     def test_health_publico(self):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
+        assert resp.json()["status"] in ("ok", "degraded")
+        assert "version" in resp.json()
+        assert "database" in resp.json()
 
 
 class TestAuth:
