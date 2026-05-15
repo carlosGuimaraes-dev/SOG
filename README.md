@@ -71,25 +71,7 @@ EMAIL_DESTINO=...
 
 > Para gerar o hash bcrypt: `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`
 
-### 3. Docker (Produção)
-
-```bash
-docker-compose up -d --build
-```
-
-Acesse: `http://localhost`
-
-### 4. Docker Dev (Hot reload)
-
-```bash
-docker-compose -f docker-compose.dev.yml up
-```
-
-- API: `http://localhost:8000`
-- Frontend: `http://localhost:3000`
-- Nginx: `http://localhost`
-
-### 5. Dev Local (sem Docker)
+### 3. Dev Local (sem Docker)
 
 **API + Agente:**
 ```bash
@@ -107,6 +89,53 @@ uvicorn src.app:app --reload --port 8000
 cd frontend
 npm install
 npm run dev
+```
+
+## Subir o Projeto
+
+### Docker (Produção)
+
+```bash
+docker-compose up -d --build
+```
+
+### Docker Dev (Hot reload)
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d --build
+```
+
+| Serviço | URL |
+|---------|-----|
+| Dashboard | http://localhost |
+| API direta | http://localhost:8000 |
+| Swagger | http://localhost:8000/docs |
+
+### Login
+
+Como o `DASHBOARD_SENHA_HASH` no `.env` está com placeholder inválido, o sistema entra em **modo desenvolvimento**:
+
+- **Usuário:** `admin`
+- **Senha:** qualquer coisa
+
+> Para definir uma senha real, gere o hash:  
+> `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`  
+> e cole no `.env` como `DASHBOARD_SENHA_HASH`.
+
+### Comandos úteis
+
+```bash
+# Ver status dos containers
+docker-compose -f docker-compose.dev.yml ps
+
+# Logs em tempo real
+docker-compose -f docker-compose.dev.yml logs -f api
+
+# Parar tudo
+docker-compose -f docker-compose.dev.yml down
+
+# Rebuildar só a API
+docker-compose -f docker-compose.dev.yml up -d --build api
 ```
 
 ## Testes
