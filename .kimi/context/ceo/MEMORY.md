@@ -8,65 +8,39 @@
 
 ## Projetos ativos
 
-<!-- Exemplo de entrada:
-### [Nome do projeto]
-- **Iniciado em**: YYYY-MM-DD
-- **Stack**: ...
-- **Status**: em andamento / pausado / concluído
-- **Última ação**: ...
-- **Próximo passo**: ...
--->
-
-_Nenhum projeto registrado ainda._
+### SOG — Sistema de Ordem de Guias (Custas Processuais TJDFT)
+- **Iniciado em:** 2026-05-15
+- **Stack:** Python 3.12 + Playwright (agente), FastAPI + SQLite (API), React 18 + Vite + Tailwind (frontend), Docker Compose + Nginx (infra)
+- **Status:** em andamento — code review enterprise-grade concluído
+- **Última ação:** Code review completo em 4 waves (Agente, API, Frontend, Cross-cutting). Relatório enterprise-grade consolidado e entregue.
+- **Próximo passo:** Correção dos 15 bloqueadores críticos identificados no relatório. Aguardando direção do usuário.
 
 ---
 
 ## Decisões estratégicas tomadas
 
-<!-- Decisões que afetam múltiplas tarefas futuras.
-Exemplo:
-- 2024-01-15: Decidido usar PostgreSQL em vez de MongoDB para todos os
-  projetos deste cliente. Motivo: requisito de relatórios relacionais.
--->
-
-_Nenhuma decisão registrada ainda._
+- **2026-05-15:** Code review do SOG revelou 98 issues (15 críticas, 38 altas, 29 médias, 16 baixas). Veredicto global: REPROVADO para produção. Correção dos bloqueadores é pré-requisito para qualquer deploy.
+- **2026-05-15:** Identificada necessidade de migração de SQLite para PostgreSQL como deuda técnica estrutural (race conditions, HA, backups).
+- **2026-05-15:** Armazenamento de JWT em localStorage foi classificado como bloqueador de segurança. Migração para httpOnly cookies é mandatória antes de produção.
 
 ---
 
 ## Padrões de delegação aprendidos
 
-<!-- O que funcionou bem / mal ao delegar para cada agente.
-Exemplo:
-- dev_senior performa melhor quando o CTO especifica interfaces antes da
-  implementação. Sem isso, tende a tomar decisões de arquitetura que
-  conflitam com o plano.
-- QA precisa sempre do caminho dos arquivos alterados no prompt —
-  sem isso, busca no codebase inteiro e perde tempo.
--->
-
-_Nenhum padrão registrado ainda._
+- **Reviewer em background:** Funciona bem para tarefas longas e independentes, mas o timeout padrão (15min) pode ser insuficiente para reviews extensos. Recomenda-se usar timeout=1800s.
+- **Reviewer em foreground:** Mais confiável para garantir entrega quando o resultado é bloqueante. Usar para waves finais ou quando o background falhar.
+- **Docs_writer:** Não performa bem com prompts extremamente longos (>3000 palavras de contexto). Para documentos enterprise-grade extensos, o CEO deve consolidar diretamente a partir dos outputs dos agents especializados.
+- **Code review enterprise-grade:** Dividir em waves por módulo (Agente, API, Frontend, Infra) e depois consolidar em documento único é a abordagem mais eficaz. Cada wave deve ter critérios explícitos e formato de saída padronizado.
 
 ---
 
 ## Preferências do usuário/cliente
 
-<!-- Tom, prioridades, restrições de negócio que o usuário sinalizou.
-Exemplo:
-- Prefere relatórios de status concisos, sem detalhes técnicos.
-- Prazo é mais importante que cobertura de testes neste projeto.
-- Não usar dependências com licença GPL.
--->
-
-_Nenhuma preferência registrada ainda._
+- Solicitou relatório "enterprise grade" para code review completo do projeto.
+- Sistema lida com dados judiciais sensíveis (processos, CPF/CNPJ, valores) — segurança e LGPD são prioridades absolutas.
 
 ---
 
 ## Log de entregas
 
-<!-- Registro resumido do que foi entregue.
-Exemplo:
-- 2024-01-20: Módulo de autenticação JWT — aprovado por QA e reviewer.
-- 2024-01-22: Documentação da API — revisada e publicada.
--->
-
-_Nenhuma entrega registrada ainda._
+- **2026-05-15:** Code Review Enterprise-Grade do SOG — 4 waves, 61 artefatos revisados, 98 issues identificados. Relatório consolidado em `docs/code-review-enterprise-report.md`. Todos os módulos reprovados (bloqueadores críticos presentes).

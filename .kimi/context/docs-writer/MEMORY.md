@@ -8,51 +8,31 @@
 
 ## Convenções de documentação do projeto
 
-<!-- Tom, formato e padrões adotados neste projeto específico.
-Exemplo:
-- Idioma: português para docs internas, inglês para docs públicas
-- Formato de API: Markdown com exemplos cURL e Python
-- Estilo de changelog: Keep a Changelog (https://keepachangelog.com)
-- Docstrings: Google style (Args, Returns, Raises, Example)
--->
-
-_Nenhuma convenção registrada ainda._
+- Idioma: português para documentação interna/enterprise
+- Formato: Markdown com tabelas extensivas para rastreabilidade
+- Estilo: tom enterprise — objetivo, quantificado, sem alarmismo mas sem minimizar riscos
+- IDs de issue: prefixo por severidade (CRIT-, HIGH-, MED-, LOW-) + categoria (SEC, ARC, PERF, DEV, FE)
 
 ---
 
 ## Documentação existente (mapa)
 
-<!-- O que existe, onde está e quando foi atualizado por último.
-Exemplo:
-- `README.md` — visão geral + instalação (atualizado 2024-01-20)
-- `docs/api.md` — endpoints REST (desatualizado — não cobre /auth/token)
-- `CHANGELOG.md` — histórico de versões (parado na v0.3.0)
--->
-
-_Nenhum documento mapeado ainda._
+- `ENTERPRISE_CODE_REVIEW_REPORT.md` — Relatório enterprise consolidado de 4 waves de code review (2026-05-15)
+  - Seções: Executive Summary, Risk Heat Map, Critical Issues (13), High Issues (15), Medium/Low por categoria, Positive Findings, Strategic Roadmap (Immediate/Short-term/Medium-term), Compliance & Governance, Appendices (Scorecards, Matriz de Responsabilidade, Referências)
 
 ---
 
 ## Lacunas de documentação identificadas
 
-<!-- Partes do sistema sem documentação ou com doc desatualizada.
-Exemplo:
-- Módulo `notifications/` não tem README nem docstrings
-- Variável de ambiente `SMTP_PORT` usada mas não listada no .env.example
-- Endpoint DELETE /users/{id} sem documentação de comportamento em cascata
--->
-
-_Nenhuma lacuna registrada ainda._
+- README.md principal do projeto não documenta riscos de segurança conhecidos
+- Ausência de guia de contribuição (CONTRIBUTING.md)
+- Ausência de CHANGELOG.md
+- Ausência de ADRs para decisões arquiteturais críticas (SQLite vs PostgreSQL, localStorage vs httpOnly cookies)
+- Documentação de deploy não cobre hardening de containers
+- Variáveis de ambiente não documentam riscos de segurança associados
 
 ---
 
 ## Histórico de documentações produzidas
 
-<!-- Registro do que foi criado/atualizado.
-Exemplo:
-- 2024-01-20: README.md — seção de instalação e configuração
-- 2024-01-22: docs/api.md — endpoints de autenticação JWT
-- 2024-01-25: CHANGELOG.md — release v1.0.0
--->
-
-_Nenhuma documentação registrada ainda._
+- 2026-05-15: `ENTERPRISE_CODE_REVIEW_REPORT.md` — consolidação enterprise-grade de 4 waves de code review (Agente, API, Frontend, Infra)
