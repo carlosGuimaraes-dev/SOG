@@ -170,6 +170,75 @@ class TestLLMFallback:
         r = extrair_sentenca(dispositivo_civel, area="civel")
         assert r["_metodo"] == "regex"
 
+    @patch("modulos.extrator_sentenca._chamar_llm")
+    def test_llm_preenche_campos_faltantes(self, mock_llm):
+        """Quando regex acha sucumbente mas não valor, LLM completa."""
+        from modulos.extrator_sentenca import extrair_sentenca
+        mock_llm.return_value = {
+            "sucumbente_nome": "",
+            "valor_condenacao": "7.500,00",
+            "honorarios_percentual": "10",
+        }
+        # Regex vai achar sucumbente mas não valor → score < 0.5
+        texto = "CONDENO JOÃO SILVA ao pagamento."
+        r = extrair_sentenca(texto, area="civel")
+        # Sucumbente veio do regex, valor do LLM
+        assert r["sucumbente_nome"] == "JOÃO SILVA"
+        assert r["valor_condenacao"] == "7.500,00"
+        assert r["_metodo"] == "llm"
+
+    @patch("modulos.extrator_sentenca._chamar_llm")
+    def test_forcar_llm_mesmo_com_score_alto(self, mock_llm, dispositivo_civel):
+        from modulos.extrator_sentenca import extrair_sentenca
+        mock_llm.return_value = {
+            "sucumbente_nome": "NOME CORRIGIDO PELO LLM",
+            "valor_condenacao": "99.999,99",
+            "honorarios_percentual": "20",
+        }
+        r = extrair_sentenca(dispositivo_civel, area="civel", forcar_llm=True)
+        # Com forcar_llm=True, LLM sobrescreve tudo
+        assert r["sucumbente_nome"] == "NOME CORRIGIDO PELO LLM"
+        assert r["valor_condenacao"] == "99.999,99"
+        assert r["honorarios_percentual"] == "20"
+        assert r["_metodo"] == "llm"
+
+    @patch("modulos.extrator_sentenca._OPENAI_DISPONIVEL", False)
+    def test_llm_indisponivel_falha_silenciosa(self):
+        """Se OpenAI não instalado, extrair_sentenca continua com regex."""
+        from modulos.extrator_sentenca import _chamar_llm
+        resultado = _chamar_llm("texto", "civel")
+        assert resultado == {}
+
+    def test_chamar_llm_mock_openai(self):
+        """Testa _chamar_llm com mock do cliente OpenAI."""
+        from unittest.mock import MagicMock
+        from modulos.extrator_sentenca import _chamar_llm
+
+        mock_resposta = MagicMock()
+        mock_resposta.choices = [MagicMock()]
+        mock_resposta.choices[0].message.content = '{"sucumbente_nome": "EMPRESA TESTE", "sucumbente_tipo": "réu", "valor_condenacao": "15.000,00", "honorarios_percentual": "10", "suspensao_exigibilidade": false}'
+
+        mock_cliente = MagicMock()
+        mock_cliente.chat.completions.create.return_value = mock_resposta
+
+        # Cria módulo openai mock para substituir o None real
+        import sys
+        from types import ModuleType
+        mock_openai_mod = ModuleType("openai")
+        mock_openai_mod.OpenAI = lambda **kwargs: mock_cliente
+        sys.modules["openai"] = mock_openai_mod
+
+        with patch("modulos.extrator_sentenca._OPENAI_DISPONIVEL", True):
+            with patch("modulos.extrator_sentenca.OPENAI_API_KEY", "fake-key"):
+                with patch("modulos.extrator_sentenca.openai", mock_openai_mod):
+                    r = _chamar_llm("dispositivo de teste", "civel")
+
+        assert r["sucumbente_nome"] == "EMPRESA TESTE"
+        assert r["sucumbente_tipo"] == "réu"
+        assert r["valor_condenacao"] == "15.000,00"
+        assert r["honorarios_percentual"] == "10"
+        assert r["suspensao_exigibilidade"] is False
+
 
 # ========================================================================
 # TESTES - Cache / Aprendizado

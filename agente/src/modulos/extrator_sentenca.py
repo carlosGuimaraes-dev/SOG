@@ -10,8 +10,21 @@ Regras de custas:
   - Se réu perdeu (condenado): paga custas finais + custas iniciais
 """
 import re
+import json
 import hashlib
 from typing import List, Dict, Any, Optional
+
+try:
+    import openai
+    _OPENAI_DISPONIVEL = True
+except ImportError:
+    openai = None
+    _OPENAI_DISPONIVEL = False
+
+try:
+    from config import OPENAI_API_KEY, OPENAI_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE
+except ImportError:
+    from agente.src.config import OPENAI_API_KEY, OPENAI_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE
 
 
 # ========================================================================
@@ -178,9 +191,87 @@ def extrair_sentenca_regex(texto: str, area: str = "civel") -> Dict[str, Any]:
 # CAMADA 2: LLM Fallback
 # ========================================================================
 
+_PROMPT_CIVEL = """Você é um assistente jurídico especializado em extrair dados do DISPOSITIVO de sentenças judiciais brasileiras para preenchimento do sistema SISTJWEB de custas processuais.
+
+Extraia do texto abaixo APENAS estes campos JSON:
+- sucumbente_nome: nome da parte condenada (quem perdeu a ação e deve pagar)
+- sucumbente_tipo: "autor" ou "réu" (quem perdeu)
+- valor_condenacao: valor monetário da condenação (ex: "10.158,00")
+- honorarios_percentual: percentual de honorários de sucumbência (ex: "10")
+- suspensao_exigibilidade: true se houver deferimento de gratuidade de justiça (art. 98, § 3º CPC), false caso contrário
+
+Regras:
+1. O sucumbente é quem foi CONDENADO no dispositivo (ex: "CONDENO X ao pagamento").
+2. Se a sentença condena o autor, sucumbente_tipo = "autor". Se condena o réu, = "réu".
+3. Ignore condenações de custas processuais ou honorários advocatícios — foque na condenação principal.
+4. Retorne APENAS o JSON, sem markdown, sem explicações.
+
+Texto do dispositivo:
+---
+{texto}
+---
+"""
+
+_PROMPT_TRABALHISTA = """Você é um assistente jurídico especializado em extrair dados do DISPOSITIVO de sentenças trabalhistas brasileiras para preenchimento do sistema SISTJWEB de custas processuais.
+
+Extraia do texto abaixo APENAS estes campos JSON:
+- sucumbente_nome: nome da parte condenada (reclamada/empregadora)
+- sucumbente_tipo: sempre "reclamada"
+- valor_condenacao: valor total da condenação (ex: "25.000,00")
+- honorarios_percentual: percentual de honorários de sucumbência (ex: "10")
+- suspensao_exigibilidade: true se houver gratuidade de justiça deferida, false caso contrário
+
+Regras:
+1. O sucumbente em ação trabalhista é sempre a reclamada (empregadora).
+2. Valor da condenação = total de verbas condenatórias (não inclua honorários).
+3. Retorne APENAS o JSON, sem markdown, sem explicações.
+
+Texto do dispositivo:
+---
+{texto}
+---
+"""
+
+
 def _chamar_llm(texto: str, area: str) -> Dict[str, Any]:
-    """Chama LLM para extrair campos quando regex falha. Placeholder."""
-    raise NotImplementedError("LLM não implementado ainda")
+    """Chama LLM (OpenAI) para extrair campos quando regex falha.
+    
+    Retorna dict com os mesmos campos do regex. Se API indisponível,
+    retorna dict vazio (código chamador ignora silenciosamente).
+    """
+    if not _OPENAI_DISPONIVEL or not OPENAI_API_KEY:
+        return {}
+
+    prompt = _PROMPT_CIVEL if area == "civel" else _PROMPT_TRABALHISTA
+    prompt = prompt.format(texto=texto[:4000])  # limite de contexto
+
+    try:
+        cliente = openai.OpenAI(api_key=OPENAI_API_KEY)
+        resposta = cliente.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": "Você é um extrator jurídico especializado. Responda apenas em JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=LLM_MAX_TOKENS,
+            temperature=LLM_TEMPERATURE,
+            response_format={"type": "json_object"},
+        )
+        conteudo = resposta.choices[0].message.content or "{}"
+        llm_json = json.loads(conteudo)
+
+        # Normaliza campos
+        resultado = {
+            "sucumbente_nome": str(llm_json.get("sucumbente_nome", "")).strip(),
+            "sucumbente_tipo": str(llm_json.get("sucumbente_tipo", "")).strip().lower(),
+            "valor_condenacao": str(llm_json.get("valor_condenacao", "")).strip(),
+            "honorarios_percentual": str(llm_json.get("honorarios_percentual", "")).strip(),
+            "suspensao_exigibilidade": bool(llm_json.get("suspensao_exigibilidade", False)),
+        }
+        return resultado
+    except Exception:
+        # Falha silenciosa — código chamador mantém o que regex conseguiu
+        return {}
 
 
 def extrair_sentenca(texto: str, area: str = "civel", forcar_llm: bool = False) -> Dict[str, Any]:

@@ -66,3 +66,9 @@ except OSError:
 HEADLESS = os.getenv("HEADLESS", "true").lower() in ("1", "true", "yes")
 MAX_TENTATIVAS = int(os.getenv("MAX_TENTATIVAS", "3"))
 TIMEOUT_PADRAO = int(os.getenv("TIMEOUT_PADRAO", "30000"))
+
+# LLM (OpenAI) — usado como fallback quando regex não consegue extrair
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "500"))
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
