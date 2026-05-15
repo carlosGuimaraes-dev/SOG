@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/src/ ./src/
 COPY agente/src/ ./agente_src/
-ENV PYTHONPATH=/app/agente_src
+ENV PYTHONPATH=/app/src:/app/agente_src
 
 EXPOSE 8000
 

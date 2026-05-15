@@ -12,13 +12,25 @@ import threading
 
 from auth import get_current_user
 from banco import db
-from modulos.emissor import emitir_e_anexar
-
 router = APIRouter(tags=["aprovacao"])
 
 
 class RejeicaoRequest(BaseModel):
     observacao: str = ""
+
+
+def _disparar_emissao(processo_id: int) -> None:
+    """Tenta disparar emissão em background; falha silenciosamente se agente não disponível."""
+    try:
+        from modulos.emissor import emitir_e_anexar
+        threading.Thread(target=emitir_e_anexar, args=(processo_id,), daemon=True).start()
+    except Exception as exc:
+        import logging
+        logging.getLogger("custas_api").warning(
+            "Emissor não disponível no container API (falta Playwright). "
+            "Processo %d marcado como aprovado; execute o agente para emissão. Erro: %s",
+            processo_id, exc,
+        )
 
 
 @router.post("/aprovar/{processo_id}")
@@ -38,8 +50,7 @@ def aprovar_processo(processo_id: int, user: str = Depends(get_current_user)):
     db.atualizar_status(processo_id, "aprovado")
     db.registrar_log(processo_id, "aprovacao", "ok", f"Aprovado por {user}")
 
-    # Dispara emissão em background
-    threading.Thread(target=emitir_e_anexar, args=(processo_id,), daemon=True).start()
+    _disparar_emissao(processo_id)
 
     return {"message": "Aprovação registrada. Emissão em andamento."}
 

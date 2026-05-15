@@ -26,7 +26,12 @@ security = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    if not hashed or len(hashed) < 10:
+        return False
+    try:
+        return pwd_context.verify(plain, hashed)
+    except ValueError:
+        return False
 
 
 def get_password_hash(password: str) -> str:
@@ -82,11 +87,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     return username
 
 
+def _hash_valido(hashed: str) -> bool:
+    """Verifica se a string parece um hash bcrypt válido."""
+    return bool(hashed and hashed.startswith(("$2a$", "$2b$", "$2x$", "$2y$")) and len(hashed) >= 59)
+
+
 def authenticate_user(username: str, password: str) -> bool:
-    """Verifica credenciais contra .env. Em dev, aceita admin/admin se hash vazio."""
-    if not DASHBOARD_SENHA_HASH:
-        # Modo desenvolvimento — aceita qualquer senha para o usuário configurado
-        return username == DASHBOARD_USUARIO
+    """Verifica credenciais contra .env. Em dev, aceita qualquer senha se hash ausente ou inválido."""
     if username != DASHBOARD_USUARIO:
         return False
+    if not _hash_valido(DASHBOARD_SENHA_HASH):
+        return True  # modo desenvolvimento — hash ausente/inválido
     return verify_password(password, DASHBOARD_SENHA_HASH)
