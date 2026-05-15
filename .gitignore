@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+.envrc
 
 # Python
 __pycache__/
@@ -10,32 +11,10 @@ __pycache__/
 *.so
 .venv/
 venv/
-
-# Node
-node_modules/
-dist/
-
-# Dados
-*.db
-*.sqlite
-*.sqlite3
-dados/screenshots/
-dados/demonstrativos/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Byte-compiled / optimized / DLL files
-*.py[codz]
-
-# Distribution / packaging
+env/
+ENV/
+env.bak/
+venv.bak/
 .Python
 build/
 develop-eggs/
@@ -54,11 +33,32 @@ share/python-wheels/
 .installed.cfg
 *.egg
 
-# Installer logs
+# Node
+node_modules/
+
+# Dados do projeto
+dados/screenshots/
+dados/demonstrativos/
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Testes / Cobertura
 htmlcov/
 .tox/
 .nox/
@@ -73,39 +73,21 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Translations
-*.mo
-*.pot
-
-# Django / Flask
-*.log
-local_settings.py
-
-# Scrapy
-.scrapy
-
-# Sphinx
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
+# Ferramentas
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+.ruff_cache/
+.pypirc
 
 # pyenv
 .python-version
 
 # pipenv
 Pipfile.lock
-
-# UV
-uv.lock
 
 # poetry
 poetry.lock
@@ -118,42 +100,10 @@ poetry.toml
 # pixi
 .pixi
 
-# PEP 582
-__pypackages__/
+# Jupyter
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
 
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath
-*.sage.py
-
-# Spyder
-.spyderproject
-.spyproject
-
-# Rope
-.ropeproject
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre
-.pyre/
-
-# pytype
-.pytype/
-
-# Cython
-cython_debug/
-
-# Abstra
-.abstra/
-
-# Ruff
-.ruff_cache/
-
-# PyPI
-.pypirc
+# Streamlit
+.streamlit/secrets.toml
