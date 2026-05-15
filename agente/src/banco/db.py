@@ -14,6 +14,7 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 def _init_db():
     """Inicializa o banco com o schema se ainda não existir."""
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH, timeout=30) as conn:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         conn.commit()

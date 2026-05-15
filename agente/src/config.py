@@ -40,7 +40,17 @@ SMTP_SENHA = os.getenv("SMTP_SENHA", "")
 EMAIL_DESTINO = os.getenv("EMAIL_DESTINO", "")
 
 # Caminhos
-DB_PATH = os.getenv("DB_PATH", str(PROJECT_ROOT / "dados" / "custas.db"))
+_db_path_env = os.getenv("DB_PATH", "")
+if _db_path_env:
+    DB_PATH = _db_path_env
+    # Se o path absoluto não for acessível (ex: /dados em dev local), fallback para relativo
+    try:
+        Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        DB_PATH = str(PROJECT_ROOT / "dados" / "custas.db")
+else:
+    DB_PATH = str(PROJECT_ROOT / "dados" / "custas.db")
+
 DADOS_DIR = Path(DB_PATH).parent
 SCREENSHOTS_DIR = DADOS_DIR / "screenshots"
 DEMONSTRATIVOS_DIR = DADOS_DIR / "demonstrativos"
