@@ -56,8 +56,8 @@ export default function Fila() {
           {toasts.map((t) => (
             <div
               key={t.id}
-              className={`rounded-lg px-4 py-3 text-sm text-white shadow-lg cursor-pointer ${
-                t.type === 'error' ? 'bg-destructive' : t.type === 'success' ? 'bg-success' : 'bg-primary'
+              className={`rounded-lg px-4 py-3 text-sm shadow-lg cursor-pointer ${
+                t.type === 'error' ? 'bg-destructive text-destructive-foreground' : t.type === 'success' ? 'bg-success text-success-foreground' : 'bg-primary text-primary-foreground'
               }`}
               onClick={() => removeToast(t.id)}
             >
