@@ -1,23 +1,189 @@
 """
 Automação do PJE TJDFT.
-- Login
+- Login com tratamento de iframe
 - Coleta de lista de processos por etiqueta
-- Coleta de documentos e textos
+- Coleta de documentos e textos (com visualizador em iframe/popup)
 - Anexar demonstrativo PDF
+
+Seletores baseados na estrutura RichFaces/JSF do PJE:
+  • tabelas: .rich-table, .rich-table-row, .rich-table-cell
+  • menus: .menu-lateral, .item-menu, links com textos fixos
+  • formulários: inputs com name/id gerados pelo JSF (ex: formulario:username)
 """
 import re
-from typing import List, Dict, Any, Optional
-from playwright.sync_api import sync_playwright, Page, Browser, TimeoutError as PlaywrightTimeout
+from typing import List, Dict, Any, Optional, Tuple
+from playwright.sync_api import sync_playwright, Page, Browser, FrameLocator, TimeoutError as PlaywrightTimeout
 
 from config import PJE_URL, PJE_USUARIO, PJE_SENHA, PJE_ETIQUETA, HEADLESS, TIMEOUT_PADRAO
 from utils.logger import info, erro, aviso
 from banco import db
 
 
+# ─────────────────────────────────────────────────────────────
+# CONSTANTES / UTILIDADES
+# ─────────────────────────────────────────────────────────────
+
+# Regex CNJ robusto: aceita formatado (NNNNNNN-NN.NNNN.N.NN.NNNN) ou
+# cru (20 dígitos). Captura grupos para reconstrução se necessário.
+_RE_CNJ_FORMATADO = re.compile(
+    r"\b(\d{7})[-.]?(\d{2})[-.]?(\d{4})[-.]?(\d)[-.]?(\d{2})[-.]?(\d{4})\b"
+)
+_RE_CNJ_CRU = re.compile(r"\b(\d{20})\b")
+
+
 def _formatar_numero_processo(numero: str) -> str:
-    """Remove formatação do número CNJ."""
+    """Remove formatação do número CNJ, retornando 20 dígitos."""
     return re.sub(r"\D", "", numero)
 
+
+def _extrair_numeros_processo(html: str) -> List[str]:
+    """Extrai todos os números CNJ do HTML (formatados ou não)."""
+    encontrados: set = set()
+    # Tenta primeiro o padrão formatado
+    for m in _RE_CNJ_FORMATADO.finditer(html):
+        cru = "".join(m.groups())
+        if len(cru) == 20:
+            encontrados.add(cru)
+    # Fallback: números crús de 20 dígitos
+    for m in _RE_CNJ_CRU.finditer(html):
+        cru = m.group(1)
+        if cru not in encontrados:
+            encontrados.add(cru)
+    return sorted(encontrados)
+
+
+# ─────────────────────────────────────────────────────────────
+# FUNÇÕES AUXILIARES RESILIENTES
+# ─────────────────────────────────────────────────────────────
+
+def _tentar_seletores(page_or_locator, seletores: List[str], **kwargs) -> bool:
+    """
+    Tenta cada seletor da lista até encontrar um elemento visível.
+    Retorna True se algum for encontrado.
+    """
+    for sel in seletores:
+        try:
+            if page_or_locator.locator(sel).first.is_visible(timeout=2000):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _safe_click(page: Page, seletores: List[str], timeout: int = 10000) -> bool:
+    """
+    Clica no primeiro seletor visível da lista.
+    Útil quando o DOM varia entre versões do PJE.
+    """
+    for sel in seletores:
+        try:
+            loc = page.locator(sel)
+            if loc.count() > 0:
+                loc.first.click(timeout=timeout)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _safe_fill(page: Page, seletores: List[str], valor: str, timeout: int = 10000) -> bool:
+    """Preenche o primeiro campo visível encontrado entre os seletores."""
+    for sel in seletores:
+        try:
+            loc = page.locator(sel)
+            if loc.count() > 0 and loc.first.is_visible(timeout=2000):
+                loc.first.fill(valor, timeout=timeout)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _safe_wait(page: Page, seletores: List[str], timeout: int = 15000) -> bool:
+    """Aguarda o primeiro seletor da lista aparecer."""
+    for sel in seletores:
+        try:
+            page.wait_for_selector(sel, timeout=timeout)
+            return True
+        except PlaywrightTimeout:
+            continue
+    return False
+
+
+def _clicar_por_texto_exato(page: Page, texto: str, timeout: int = 10000) -> bool:
+    """
+    Clica em elemento cujo texto exato corresponda.
+    Tenta estratégias: text=, role=link, role=button, span, a, td.
+    """
+    estrategias = [
+        f"text='{texto}'",
+        f"a:has-text('{texto}')",
+        f"span:has-text('{texto}')",
+        f"div:has-text('{texto}')",
+        f"td:has-text('{texto}')",
+        f"li:has-text('{texto}')",
+        f"[role='link']:has-text('{texto}')",
+        f"[role='button']:has-text('{texto}')",
+    ]
+    return _safe_click(page, estrategias, timeout=timeout)
+
+
+def _entrar_iframe_login(page: Page, timeout: int = 15000) -> Optional[Page]:
+    """
+    O PJE TJDFT frequentemente carrega o formulário de login dentro de um iframe.
+    Esta função detecta e retorna o frame (Page/FrameLocator) correto para
+    interagir com os campos de autenticação.
+    """
+    # Primeiro verifica se o campo já está na página principal
+    if page.locator("input[name='username'], #username").count() > 0:
+        return page
+
+    # Procura iframe de login por id ou name parciais
+    iframe_seletores = [
+        "iframe[id*='login']",
+        "iframe[name*='login']",
+        "iframe[src*='login']",
+        "iframe[src*='autentica']",
+        "iframe",  # fallback: pega o primeiro iframe
+    ]
+    for sel in iframe_seletores:
+        try:
+            loc = page.locator(sel)
+            if loc.count() > 0:
+                iframe = loc.first.content_frame()
+                if iframe and iframe.locator("input[name='username'], #username").count() > 0:
+                    return iframe
+        except Exception:
+            continue
+    return page  # fallback: trabalha na página mesmo assim
+
+
+def _aguardar_e_clicar_menu(page: Page, texto_menu: str, timeout: int = 10000) -> bool:
+    """
+    Alguns menus do PJE exigem hover ou aguardam animação antes do click.
+    Tenta scrollIntoViewIfNeeded + click com retry.
+    """
+    seletores = [
+        f"text='{texto_menu}'",
+        f"a:has-text('{texto_menu}')",
+        f"span:has-text('{texto_menu}')",
+        f"li:has-text('{texto_menu}') >> a",
+        f"[class*='menu']:has-text('{texto_menu}')",
+    ]
+    for sel in seletores:
+        try:
+            loc = page.locator(sel).first
+            loc.scroll_into_view_if_needed(timeout=timeout)
+            loc.click(timeout=timeout)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+# ─────────────────────────────────────────────────────────────
+# PJE CLIENT
+# ─────────────────────────────────────────────────────────────
 
 class PjeClient:
     def __init__(self):
@@ -41,114 +207,246 @@ class PjeClient:
         if self._playwright:
             self._playwright.stop()
 
+    # ─────────────────────────────────────────────────────────
+    # LOGIN
+    # ─────────────────────────────────────────────────────────
     def login(self) -> bool:
         if not self.page:
             self.iniciar()
         try:
             self.page.goto(PJE_URL, wait_until="networkidle")
-            # PJE tem iframe de login em algumas versões; tenta ambos
-            self.page.wait_for_selector("input[name='username'], #username, #formulario:username", timeout=15000)
+            self.page.wait_for_timeout(2000)
 
-            # Tenta preencher usuário
-            self.page.fill("input[name='username'], #username, #formulario\\:username", PJE_USUARIO)
-            self.page.fill("input[name='password'], #password, #formulario\\:password", PJE_SENHA)
-            self.page.click("input[type='submit'], #btnLogin, #formulario\\:btnEntrar")
+            # Detecta iframe de login (comum no PJE TJDFT)
+            frame = _entrar_iframe_login(self.page)
 
-            # Aguarda carregamento do painel
+            # Seletores robustos para usuário / senha / botão
+            seletores_usuario = [
+                "input[name='username']",
+                "#username",
+                "input[id*='username']",
+                "#formulario\\:username",
+                "input[name*='j_username']",
+            ]
+            seletores_senha = [
+                "input[name='password']",
+                "#password",
+                "input[id*='password']",
+                "#formulario\\:password",
+                "input[name*='j_password']",
+                "input[type='password']",
+            ]
+            seletores_submit = [
+                "input[type='submit']",
+                "#btnLogin",
+                "button[type='submit']",
+                "#formulario\\:btnEntrar",
+                "input[value*='Entrar']",
+                "input[value*='Login']",
+            ]
+
+            # Aguarda ao menos um campo de usuário
+            if not _safe_wait(frame, seletores_usuario, timeout=20000):
+                aviso("Campo de usuário não encontrado; tentando continuar mesmo assim.")
+
+            _safe_fill(frame, seletores_usuario, PJE_USUARIO)
+            _safe_fill(frame, seletores_senha, PJE_SENHA)
+            _safe_click(frame, seletores_submit)
+
+            # Aguarda carregamento do painel (sai do iframe / carrega dashboard)
             self.page.wait_for_load_state("networkidle")
-            self.page.wait_for_timeout(3000)
+            self.page.wait_for_timeout(4000)
 
-            # Verifica se logou (nome do usuário visível)
-            if self.page.locator("text='SHEILA'").count() > 0 or \
-               self.page.locator("text='Sheila'").count() > 0 or \
-               self.page.locator(".nome-usuario").count() > 0:
+            # Verifica login: nome do usuário, avatar, menu principal ou barra superior
+            indicadores_sucesso = [
+                "text='SHEILA'",
+                "text='Sheila'",
+                ".nome-usuario",
+                ".usuario-logado",
+                "[class*='menu-lateral']",
+                "#menuPrincipal",
+                "a:has-text('Sair')",
+                "a:has-text('Logout')",
+            ]
+            logado = any(
+                self.page.locator(sel).count() > 0 for sel in indicadores_sucesso
+            )
+            if logado:
                 info("Login PJE realizado com sucesso.")
                 return True
 
-            info("Login PJE realizado (verificação alternativa).")
+            # Último recurso: verifica se a URL mudou para algo diferente de login
+            if "login" not in self.page.url.lower():
+                info("Login PJE realizado (verificação alternativa por URL).")
+                return True
+
+            aviso("Login PJE: não foi possível confirmar sucesso, mas prosseguindo.")
             return True
         except Exception as e:
             erro(f"Falha no login PJE: {e}")
             return False
 
+    # ─────────────────────────────────────────────────────────
+    # COLETA DE PROCESSOS POR ETIQUETA
+    # ─────────────────────────────────────────────────────────
     def coletar_lista_processos(self) -> List[str]:
         """Navega até a etiqueta e extrai números de processo."""
         try:
             # Menu: Meu Perfil -> Núcleo Permanente de Cálculos
-            self.page.click("text='Meu Perfil'", timeout=10000)
-            self.page.click("text='Núcleo Permanente de Cálculos'", timeout=10000)
+            # Usa _aguardar_e_clicar_menu porque o PJE às vezes exige scroll
+            _aguardar_e_clicar_menu(self.page, "Meu Perfil", timeout=12000)
+            self.page.wait_for_timeout(1000)
+            _aguardar_e_clicar_menu(self.page, "Núcleo Permanente de Cálculos", timeout=12000)
+            self.page.wait_for_timeout(1000)
 
             # Tarefas -> Incluir Cálculo
-            self.page.click("text='Tarefas'", timeout=10000)
-            self.page.click("text='Incluir Cálculo'", timeout=10000)
+            _aguardar_e_clicar_menu(self.page, "Tarefas", timeout=12000)
+            self.page.wait_for_timeout(1000)
+            _aguardar_e_clicar_menu(self.page, "Incluir Cálculo", timeout=12000)
+            self.page.wait_for_timeout(2000)
 
-            # Etiquetas -> rolar até etiqueta e clicar
-            self.page.click(f"text='{PJE_ETIQUETA}'", timeout=10000)
+            # Etiquetas -> clica na etiqueta configurada
+            # O PJE pode renderizar etiquetas como links, spans ou badges
+            if not _clicar_por_texto_exato(self.page, PJE_ETIQUETA):
+                aviso(f"Etiqueta '{PJE_ETIQUETA}' não encontrada via texto; tentando seletores genéricos.")
+                _safe_click(self.page, [f"a:has-text('{PJE_ETIQUETA}')", f"span:has-text('{PJE_ETIQUETA}')"])
 
-            # Extrai números de processo da tabela/grade
-            self.page.wait_for_selector("table, .processo, .numero-processo", timeout=15000)
+            # Aguarda a grade/tabela de processos carregar
+            seletores_tabela = [
+                ".rich-table",           # RichFaces
+                "table.rich-table",
+                ".processo",
+                ".numero-processo",
+                "table[class*='processo']",
+                "tbody tr",              # fallback genérico
+            ]
+            _safe_wait(self.page, seletores_tabela, timeout=20000)
+            self.page.wait_for_timeout(3000)
 
-            # Tenta encontrar padrões CNJ na página
+            # Extrai números CNJ do HTML inteiro (mais confiável que iterar linhas)
             html = self.page.content()
-            numeros = re.findall(r"\d{7}-?\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}", html)
-            if not numeros:
-                numeros = re.findall(r"\d{20}", html)
+            numeros = _extrair_numeros_processo(html)
 
             info(f"Encontrados {len(numeros)} processos na etiqueta '{PJE_ETIQUETA}'.")
-            return list(set(numeros))
+            return numeros
         except Exception as e:
             erro(f"Falha ao coletar lista de processos no PJE: {e}")
             return []
 
-    def coletar_documentos(self, numero_processo: str) -> tuple:
+    # ─────────────────────────────────────────────────────────
+    # COLETA DE DOCUMENTOS
+    # ─────────────────────────────────────────────────────────
+    def coletar_documentos(self, numero_processo: str) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
         """
         Acessa o processo e coleta documentos.
         Retorna (lista_docs, dict_textos).
         """
-        docs = []
-        textos = {}
+        docs: List[Dict[str, Any]] = []
+        textos: Dict[str, str] = {}
         try:
-            # Clica no número do processo
-            self.page.click(f"text='{numero_processo}'", timeout=10000)
+            # Clica no número do processo (pode estar em link, td ou span)
+            seletores_processo = [
+                f"a:has-text('{numero_processo}')",
+                f"td:has-text('{numero_processo}')",
+                f"span:has-text('{numero_processo}')",
+                f"text='{numero_processo}'",
+            ]
+            if not _safe_click(self.page, seletores_processo, timeout=15000):
+                aviso(f"Não foi possível clicar no processo {numero_processo}")
+                return docs, textos
+
             self.page.wait_for_load_state("networkidle")
+            self.page.wait_for_timeout(3000)
 
             # Aguarda tabela de documentos
-            self.page.wait_for_selector("table, .documentos, #tabelaDocumentos", timeout=15000)
+            seletores_tabela_docs = [
+                ".rich-table",                       # tabela RichFaces
+                "table.rich-table",
+                ".documentos",
+                "#tabelaDocumentos",
+                "table[id*='documento']",
+                "table",                             # fallback
+            ]
+            _safe_wait(self.page, seletores_tabela_docs, timeout=20000)
 
-            # Extrai linhas da tabela
-            linhas = self.page.locator("table tbody tr, .documento-item").all()
+            # Extrai linhas da tabela — prioriza rich-table-row, depois tbody tr
+            linhas = self.page.locator(".rich-table-row, table tbody tr, .documento-item").all()
             for linha in linhas:
-                colunas = linha.locator("td").all_inner_texts()
-                if len(colunas) >= 4:
-                    doc_id = re.sub(r"\D", "", colunas[0]) or ""
-                    data_assinatura = colunas[1]
-                    nome_doc = colunas[2]
-                    tipo = colunas[3]
+                try:
+                    # Células podem ter classe .rich-table-cell ou ser <td> comuns
+                    celulas = linha.locator(".rich-table-cell, td").all_inner_texts()
+                except Exception:
+                    continue
+                if len(celulas) >= 4:
+                    doc_id = re.sub(r"\D", "", celulas[0]) or ""
+                    data_assinatura = celulas[1].strip()
+                    nome_doc = celulas[2].strip()
+                    tipo = celulas[3].strip()
                     docs.append({
                         "doc_id": doc_id,
-                        "tipo": tipo.strip(),
-                        "data_assinatura": data_assinatura.strip(),
-                        "nome": nome_doc.strip(),
+                        "tipo": tipo,
+                        "data_assinatura": data_assinatura,
+                        "nome": nome_doc,
                     })
 
             # Lê conteúdo de documentos relevantes
             for doc in docs:
-                if doc["tipo"] in ("Sentença", "Decisão", "Comprovante de Pagamento de Custas"):
+                if doc["tipo"] in ("Sentença", "Decisão", "Comprovante de Pagamento de Custas", "Despacho"):
                     try:
-                        # Clica no documento
-                        self.page.click(f"text='{doc['nome']}'", timeout=5000)
-                        self.page.wait_for_timeout(2000)
-                        # Tenta pegar texto do iframe ou da página
+                        # Clica no nome do documento
+                        _clicar_por_texto_exato(self.page, doc["nome"])
+                        self.page.wait_for_timeout(3000)
+
                         texto = ""
-                        if self.page.locator("iframe").count() > 0:
-                            iframe = self.page.frame_locator("iframe").first
-                            texto = iframe.locator("body").inner_text(timeout=5000)
-                        else:
+                        # Estratégia 1: iframe de visualização (PDF ou HTML)
+                        iframe_seletores = [
+                            "iframe[id*='visualiz']",
+                            "iframe[name*='visualiz']",
+                            "iframe[id*='doc']",
+                            "iframe[src*='visualiz']",
+                            "iframe",  # último recurso
+                        ]
+                        for if_sel in iframe_seletores:
+                            try:
+                                if self.page.locator(if_sel).count() > 0:
+                                    iframe = self.page.frame_locator(if_sel).first
+                                    # Tenta body ou embed/pdf
+                                    texto = iframe.locator("body").inner_text(timeout=8000)
+                                    if texto.strip():
+                                        break
+                            except Exception:
+                                continue
+
+                        # Estratégia 2: popup / nova aba (menos comum)
+                        if not texto.strip():
+                            # O PJE às vezes abre visualizador em modal/popup
+                            modal_seletores = [
+                                ".modal-body",
+                                "[role='dialog']",
+                                "#visualizadorDocumento",
+                                "[class*='visualizador']",
+                            ]
+                            for m_sel in modal_seletores:
+                                try:
+                                    if self.page.locator(m_sel).count() > 0:
+                                        texto = self.page.locator(m_sel).first.inner_text(timeout=8000)
+                                        if texto.strip():
+                                            break
+                                except Exception:
+                                    continue
+
+                        # Estratégia 3: conteúdo direto na página
+                        if not texto.strip():
                             texto = self.page.locator("body").inner_text()
-                        textos[doc["doc_id"]] = texto
+
+                        textos[doc["doc_id"]] = texto.strip()
+
+                        # Volta para lista de documentos
                         self.page.go_back()
-                        self.page.wait_for_timeout(1000)
+                        self.page.wait_for_load_state("networkidle")
+                        self.page.wait_for_timeout(2000)
                     except Exception:
+                        # Ignora falhas de leitura de documento individual
                         pass
 
             info(f"Coletados {len(docs)} documentos do processo {numero_processo}.")
@@ -157,17 +455,73 @@ class PjeClient:
             erro(f"Falha ao coletar documentos de {numero_processo}: {e}")
             return docs, textos
 
+    # ─────────────────────────────────────────────────────────
+    # ANEXAR DEMONSTRATIVO
+    # ─────────────────────────────────────────────────────────
     def anexar_demonstrativo(self, numero_processo: str, caminho_pdf: str) -> bool:
         """Anexa o PDF do demonstrativo no processo."""
         try:
-            # Navega até o processo
+            # Recarrega a URL base e navega até o processo
             self.page.goto(PJE_URL, wait_until="networkidle")
-            self.page.click(f"text='{numero_processo}'", timeout=10000)
+            self.page.wait_for_timeout(2000)
 
-            # Botão de anexar documento
-            self.page.click("text='Anexar'", timeout=10000)
-            self.page.set_input_files("input[type='file']", caminho_pdf)
-            self.page.click("text='Confirmar'", timeout=10000)
+            seletores_processo = [
+                f"a:has-text('{numero_processo}')",
+                f"td:has-text('{numero_processo}')",
+                f"span:has-text('{numero_processo}')",
+                f"text='{numero_processo}'",
+            ]
+            if not _safe_click(self.page, seletores_processo, timeout=15000):
+                raise RuntimeError(f"Processo {numero_processo} não encontrado para anexação.")
+
+            self.page.wait_for_timeout(3000)
+
+            # Botão "Anexar" ou "Anexar Documento"
+            seletores_anexar = [
+                "text='Anexar'",
+                "a:has-text('Anexar')",
+                "button:has-text('Anexar')",
+                "text='Anexar Documento'",
+                "a:has-text('Anexar Documento')",
+                "input[value*='Anexar']",
+            ]
+            if not _safe_click(self.page, seletores_anexar, timeout=15000):
+                raise RuntimeError("Botão Anexar não encontrado.")
+
+            # Input file (pode estar em modal ou na página)
+            seletores_file = [
+                "input[type='file']",
+                "input[id*='arquivo']",
+                "input[name*='arquivo']",
+                "input[id*='file']",
+                "input[name*='file']",
+            ]
+            anexado = False
+            for sel in seletores_file:
+                try:
+                    loc = self.page.locator(sel)
+                    if loc.count() > 0:
+                        loc.first.set_input_files(caminho_pdf)
+                        anexado = True
+                        break
+                except Exception:
+                    continue
+            if not anexado:
+                raise RuntimeError("Campo de upload de arquivo não encontrado.")
+
+            # Confirma upload
+            seletores_confirmar = [
+                "text='Confirmar'",
+                "button:has-text('Confirmar')",
+                "input[value='Confirmar']",
+                "text='Enviar'",
+                "button:has-text('Enviar')",
+                "input[value='Enviar']",
+                "text='Salvar'",
+                "button:has-text('Salvar')",
+            ]
+            _safe_click(self.page, seletores_confirmar, timeout=15000)
+            self.page.wait_for_timeout(3000)
 
             info(f"Demonstrativo anexado ao processo {numero_processo}.")
             return True
