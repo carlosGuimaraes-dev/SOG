@@ -45,9 +45,12 @@ DADOS_DIR = Path(DB_PATH).parent
 SCREENSHOTS_DIR = DADOS_DIR / "screenshots"
 DEMONSTRATIVOS_DIR = DADOS_DIR / "demonstrativos"
 
-# Cria diretórios se não existirem
-SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-DEMONSTRATIVOS_DIR.mkdir(parents=True, exist_ok=True)
+# Cria diretórios se não existirem (silencioso se sem permissão)
+try:
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    DEMONSTRATIVOS_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
 # Playwright
 HEADLESS = os.getenv("HEADLESS", "true").lower() in ("1", "true", "yes")

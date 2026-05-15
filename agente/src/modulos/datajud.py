@@ -33,8 +33,9 @@ def consultar(numero_sem_mascara: str) -> Dict[str, Any]:
 
     source = hits[0].get("_source", {})
 
-    # Detecta instância pelo segmento TT (posições 14-15 do número CNJ)
-    segmento = numero_sem_mascara[13:15] if len(numero_sem_mascara) >= 15 else ""
+    # Detecta instância pelo segmento TT (posições 15-16 do número CNJ, 0-based 14:16)
+    # Formato CNJ 20 dígitos: NNNNNNN(7) DD(2) AAAA(4) J(1) TR(2) OOOO(4)
+    segmento = numero_sem_mascara[14:16] if len(numero_sem_mascara) >= 16 else ""
     instancia = "1ª Instância" if segmento == "07" else "2ª Instância" if segmento == "08" else ""
 
     # Partes

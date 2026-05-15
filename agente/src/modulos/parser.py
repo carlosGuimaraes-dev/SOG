@@ -23,9 +23,9 @@ def parse_sentenca(texto: str) -> Dict[str, Any]:
         "valor_condenacao": "",
     }
 
-    # Sucumbente
+    # Sucumbente (ex: "condeno FULANO ao pagamento", "condeno o réu FULANO ao pagamento", "condeno a EMPRESA ao pagamento")
     m = re.search(
-        r"condeno\s+(?:\w+\s+)?([A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇ][A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇa-záéíóúãõàâêîôûç\s\.]+?)\s+ao\s+pagamento",
+        r"condeno\s+(?:(?:o\s+(?:r[eé]u|autor|embargad[oa])|a)\s+)?([A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇ][A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇa-záéíóúãõàâêîôûç\s\.]+?)\s+ao\s+pagamento",
         texto,
         re.IGNORECASE,
     )
@@ -48,7 +48,7 @@ def parse_sentenca(texto: str) -> Dict[str, Any]:
         re.IGNORECASE,
     )
     if m:
-        resultado["valor_condenacao"] = m.group(1)
+        resultado["valor_condenacao"] = m.group(1).rstrip(".")
 
     return resultado
 
