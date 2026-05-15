@@ -43,6 +43,10 @@ dados/demonstrativos/
 *.sqlite
 *.sqlite3
 
+# Dados dos Processos
+docs/*
+image/*
+
 # IDE
 .vscode/
 .idea/
@@ -107,3 +111,5 @@ ipython_config.py
 
 # Streamlit
 .streamlit/secrets.toml
+# PDFs de processos (grandes demais para git)
+docs/*.pdf

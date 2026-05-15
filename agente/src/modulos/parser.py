@@ -30,7 +30,7 @@ def parse_sentenca(texto: str) -> Dict[str, Any]:
         re.IGNORECASE,
     )
     if m:
-        resultado["sucumbente_nome"] = m.group(1).strip()
+        resultado["sucumbente_nome"] = m.group(1).strip().replace("\n", " ")
 
     # Honorários
     m = re.search(r"honorários[^%]+?(\d+(?:,\d+)?)\s*%", texto, re.IGNORECASE)
@@ -42,13 +42,17 @@ def parse_sentenca(texto: str) -> Dict[str, Any]:
         resultado["suspensao_exigibilidade"] = True
 
     # Valor da condenação
-    m = re.search(
+    # Tenta vários padrões: "valor da condenação de R$", "montante de R$", "condeno...montante de R$"
+    padroes_valor = [
         r"valor\s+d[ae]\s+condena[çc][ãa]o\s+de\s+R\$\s*([\d.,]+)",
-        texto,
-        re.IGNORECASE,
-    )
-    if m:
-        resultado["valor_condenacao"] = m.group(1).rstrip(".")
+        r"condeno.*?ao\s+cumprimento.*?montante\s+de\s+R\$\s*([\d.,]+)",
+        r"montante\s+de\s+R\$\s*([\d.,]+)",
+    ]
+    for padrao in padroes_valor:
+        m = re.search(padrao, texto, re.IGNORECASE | re.DOTALL)
+        if m:
+            resultado["valor_condenacao"] = m.group(1).rstrip(".")
+            break
 
     return resultado
 
