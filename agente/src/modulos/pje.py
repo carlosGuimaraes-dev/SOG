@@ -17,6 +17,7 @@ from playwright.sync_api import sync_playwright, Page, Browser, FrameLocator, Ti
 from config import PJE_URL, PJE_USUARIO, PJE_SENHA, PJE_ETIQUETA, HEADLESS, TIMEOUT_PADRAO
 from utils.logger import info, erro, aviso
 from banco import db
+from modulos.retry import retry_on_exception, is_session_expired
 
 
 # ─────────────────────────────────────────────────────────────
@@ -210,6 +211,25 @@ class PjeClient:
     # ─────────────────────────────────────────────────────────
     # LOGIN
     # ─────────────────────────────────────────────────────────
+    def verificar_sessao(self) -> bool:
+        """Retorna True se a sessão estiver expirada ou inválida."""
+        if not self.page:
+            return True
+        return is_session_expired(self.page)
+
+    def reconectar(self) -> bool:
+        """Refaz login no PJE. Retorna True em caso de sucesso."""
+        try:
+            info("Reconectando ao PJE...")
+            if self.login():
+                info("Reconexão PJE bem-sucedida.")
+                return True
+            erro("Reconexão PJE falhou: login retornou False.")
+            return False
+        except Exception as e:
+            erro(f"Falha na reconexão PJE: {e}")
+            return False
+
     def login(self) -> bool:
         if not self.page:
             self.iniciar()
@@ -289,6 +309,11 @@ class PjeClient:
     # ─────────────────────────────────────────────────────────
     # COLETA DE PROCESSOS POR ETIQUETA
     # ─────────────────────────────────────────────────────────
+    @retry_on_exception(
+        exceptions=(Exception, PlaywrightTimeout),
+        max_retries=3,
+        backoff=2,
+    )
     def coletar_lista_processos(self) -> List[str]:
         """Navega até a etiqueta e extrai números de processo."""
         try:
@@ -336,6 +361,11 @@ class PjeClient:
     # ─────────────────────────────────────────────────────────
     # COLETA DE DOCUMENTOS
     # ─────────────────────────────────────────────────────────
+    @retry_on_exception(
+        exceptions=(Exception, PlaywrightTimeout),
+        max_retries=3,
+        backoff=2,
+    )
     def coletar_documentos(self, numero_processo: str) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
         """
         Acessa o processo e coleta documentos.
@@ -458,6 +488,11 @@ class PjeClient:
     # ─────────────────────────────────────────────────────────
     # ANEXAR DEMONSTRATIVO
     # ─────────────────────────────────────────────────────────
+    @retry_on_exception(
+        exceptions=(Exception, PlaywrightTimeout),
+        max_retries=3,
+        backoff=2,
+    )
     def anexar_demonstrativo(self, numero_processo: str, caminho_pdf: str) -> bool:
         """Anexa o PDF do demonstrativo no processo."""
         try:

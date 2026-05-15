@@ -20,6 +20,7 @@ from playwright.sync_api import sync_playwright, Page, Browser, TimeoutError as 
 from config import SISTJ_URL, SISTJ_USUARIO, SISTJ_SENHA, HEADLESS, TIMEOUT_PADRAO, SCREENSHOTS_DIR, DEMONSTRATIVOS_DIR
 from utils.logger import info, erro, aviso
 from regras import detectar_area, obter_regras_outros_itens
+from modulos.retry import retry_on_exception, is_session_expired
 
 # Importa constantes de seletores organizadas por seção do sistema
 from modulos.selectors import (
@@ -196,6 +197,30 @@ class SistjClient:
         if self._playwright:
             self._playwright.stop()
 
+    def verificar_sessao(self) -> bool:
+        """Retorna True se a sessão estiver expirada ou inválida."""
+        if not self.page:
+            return True
+        return is_session_expired(self.page)
+
+    def reconectar(self) -> bool:
+        """Refaz login no SISTJWEB. Retorna True em caso de sucesso."""
+        try:
+            info("Reconectando ao SISTJWEB...")
+            if self.login():
+                info("Reconexão SISTJWEB bem-sucedida.")
+                return True
+            erro("Reconexão SISTJWEB falhou: login retornou False.")
+            return False
+        except Exception as e:
+            erro(f"Falha na reconexão SISTJWEB: {e}")
+            return False
+
+    @retry_on_exception(
+        exceptions=(Exception, PlaywrightTimeout),
+        max_retries=3,
+        backoff=2,
+    )
     def login(self) -> bool:
         """
         Realiza login no SISTJWEB.
@@ -222,6 +247,11 @@ class SistjClient:
             erro(f"Falha no login SISTJWEB: {e}")
             return False
 
+    @retry_on_exception(
+        exceptions=(Exception, PlaywrightTimeout),
+        max_retries=3,
+        backoff=2,
+    )
     def preencher(self, dados: Dict[str, Any], numero_processo: str) -> Dict[str, Any]:
         """
         Preenche a planilha de custas no SISTJWEB.
@@ -406,6 +436,11 @@ class SistjClient:
             erro(f"Falha ao preencher SISTJWEB para {numero_processo}: {e}")
             raise
 
+    @retry_on_exception(
+        exceptions=(Exception, PlaywrightTimeout),
+        max_retries=3,
+        backoff=2,
+    )
     def gravar_e_aprovar(self, numero_processo: str) -> str:
         """
         Navega até o processo salvo e clica 'Gravar e Aprovar'.
