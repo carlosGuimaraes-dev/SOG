@@ -1,5 +1,9 @@
 """
 Consulta à API pública Datajud (CNJ) para obter dados do processo.
+
+Nota: A API Datajud não disponibiliza partes nem valor da causa para
+todos os tribunais (ex: TJDFT). Esses campos devem ser obtidos via
+capa do processo no PJE (PDF).
 """
 import requests
 from typing import Dict, Any, Optional
@@ -38,10 +42,10 @@ def consultar(numero_sem_mascara: str) -> Dict[str, Any]:
     segmento = numero_sem_mascara[14:16] if len(numero_sem_mascara) >= 16 else ""
     instancia = "1ª Instância" if segmento == "07" else "2ª Instância" if segmento == "08" else ""
 
-    # Partes
+    # Partes — nem todos os tribunais disponibilizam via Datajud (ex: TJDFT)
     partes = source.get("partes", [])
     polo_ativo = ""
-    polo_passivo = "Não Há"
+    polo_passivo = ""
     for parte in partes:
         tipo = parte.get("tipo", "").upper()
         if tipo == "AUTOR":
@@ -58,8 +62,14 @@ def consultar(numero_sem_mascara: str) -> Dict[str, Any]:
         except (ValueError, TypeError):
             pass
 
+    # Formata data de ajuizamento (AAAAMMDDHHMMSS → DD/MM/AAAA)
+    data_ajuiz = source.get("dataAjuizamento", "")
+    data_distribuicao = ""
+    if len(data_ajuiz) >= 8:
+        data_distribuicao = f"{data_ajuiz[6:8]}/{data_ajuiz[4:6]}/{data_ajuiz[0:4]}"
+
     return {
-        "data_distribuicao": source.get("dataAjuizamento", ""),
+        "data_distribuicao": data_distribuicao,
         "polo_ativo": polo_ativo,
         "polo_passivo": polo_passivo,
         "valor_causa": valor_causa,

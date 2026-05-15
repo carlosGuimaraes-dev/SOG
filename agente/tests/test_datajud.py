@@ -15,7 +15,7 @@ class TestConsultarDatajud:
                 "hits": [
                     {
                         "_source": {
-                            "dataAjuizamento": "2024-01-15",
+                            "dataAjuizamento": "20240115000000",
                             "valorCausa": 50000.0,
                             "classe": {"nome": "Procedimento Comum"},
                             "partes": [
@@ -34,7 +34,7 @@ class TestConsultarDatajud:
         assert resultado["classe"] == "Procedimento Comum"
         assert resultado["polo_ativo"] == "JOÃO SILVA"
         assert resultado["polo_passivo"] == "EMPRESA XYZ"
-        assert resultado["data_distribuicao"] == "2024-01-15"
+        assert resultado["data_distribuicao"] == "15/01/2024"
         assert resultado["instancia"] == "1ª Instância"  # segmento 07
 
     @patch("modulos.datajud.requests.post")
@@ -45,7 +45,7 @@ class TestConsultarDatajud:
                 "hits": [
                     {
                         "_source": {
-                            "dataAjuizamento": "2024-01-15",
+                            "dataAjuizamento": "20240115000000",
                             "valorCausa": 100000.0,
                             "classe": {"nome": "Apelação"},
                             "partes": [],
@@ -77,7 +77,7 @@ class TestConsultarDatajud:
                 "hits": [
                     {
                         "_source": {
-                            "dataAjuizamento": "2024-01-15",
+                            "dataAjuizamento": "20240115000000",
                             "valorCausa": 1000.0,
                             "classe": {"nome": "Procedimento Comum"},
                             "partes": [
@@ -91,4 +91,4 @@ class TestConsultarDatajud:
         mock_post.return_value = mock_response
 
         resultado = consultar("070372990220268070007")
-        assert resultado["polo_passivo"] == "Não Há"
+        assert resultado["polo_passivo"] == ""
