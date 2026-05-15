@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import axios from 'axios'
+import api from '../lib/api'
+import { useToast } from '../hooks/useToast'
+import Button from '../components/ui/Button'
+import Badge from '../components/ui/Badge'
+import { Card, CardContent } from '../components/ui/Card'
+import Skeleton from '../components/ui/Skeleton'
 
 interface Processo {
   id: number
@@ -13,14 +18,15 @@ export default function Fila() {
   const [aguardando, setAguardando] = useState<Processo[]>([])
   const [manual, setManual] = useState<Processo[]>([])
   const [loading, setLoading] = useState(true)
+  const { toasts, addToast, removeToast } = useToast()
 
   async function fetchData() {
     try {
-      const res = await axios.get('/api/processos', { auth: { username: 'admin', password: 'admin' } })
+      const res = await api.get('/processos')
       setAguardando(res.data.aguardando_aprovacao || [])
       setManual(res.data.pendente_manual || [])
-    } catch (e) {
-      alert('Erro ao carregar processos')
+    } catch {
+      addToast('Erro ao carregar processos', 'error')
     } finally {
       setLoading(false)
     }
@@ -32,47 +38,95 @@ export default function Fila() {
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) return <p>Carregando...</p>
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    )
+  }
 
   return (
-    <div>
-      <h2>Aguardando Aprovação</h2>
-      {aguardando.length === 0 ? (
-        <p>Nenhum processo aguardando aprovação.</p>
-      ) : (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {aguardando.map(p => (
-            <div key={p.id} style={{ border: '1px solid #ccc', borderRadius: 8, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong>{p.numero}</strong>
-                <Link to={`/detalhe/${p.id}`} style={{ padding: '6px 12px', background: '#007bff', color: '#fff', borderRadius: 4, textDecoration: 'none' }}>
-                  Revisar
-                </Link>
-              </div>
-              <small style={{ color: '#666' }}>Criado em: {new Date(p.criado_em).toLocaleString('pt-BR')}</small>
+    <div className="space-y-8">
+      {/* Toasts */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`rounded-lg px-4 py-3 text-sm text-white shadow-lg cursor-pointer ${
+                t.type === 'error' ? 'bg-destructive' : t.type === 'success' ? 'bg-success' : 'bg-primary'
+              }`}
+              onClick={() => removeToast(t.id)}
+            >
+              {t.message}
             </div>
           ))}
         </div>
       )}
 
-      <h2 style={{ marginTop: 32 }}>Pendente Manual (Área não mapeada)</h2>
-      {manual.length === 0 ? (
-        <p>Nenhum processo pendente manual.</p>
-      ) : (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {manual.map(p => (
-            <div key={p.id} style={{ border: '1px solid #f0ad4e', borderRadius: 8, padding: 16, background: '#fff3cd' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong>{p.numero}</strong>
-                <Link to={`/detalhe/${p.id}`} style={{ padding: '6px 12px', background: '#f0ad4e', color: '#fff', borderRadius: 4, textDecoration: 'none' }}>
-                  Revisar
-                </Link>
-              </div>
-              <small style={{ color: '#856404' }}>Requer conferência manual dos Itens da Guia</small>
-            </div>
-          ))}
-        </div>
-      )}
+      <section>
+        <h2 className="text-xl font-semibold mb-4">Aguardando Aprovação</h2>
+        {aguardando.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Nenhum processo aguardando aprovação.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {aguardando.map((p) => (
+              <Card key={p.id}>
+                <CardContent className="flex items-center justify-between py-4">
+                  <div>
+                    <div className="font-medium text-lg">{p.numero}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Criado em: {new Date(p.criado_em).toLocaleString('pt-BR')}
+                    </div>
+                  </div>
+                  <Link to={`/detalhe/${p.id}`}>
+                    <Button>Revisar</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold mb-4">Pendente Manual</h2>
+        {manual.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              Nenhum processo pendente manual.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {manual.map((p) => (
+              <Card key={p.id} className="border-warning/50 bg-warning/5">
+                <CardContent className="flex items-center justify-between py-4">
+                  <div>
+                    <div className="font-medium text-lg flex items-center gap-2">
+                      {p.numero}
+                      <Badge variant="warning">Manual</Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Requer conferência manual dos Itens da Guia
+                    </div>
+                  </div>
+                  <Link to={`/detalhe/${p.id}`}>
+                    <Button variant="outline">Revisar</Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
