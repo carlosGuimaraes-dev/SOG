@@ -37,9 +37,9 @@ describe('Login', () => {
     renderLogin()
     await waitFor(() => {
       expect(screen.getByLabelText('Usuário')).toBeInTheDocument()
+      expect(screen.getByLabelText('Senha')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /entrar/i })).toBeInTheDocument()
     })
-    expect(screen.getByLabelText('Senha')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /entrar/i })).toBeInTheDocument()
   })
 
   it('exibe erro ao falhar login', async () => {

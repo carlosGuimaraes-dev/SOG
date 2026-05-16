@@ -3,6 +3,27 @@ export interface Processo {
   numero: string
   status: string
   criado_em: string
+  tentativas?: number
+  erro_msg?: string
+  valor_total_recolher?: string
+}
+
+export interface Log {
+  id: number
+  processo_id: number
+  etapa: string
+  status: 'ok' | 'erro' | 'aviso'
+  mensagem?: string
+  criado_em: string
+}
+
+export interface Documento {
+  id: number
+  processo_id: number
+  doc_id: string
+  tipo: string
+  data_assinatura?: string
+  nome?: string
 }
 
 export interface ProcessoHistorico {
@@ -39,6 +60,13 @@ export interface CustasPaga {
   numeroGuia?: string
 }
 
+export interface Compensacao {
+  data?: string
+  valor?: string
+  numero_guia?: string
+  numeroGuia?: string
+}
+
 export interface DadosProcesso {
   instancia?: string
   circunscricao?: string
@@ -64,6 +92,7 @@ export interface DadosProcesso {
   ids_armp?: string
   outros_itens?: OutroItem[]
   custas_pagas?: CustasPaga[]
+  compensacao?: Compensacao[]
   valor_total_recolher?: string
   screenshot_path?: string
   sucumbente_nome?: string
@@ -73,4 +102,6 @@ export interface DadosProcesso {
 export interface ProcessoCompleto {
   processo: Processo
   dados: DadosProcesso
+  logs: Log[]
+  documentos: Documento[]
 }

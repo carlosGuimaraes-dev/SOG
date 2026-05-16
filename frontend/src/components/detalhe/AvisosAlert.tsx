@@ -1,14 +1,17 @@
 import Alert, { AlertTitle, AlertDescription } from '../ui/Alert'
+import { parseValorMonetario } from '../../lib/formatters'
 
 interface Props {
   areaDireito?: string
   suspensao?: boolean
   sucumbenteNome?: string
+  valorTotalRecolher?: string
 }
 
-export default function AvisosAlert({ areaDireito, suspensao, sucumbenteNome }: Props) {
+export default function AvisosAlert({ areaDireito, suspensao, sucumbenteNome, valorTotalRecolher }: Props) {
   const isDefaultArea = areaDireito === 'default'
-  const hasWarning = isDefaultArea || suspensao || !sucumbenteNome
+  const valorAlto = parseValorMonetario(valorTotalRecolher) > 50000
+  const hasWarning = isDefaultArea || suspensao || !sucumbenteNome || valorAlto
 
   if (!hasWarning) return null
 
@@ -25,6 +28,9 @@ export default function AvisosAlert({ areaDireito, suspensao, sucumbenteNome }: 
           )}
           {!sucumbenteNome && (
             <li>Sucumbente não identificado na sentença</li>
+          )}
+          {valorAlto && (
+            <li>Valor total muito alto (acima de R$ 50.000) — confira manualmente</li>
           )}
         </ul>
       </AlertDescription>

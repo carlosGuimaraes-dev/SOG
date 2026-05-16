@@ -1,10 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useProcesso } from '../hooks/useProcesso'
 import { useAprovar } from '../hooks/useAprovar'
 import { useRejeitar } from '../hooks/useRejeitar'
 import Button from '../components/ui/Button'
 import Skeleton from '../components/ui/Skeleton'
+import LinkPje from '../components/detalhe/LinkPje'
+import ErroBanner from '../components/detalhe/ErroBanner'
+import ResumoPreenchimento from '../components/detalhe/ResumoPreenchimento'
+import LogsTimeline from '../components/detalhe/LogsTimeline'
+import DocumentosPje from '../components/detalhe/DocumentosPje'
+import CompensacaoTable from '../components/detalhe/CompensacaoTable'
+import EmissaoStatus from '../components/detalhe/EmissaoStatus'
+import DemonstrativoLink from '../components/detalhe/DemonstrativoLink'
 import DadosProcessoCard from '../components/detalhe/DadosProcessoCard'
 import SucumbentesTable from '../components/detalhe/SucumbentesTable'
 import PecasProcessuaisCard from '../components/detalhe/PecasProcessuaisCard'
@@ -22,6 +30,12 @@ export default function Detalhe() {
   const { aprovar, actionLoading: aprovando } = useAprovar(id)
   const { rejeitar, actionLoading: rejeitando } = useRejeitar(id)
   const [obs, setObs] = useState(data?.dados?.obs_operador || '')
+
+  useEffect(() => {
+    if (data?.dados?.obs_operador !== undefined) {
+      setObs(data.dados.obs_operador)
+    }
+  }, [data?.dados?.obs_operador])
 
   if (loading || !data) {
     return (
@@ -41,10 +55,17 @@ export default function Detalhe() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Processo {p.numero}</h2>
-        <Button variant="outline" onClick={() => navigate('/')} aria-label="Voltar para fila">
-          ← Voltar
-        </Button>
+        <div className="flex items-center gap-2">
+          <LinkPje numero={p.numero} />
+          <Button variant="outline" onClick={() => navigate('/')} aria-label="Voltar para fila">
+            ← Voltar
+          </Button>
+        </div>
       </div>
+
+      {p.erro_msg && <ErroBanner mensagem={p.erro_msg} />}
+
+      <ResumoPreenchimento dados={d} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
@@ -73,6 +94,8 @@ export default function Detalhe() {
           )}
 
           <ValorTotal valor={d.valor_total_recolher} />
+
+          <LogsTimeline logs={data.logs} />
         </div>
 
         <div className="space-y-6">
@@ -82,7 +105,10 @@ export default function Detalhe() {
             areaDireito={d.area_direito}
             suspensao={d.suspensao_exigibilidade}
             sucumbenteNome={d.sucumbente_nome}
+            valorTotalRecolher={d.valor_total_recolher}
           />
+
+          {p.status === 'aprovado' && <EmissaoStatus processoId={p.id} />}
 
           <AcoesPanel
             observacao={obs}
@@ -91,6 +117,12 @@ export default function Detalhe() {
             onRejeitar={() => rejeitar(obs)}
             actionLoading={actionLoading}
           />
+
+          <DocumentosPje documentos={data.documentos} />
+
+          <CompensacaoTable items={d.compensacao} />
+
+          <DemonstrativoLink numero={p.numero} />
         </div>
       </div>
     </div>

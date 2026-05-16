@@ -329,6 +329,54 @@ class TestHistorico:
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
+    def test_exportar_historico_csv(self, client, mock_db):
+        from auth import create_access_token
+
+        # Insere processos emitidos/rejeitados com dados_processo
+        mock_db.execute(
+            "INSERT INTO processos (numero, numero_sem_mascara, status) VALUES (?, ?, ?)",
+            ("0000001-00.0000.0.00.0000", "000000100000000000000", "emitido"),
+        )
+        mock_db.execute(
+            "INSERT INTO processos (numero, numero_sem_mascara, status) VALUES (?, ?, ?)",
+            ("0000002-00.0000.0.00.0000", "000000200000000000000", "rejeitado"),
+        )
+        mock_db.commit()
+        p1_id = mock_db.execute(
+            "SELECT id FROM processos WHERE numero = ?", ("0000001-00.0000.0.00.0000",)
+        ).fetchone()["id"]
+        p2_id = mock_db.execute(
+            "SELECT id FROM processos WHERE numero = ?", ("0000002-00.0000.0.00.0000",)
+        ).fetchone()["id"]
+        mock_db.execute(
+            "INSERT INTO dados_processo (processo_id, polo_ativo, valor_total_recolher, obs_operador) VALUES (?, ?, ?, ?)",
+            (p1_id, "João da Silva", "R$ 1.234,56", "OK"),
+        )
+        mock_db.execute(
+            "INSERT INTO dados_processo (processo_id, polo_ativo, valor_total_recolher, obs_operador) VALUES (?, ?, ?, ?)",
+            (p2_id, "Maria Oliveira", "R$ 2.000,00", "Falta doc"),
+        )
+        mock_db.commit()
+
+        token = create_access_token({"sub": "admin"})
+        client.cookies.clear()
+        client.cookies.set("access_token", token, domain="testserver.local", path="/")
+        resp = client.get("/api/v1/historico/exportar")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "text/csv; charset=utf-8"
+        assert 'attachment; filename="historico.csv"' in resp.headers["content-disposition"]
+        content = resp.content.decode("utf-8-sig")
+        lines = content.strip().split("\r\n")
+        assert lines[0] == "Número do processo,Polo Ativo,Valor Total,Status,Data de atualização,Observação do operador"
+        assert len(lines) == 3  # header + 2 rows
+        assert "0000001-00.0000.0.00.0000" in lines[1]
+        assert "0000002-00.0000.0.00.0000" in lines[2]
+
+    def test_exportar_historico_sem_token_retorna_401(self, client):
+        client.cookies.clear()
+        resp = client.get("/api/v1/historico/exportar")
+        assert resp.status_code == 401
+
 
 class TestScreenshot:
     def test_screenshot_processo_inexistente(self, client, mock_db):

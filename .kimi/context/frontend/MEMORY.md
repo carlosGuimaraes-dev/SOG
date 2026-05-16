@@ -41,7 +41,7 @@
 
 ---
 
-## Sub-componentes de Detalhe (Wave 5)
+## Sub-componentes de Detalhe (Wave 5 + Wave 1)
 
 | Componente | Path | Responsabilidade |
 |---|---|---|
@@ -49,11 +49,24 @@
 | SucumbentesTable | `src/components/detalhe/SucumbentesTable.tsx` | Tabela de sucumbentes |
 | ScreenshotCard | `src/components/detalhe/ScreenshotCard.tsx` | Imagem do screenshot com fallback |
 | AcoesPanel | `src/components/detalhe/AcoesPanel.tsx` | Textarea + botões aprovar/rejeitar |
+| DocumentosPje | `src/components/detalhe/DocumentosPje.tsx` | Tabela de documentos PJE (tipo, data assinatura, nome) — Wave 2 |
+| CompensacaoTable | `src/components/detalhe/CompensacaoTable.tsx` | Tabela de compensação (data, valor, guia origem) — Wave 2 |
+| EmissaoStatus | `src/components/detalhe/EmissaoStatus.tsx` | Spinner + polling de status pós-aprovação — Wave 2 |
 | PecasProcessuaisCard | `src/components/detalhe/PecasProcessuaisCard.tsx` | Lista de IDs PJE |
 | OutrosItensTable | `src/components/detalhe/OutrosItensTable.tsx` | Tabela de outros itens |
 | CustasPagasTable | `src/components/detalhe/CustasPagasTable.tsx` | Tabela de custas pagas |
 | AvisosAlert | `src/components/detalhe/AvisosAlert.tsx` | Alertas de validação |
 | ValorTotal | `src/components/detalhe/ValorTotal.tsx` | Exibição do valor total |
+| LogsTimeline | `src/components/detalhe/LogsTimeline.tsx` | Timeline vertical de logs com status colorido (ok/erro/aviso) |
+| ErroBanner | `src/components/detalhe/ErroBanner.tsx` | Alerta de erro na execução (variant destructive) |
+| ResumoPreenchimento | `src/components/detalhe/ResumoPreenchimento.tsx` | Card compacto com sucumbente, peças, itens e valor total |
+| LinkPje | `src/components/detalhe/LinkPje.tsx` | Link externo para consulta do processo no PJE |
+| BuscaProcesso | `src/components/fila/BuscaProcesso.tsx` | Input de busca com ícone e botão limpar |
+| DemonstrativoLink | `src/components/detalhe/DemonstrativoLink.tsx` | Link para PDF do demonstrativo com verificação HEAD — Wave 3 |
+| PrioridadeBadge | `src/components/fila/PrioridadeBadge.tsx` | Badge de prioridade (urgente/alto valor/antigo) — Wave 3 |
+| Paginacao | `src/components/historico/Paginacao.tsx` | Controles de paginação client-side — Wave 3 |
+| FiltrosHistorico | `src/components/historico/FiltrosHistorico.tsx` | Painel de filtros por status, data e valor mínimo — Wave 3 |
+| BotaoExportar | `src/components/historico/BotaoExportar.tsx` | Botão de download CSV via `api.get(blob)` — Wave 3 |
 
 ---
 
@@ -65,6 +78,15 @@
 | useAprovar | `src/hooks/useAprovar.ts` | Ação de aprovação + navegação |
 | useRejeitar | `src/hooks/useRejeitar.ts` | Ação de rejeição + navegação |
 | useToast | `src/hooks/useToast.ts` | Re-exporta do ToastProvider (compat) |
+| usePollingStatus | `src/hooks/usePollingStatus.ts` | Polling de status do processo a cada N ms (default 5s). Para quando status ≠ 'aprovado'. Cleanup no unmount — Wave 2 |
+
+---
+
+## Libs utilitárias
+
+| Lib | Path | Função |
+|---|---|---|
+| formatters.ts | `src/lib/formatters.ts` | `parseValorMonetario()` — remove `R$`, pontos de milhar, troca vírgula por ponto. Retorna `0` para input vazio/inválido — Wave 2 |
 
 ---
 
@@ -75,6 +97,7 @@
 - **Auth:** Contexto `AuthProvider` em `src/lib/auth.tsx` — verifica sessão via `/auth/me`. Usa `ENDPOINTS` (Wave 5).
 - **Tema:** Contexto `ThemeProvider` em `src/lib/theme.tsx` — persiste preferência em `localStorage` (chave `sog-theme`).
 - **Endpoints:** Constantes centralizadas em `src/lib/endpoints.ts` (Wave 5). Nunca usar strings mágicas de API.
+- **Formatters:** `src/lib/formatters.ts` com `parseValorMonetario()` — remove `R$`, pontos de milhar, troca vírgula por ponto. Retorna `0` para input vazio/inválido — Wave 2.
 - **Tipos:** `src/types/processo.ts` com interfaces `Processo`, `ProcessoHistorico`, `ProcessoCompleto`, `DadosProcesso`, etc. (Wave 5).
 - **Pages:** Fila, Detalhe, Historico, Login — todas em `src/pages/`. Detalhe e Historico são lazy-loaded (Wave 5).
 
@@ -87,6 +110,7 @@
 - **Base URL da API:** `/api/v1`.
 - **Lazy loading:** `React.lazy` + `Suspense` com `Skeleton` como fallback para Detalhe e Historico.
 - **ErrorBoundary:** Envolve `<Routes>` no App.tsx. Qualquer erro de renderização mostra UI de fallback com botão "Recarregar página".
+- **Filtro client-side:** `Fila.tsx` usa `useMemo` com `filtrarProcessos()` — normaliza número removendo `\D` antes de comparar. Avaliar server-side se fila > 200 processos.
 
 ---
 
@@ -95,6 +119,14 @@
 - Nenhum teste escrito para `Historico.tsx` (cobertura 0%, mas média global > 60%).
 - `App.tsx` e `main.tsx` não cobertos por testes (cobertura 0% nesses arquivos).
 - React Router v6 future flags warnings (não crítico, não quebra funcionalidade).
+- **Ressalvas do Reviewer — Wave 2 (corrigidas na Wave 3):**
+  - `CompensacaoTable.tsx` linha 42: dupla nomenclatura `numero_guia || numeroGuia` indica inconsistência no schema/tipagem. Avaliar padronizar no backend e remover fallback no frontend.
+  - `usePollingStatus.ts`: não há timeout máximo de polling. Se o processo ficar preso em `aprovado` indefinidamente, o polling continua até o unmount. Considerar `maxRetries` ou timeout de segurança.
+  - `EmissaoStatus.tsx` `useEffect` depende de `data` inteiro (objeto) em vez de apenas `data?.processo.status`, o que pode causar re-runs desnecessários a cada resposta do poll.
+  - `parseValorMonetario` não lida com valores já numéricos ou formatações inesperadas (ex: `1.234,56` com ponto de milhar). Threshold de R$ 50.000 está hardcoded em `AvisosAlert.tsx`; não há configuração via env ou API.
+- **Correções pós-Review — Wave 3:**
+  - Botão exportar: alterado de `window.location.href` para `api.get(blob)` com `responseType: 'blob'`, garantindo refresh token automático — `BotaoExportar.tsx`.
+  - Rate limit do endpoint de exportação reduzido para `10/minute`.
 
 ---
 
@@ -119,3 +151,26 @@
 - **M-033:** Extraído `ThemeToggle` para `src/components/ThemeToggle.tsx`.
 - **M-035:** `Skeleton.tsx` com `role="status" aria-busy="true" aria-label="Carregando..."`.
 - **F-002:** `api.ts` trata `error.code === 'ERR_NETWORK'` emitindo evento customizado `api:network-error`, consumido pelo ToastProvider.
+
+### Wave 1 — Features Essenciais do Dashboard (2026-05-15)
+- **Logs de execução:** Criado `LogsTimeline.tsx` — timeline vertical com bolinhas coloridas (ok=verde, erro=vermelho, aviso=amarelo). Ordenação decrescente por `criado_em`. Badge `aria-hidden` no indicador visual.
+- **Tentativas e erro_msg:** `Fila.tsx` exibe `tentativas` nos cards quando > 0. Cards com `erro_msg` ganham borda `border-destructive/50` e fundo `bg-destructive/5`. `ErroBanner.tsx` renderiza `Alert` variant destructive no topo do detalhe quando `processo.erro_msg` existe.
+- **Resumo do Preenchimento Automático:** `ResumoPreenchimento.tsx` consolida em grid 4 colunas: sucumbente, contagem de peças (soma de IDs separados por vírgula), quantidade de itens da guia, valor total.
+- **Busca client-side:** `BuscaProcesso.tsx` input controlado com ícone de lupa e botão limpar. `Fila.tsx` aplica `filtrarProcessos()` via `useMemo`, normalizando número (remove `\D`) antes de `includes`. Exibe card vazio quando nenhum resultado.
+- **Link PJE:** `LinkPje.tsx` monta URL `https://pje.tjdft.jus.br/pje/Processo/ConsultaProcesso/listView.seam?nrProcesso={numero}` com `encodeURIComponent`. Abre em nova aba (`target="_blank" rel="noopener noreferrer"`).
+- **Testes:** 41/41 testes passando. Novos arquivos de teste: `LogsTimeline.test.tsx` (6), `ErroBanner.test.tsx` (1), `ResumoPreenchimento.test.tsx` (3), `LinkPje.test.tsx` (3), `BuscaProcesso.test.tsx` (5).
+
+### Wave 2 — Confiança na Aprovação (2026-05-15)
+- **Documentos PJE:** `DocumentosPje.tsx` renderiza tabela com `tipo`, `data_assinatura` (formatado via `toLocaleDateString('pt-BR')`) e `nome`. Estado vazio: "Nenhum documento extraído".
+- **Compensação:** `CompensacaoTable.tsx` exibe tabela com fallback para snake_case/camelCase em guia de origem. Estado vazio: "Nenhuma compensação".
+- **Status da emissão com polling:** `usePollingStatus.ts` faz GET em `ENDPOINTS.PROCESSOS/{id}` a cada 5s. Para quando status ≠ 'aprovado'. `EmissaoStatus.tsx` consome o hook e renderiza spinner, card de sucesso (com toast) ou card de erro (com `erro_msg`).
+- **Avisos de valor alto:** `AvisosAlert.tsx` usa `parseValorMonetario` para comparar com threshold de R$ 50.000. Alerta agrupado com outros avisos em lista `ul` dentro de `Alert`.
+- **Testes:** 86/86 testes passando. Novos arquivos de teste: `DocumentosPje.test.tsx`, `CompensacaoTable.test.tsx`, `EmissaoStatus.test.tsx`, `usePollingStatus.test.ts`, `formatters.test.ts`.
+
+### Wave 3 — Produtividade (2026-05-15)
+- **PDF do demonstrativo:** `DemonstrativoLink.tsx` faz HEAD request para verificar existência do PDF antes de habilitar o link. URL via API `/api/v1/processos/{id}/demonstrativo`. Desabilitado com tooltip "PDF não disponível" quando 404.
+- **Paginação no histórico:** `Paginacao.tsx` com controles "Anterior / Próximo", 20 registros por página. Estado gerenciado no `Historico.tsx` via `useState`.
+- **Filtros no histórico:** `FiltrosHistorico.tsx` com selects de status (emitido/rejeitado), data (7/30/90 dias) e input de valor mínimo. Filtros combinados via `useMemo` sobre `historico` carregado.
+- **Indicadores de prioridade:** `PrioridadeBadge.tsx` renderiza badges com variantes: `urgente` (erro — destructive), `alto_valor` (> R$ 50k — warning), `antigo` (> 7 dias — muted). Consumido nos cards de `Fila.tsx`.
+- **Exportação CSV:** `BotaoExportar.tsx` dispara `api.get` com `responseType: 'blob'` e cria objeto URL para download. Inclui nome do arquivo com timestamp. Rate limit do endpoint: `10/minute`.
+- **Testes:** 124/124 testes passando. Novos arquivos de teste: `DemonstrativoLink.test.tsx`, `Paginacao.test.tsx`, `FiltrosHistorico.test.tsx`, `PrioridadeBadge.test.tsx`, `BotaoExportar.test.tsx`.
