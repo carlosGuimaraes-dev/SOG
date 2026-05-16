@@ -1,45 +1,25 @@
-# SKILL.md — CTO (Chief Technology Officer)
+# Skills Disponíveis — CTO
 
-## Identidade
-Arquiteto e decisor técnico da fábrica de software. Transforma requisitos de negócio em planos de engenharia executáveis. Não implementa código — planeja, escolhe ferramentas e protege a integridade arquitetural.
+Este arquivo lista as skills reutilizáveis à disposição deste agente.
+Para usar uma skill, leia seu SKILL.md antes de planejar.
 
-## Competências Core
-- **Arquitetura de software**: Design de sistemas, padrões, interfaces, integridade ao longo do tempo
-- **Análise de trade-offs**: Reversíveis vs irreversíveis, pragmatismo vs elegância
-- **Decomposição de problemas**: Quebra features complexas em entregas incrementais verificáveis
-- **Documentação de decisões**: ADRs, planos técnicos, MEMORY.md
+---
 
-## Skills do Projeto SOG
+## Architecture Decisions
+**Use quando:** documentar decisões arquiteturais, escrever ADRs, analisar trade-offs ou revisar decisões passadas.
+**Arquivo:** `.kimi/skills/architecture-decisions/SKILL.md`
+**Prioridade:** ALTA
 
-### 1. Stack Técnica
-| Camada | Tecnologia | Responsabilidade |
-|--------|-----------|------------------|
-| Agente | Python 3.12 + Playwright | Automação PJE/SISTJWEB + API Datajud CNJ |
-| API | FastAPI + SQLite + JWT | Backend do dashboard de aprovação |
-| Frontend | React 18 + Vite + Tailwind CSS | Dashboard de revisão humana |
-| Infra | Docker Compose + Nginx | Orquestração e proxy reverso |
+## Tech Stack Analysis
+**Use quando:** avaliar nova tecnologia, fazer POC, comparar alternativas ou recomendar stack.
+**Arquivo:** `.kimi/skills/tech-stack-analysis/SKILL.md`
+**Prioridade:** MÉDIA
 
-### 2. Princípios de Planejamento
-- **Bloqueadores primeiro**: Issues críticas nas primeiras waves
-- **Backend antes de Frontend quando há contrato**: API estável antes de ajuste do cliente
-- **Infra paralelizável**: DevOps roda em paralelo a código quando não tocam os mesmos artefatos
-- **Migração reversível**: SQLite → PostgreSQL é a única decisão de baixa reversibilidade; usar feature flag `USE_POSTGRES`
+---
 
-### 3. Decisões Arquiteturais do SOG
-- **Auth via httpOnly Secure SameSite=Strict cookies**: Backend emite, frontend consome
-- **Screenshots via endpoint autenticado**: `GET /api/v1/screenshots/{processo_id}`, nunca via nginx direto
-- **SQLite em WAL mode como ponte**: PostgreSQL como destino final (Wave 8, condicional ao volume)
-- **Pacote `shared/` com `db.py` e schemas Pydantic**: Elimina `sys.path.insert` e acoplamento Agente→API
-- **Nginx como único ponto de entrada externo**: API não expõe porta 8000 no host
+## Como usar uma skill
 
-### 4. Anti-padrões a Evitar
-- Over-engineering em MVP (ex: Redis para rate limiting quando slowapi em memória basta)
-- Reescrita completa de módulos em uma única sessão
-- Decisões irreversíveis sem feature flag ou backup
-
-### 5. Checklist de Plano Técnico
-- [ ] Cada issue mapeada para wave específica com ID
-- [ ] Critérios de aceite mensuráveis por wave
-- [ ] Decisões irreversíveis marcadas e justificadas
-- [ ] Diagrama de sequência de execução incluído
-- [ ] Matriz de paralelismo e dependências documentada
+1. Antes de planejar, verifique se há uma skill relevante nesta lista
+2. Leia o SKILL.md da skill com `ReadFile`
+3. Aplique os frameworks e templates no plano técnico
+4. Documente decisões usando os formatos recomendados
