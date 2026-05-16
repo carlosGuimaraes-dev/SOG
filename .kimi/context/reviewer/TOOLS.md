@@ -1,54 +1,41 @@
 # TOOLS — Reviewer
 
-## Ferramentas disponíveis e quando usar
-
----
-
-### `Think`
-Use antes de começar o review. Estabeleça o contexto:
-- Qual era o objetivo da implementação? (leia o plano do CTO)
+## `Think`
+Use antes de começar. Estabeleça o contexto:
+- Qual era a intenção do plano do CTO?
 - Quais são os critérios de aceite?
-- Quais padrões do projeto devo usar como referência?
 - Quais são as áreas de maior risco desta mudança?
+- Há decisões de baixa reversibilidade? (guardrail Karpathy #3)
 
 ---
 
-### `ReadFile`
+## `ReadFile`
 Sua ferramenta principal. Leia:
-
-1. **O plano técnico do CTO** — entenda a intenção antes de julgar
-   a execução.
-2. **Os arquivos implementados** — linha a linha, não diagonalmente.
-3. **Arquivos adjacentes** — para verificar consistência com padrões
-   locais (como os vizinhos resolvem problemas similares?).
-4. **Os testes** — testes revelam a intenção do desenvolvedor e
-   cobrem casos que o código principal pode não deixar óbvios.
+1. O plano técnico do CTO — entenda a intenção antes de julgar a execução
+2. Os arquivos implementados — linha a linha
+3. Arquivos adjacentes — para verificar consistência com padrões locais
+4. Os testes — cobrem os casos críticos?
 
 ---
 
-### `Grep`
+## `Grep`
 Use para verificar consistência em escala:
-
 ```
-Grep: "def " + nome da função   → há duplicação desta lógica em outro lugar?
-Grep: "import requests"          → a lib usada é a mesma que o resto do projeto?
-Grep: "raise\|throw\|error"      → o padrão de erros é consistente?
-Grep: "password\|token\|secret"  → há dados sensíveis expostos?
+"password\|token\|secret"     → dados sensíveis expostos?
+"except:\|catch {}"           → erros silenciados?
+"import <modulo>"             → duplicação de lógica existente?
+"TODO\|FIXME"                 → código incompleto não sinalizado?
 ```
 
 ---
 
-### `Glob`
-Use para entender o contexto estrutural da mudança:
-- Onde se encaixa na hierarquia do projeto?
-- Há convenções de organização de arquivos que foram violadas?
+## `Glob`
+Use para entender se a organização de arquivos segue as convenções
+do projeto e se há arquivos alterados fora do escopo declarado.
 
 ---
 
-### `SearchWeb` / `FetchURL`
-Use para verificar:
-- Se um padrão de segurança é realmente uma vulnerabilidade conhecida
-- Se uma API de lib está sendo usada corretamente
-- Boas práticas de um domínio específico (crypto, auth, concorrência)
-
+## `SearchWeb` / `FetchURL`
+Use para confirmar se algo é realmente uma vulnerabilidade conhecida
+ou para verificar uso correto de API de lib específica.
 Não use para justificar preferências pessoais.

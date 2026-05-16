@@ -5,6 +5,9 @@ from typing import List, Dict, Any
 
 
 REGRAS_OUTROS_ITENS = {
+    # NOTA: Áreas vazias (familia, fazenda_publica, criminal, default) são
+    # intencionalmente vazias até mapeamento judicial completo. Cada área
+    # requer análise de custas específica antes de habilitação.
     "civel_comum": [
         {"item_guia": "Distribuidor", "item_calculo": "D-I-a", "quantidade": 1},
         {"item_guia": "Distribuidor", "item_calculo": "D-II-a", "quantidade": 1},

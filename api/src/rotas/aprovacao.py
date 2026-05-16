@@ -1,29 +1,21 @@
 """
 Rotas de aprovação e rejeição de processos.
 """
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agente" / "src"))
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-import threading
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 
 from auth import get_current_user
-from banco import db
+from sog_shared import db
+from limiter import limiter
+from schemas import AprovacaoResponse, RejeicaoResponse, RejeicaoRequest
+
 router = APIRouter(tags=["aprovacao"])
-
-
-class RejeicaoRequest(BaseModel):
-    observacao: str = ""
 
 
 def _disparar_emissao(processo_id: int) -> None:
     """Tenta disparar emissão em background; falha silenciosamente se agente não disponível."""
     try:
         from modulos.emissor import emitir_e_anexar
-        threading.Thread(target=emitir_e_anexar, args=(processo_id,), daemon=True).start()
+        emitir_e_anexar(processo_id)
     except Exception as exc:
         import logging
         logging.getLogger("custas_api").warning(
@@ -33,45 +25,69 @@ def _disparar_emissao(processo_id: int) -> None:
         )
 
 
-@router.post("/aprovar/{processo_id}")
-def aprovar_processo(processo_id: int, user: str = Depends(get_current_user)):
+@router.post("/aprovar/{processo_id}", response_model=AprovacaoResponse)
+@limiter.limit("10/minute")
+def aprovar_processo(
+    processo_id: int,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    user: str = Depends(get_current_user),
+):
     with db.get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             "SELECT status FROM processos WHERE id = ?", (processo_id,)
         ).fetchone()
         if not row:
+            conn.rollback()
             raise HTTPException(status_code=404, detail="Processo não encontrado")
         if row["status"] != "aguardando_aprovacao":
+            conn.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Processo não está aguardando aprovação",
             )
 
-    db.atualizar_status(processo_id, "aprovado")
-    db.registrar_log(processo_id, "aprovacao", "ok", f"Aprovado por {user}")
+        conn.execute(
+            "UPDATE processos SET status = 'aprovado', atualizado_em = CURRENT_TIMESTAMP WHERE id = ?",
+            (processo_id,),
+        )
+        conn.execute(
+            "INSERT INTO log_execucao (processo_id, etapa, status, mensagem) VALUES (?, ?, ?, ?)",
+            (processo_id, "aprovacao", "ok", f"Aprovado por {user}"),
+        )
+        conn.commit()
 
-    _disparar_emissao(processo_id)
+    background_tasks.add_task(_disparar_emissao, processo_id)
 
     return {"message": "Aprovação registrada. Emissão em andamento."}
 
 
-@router.post("/rejeitar/{processo_id}")
+@router.post("/rejeitar/{processo_id}", response_model=RejeicaoResponse)
 def rejeitar_processo(
-    processo_id: int, req: RejeicaoRequest, user: str = Depends(get_current_user)
+    processo_id: int,
+    req: RejeicaoRequest,
+    user: str = Depends(get_current_user),
 ):
+    observacao_segura = req.observacao.replace("\n", " ").replace("\r", "")[:500]
+
     with db.get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             "SELECT status FROM processos WHERE id = ?", (processo_id,)
         ).fetchone()
         if not row:
+            conn.rollback()
             raise HTTPException(status_code=404, detail="Processo não encontrado")
 
-    db.atualizar_status(processo_id, "rejeitado")
-    db.registrar_log(
-        processo_id, "rejeicao", "ok", f"Rejeitado por {user}: {req.observacao}"
-    )
-
-    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE processos SET status = 'rejeitado', atualizado_em = CURRENT_TIMESTAMP WHERE id = ?",
+            (processo_id,),
+        )
+        conn.execute(
+            "INSERT INTO log_execucao (processo_id, etapa, status, mensagem) VALUES (?, ?, ?, ?)",
+            (processo_id, "rejeicao", "ok", f"Rejeitado por {user}: {observacao_segura}"),
+        )
         conn.execute(
             "UPDATE dados_processo SET obs_operador = ? WHERE processo_id = ?",
             (req.observacao, processo_id),

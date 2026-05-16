@@ -1,28 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../lib/api'
-import { useToast } from '../hooks/useToast'
+import { ENDPOINTS } from '../lib/endpoints'
+import { useToast } from '../components/ToastProvider'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import { Card, CardContent } from '../components/ui/Card'
 import Skeleton from '../components/ui/Skeleton'
-
-interface Processo {
-  id: number
-  numero: string
-  status: string
-  criado_em: string
-}
+import type { Processo } from '../types/processo'
 
 export default function Fila() {
   const [aguardando, setAguardando] = useState<Processo[]>([])
   const [manual, setManual] = useState<Processo[]>([])
   const [loading, setLoading] = useState(true)
-  const { toasts, addToast, removeToast } = useToast()
+  const { addToast } = useToast()
 
   async function fetchData() {
     try {
-      const res = await api.get('/processos')
+      const res = await api.get(ENDPOINTS.PROCESSOS)
       setAguardando(res.data.aguardando_aprovacao || [])
       setManual(res.data.pendente_manual || [])
     } catch {
@@ -50,23 +45,6 @@ export default function Fila() {
 
   return (
     <div className="space-y-8">
-      {/* Toasts */}
-      {toasts.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 space-y-2">
-          {toasts.map((t) => (
-            <div
-              key={t.id}
-              className={`rounded-lg px-4 py-3 text-sm shadow-lg cursor-pointer ${
-                t.type === 'error' ? 'bg-destructive text-destructive-foreground' : t.type === 'success' ? 'bg-success text-success-foreground' : 'bg-primary text-primary-foreground'
-              }`}
-              onClick={() => removeToast(t.id)}
-            >
-              {t.message}
-            </div>
-          ))}
-        </div>
-      )}
-
       <section>
         <h2 className="text-xl font-semibold mb-4">Aguardando Aprovação</h2>
         {aguardando.length === 0 ? (
@@ -86,7 +64,7 @@ export default function Fila() {
                       Criado em: {new Date(p.criado_em).toLocaleString('pt-BR')}
                     </div>
                   </div>
-                  <Link to={`/detalhe/${p.id}`}>
+                  <Link to={`/detalhe/${p.id}`} aria-label={`Revisar processo ${p.numero}`}>
                     <Button>Revisar</Button>
                   </Link>
                 </CardContent>
@@ -118,7 +96,7 @@ export default function Fila() {
                       Requer conferência manual dos Itens da Guia
                     </div>
                   </div>
-                  <Link to={`/detalhe/${p.id}`}>
+                  <Link to={`/detalhe/${p.id}`} aria-label={`Revisar processo ${p.numero}`}>
                     <Button variant="outline">Revisar</Button>
                   </Link>
                 </CardContent>

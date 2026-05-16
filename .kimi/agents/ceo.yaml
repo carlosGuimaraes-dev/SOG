@@ -13,16 +13,25 @@ agent:
   subagents:
     cto:
       path: ../agents/cto.yaml
-      description: "Arquitetura, decisões técnicas e decomposição de tarefas em plano executável"
+      description: "Arquitetura, decisões técnicas e plano executável para qualquer tarefa de implementação ou análise técnica"
     dev_senior:
       path: ../agents/dev-senior.yaml
-      description: "Implementação de código: features, correções, refatorações"
+      description: "Implementação de backend: APIs, banco de dados, lógica de negócio, serviços"
+    frontend:
+      path: ../agents/frontend.yaml
+      description: "Implementação de interfaces web: React, Vue, CSS, componentes, acessibilidade"
+    mobile:
+      path: ../agents/mobile.yaml
+      description: "Implementação de apps mobile: React Native, Expo, Flutter, iOS, Android"
+    devops:
+      path: ../agents/devops.yaml
+      description: "Infraestrutura, CI/CD, pipelines GitHub Actions e GitLab CI, Docker, deploy"
     qa:
       path: ../agents/qa.yaml
-      description: "Validação funcional, execução de testes e relatório de bugs"
+      description: "Validação funcional, execução de testes e relatório de bugs com severidade"
     reviewer:
       path: ../agents/reviewer.yaml
-      description: "Code review: qualidade, segurança, consistência e padrões do projeto"
+      description: "Code review: segurança, qualidade, consistência e padrões — incluindo review de repositório completo"
     docs_writer:
       path: ../agents/docs-writer.yaml
-      description: "Redação de documentação técnica: README, API, changelog, docstrings"
+      description: "Redação de documentação técnica: README, API, changelog, ADR, docstrings"

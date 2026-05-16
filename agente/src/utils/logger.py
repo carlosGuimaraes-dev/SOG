@@ -3,7 +3,7 @@ Logging estruturado em JSON.
 """
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 
@@ -15,7 +15,7 @@ def log(
     extra: Optional[Dict[str, Any]] = None,
 ):
     entrada = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "level": level.upper(),
         "mensagem": mensagem,
     }

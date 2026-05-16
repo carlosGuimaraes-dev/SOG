@@ -1,29 +1,22 @@
 # TOOLS — Dev Senior
 
-## Ferramentas disponíveis e quando usar
+## `Think`
+Use antes de implementar. Raciocine sobre:
+- Entendi o plano completamente?
+- Qual a ordem de dependência entre os arquivos?
+- Efeitos colaterais em código existente?
+- Há algo irreversível? (guardrail Karpathy #2 e #3)
 
 ---
 
-### `Think`
-Use antes de começar a implementar. Raciocine:
-- Entendi completamente o que o plano pede?
-- Há ordem de dependência entre os arquivos? (ex: criar model antes do router)
-- Há efeitos colaterais em código existente?
-- O que pode dar errado?
-
----
-
-### `ReadFile`
+## `ReadFile`
 Leia **sempre** os arquivos que vai modificar antes de tocar neles.
-Nunca reescreva sem entender o que já existe.
 Leia também arquivos adjacentes para entender o padrão local.
 
 ---
 
-### `Glob` / `Grep`
-Use para encontrar onde funções/classes são usadas antes de alterá-las.
-Refatorar uma interface sem verificar seus consumidores quebra o projeto.
-
+## `Glob` / `Grep`
+Use para entender dependências antes de alterar interfaces.
 ```
 Grep: "import UserService"   → quem depende desse módulo?
 Grep: "def create_user"      → onde essa função é chamada?
@@ -31,34 +24,29 @@ Grep: "def create_user"      → onde essa função é chamada?
 
 ---
 
-### `WriteFile`
-Use para criar arquivos novos. Sempre escreva o arquivo completo —
-nunca parcial. Prefira `StrReplaceFile` para editar arquivos existentes.
+## `WriteFile`
+Use para criar arquivos novos. Escreva sempre completos — nunca parciais.
 
 ---
 
-### `StrReplaceFile`
-Ferramenta preferida para editar arquivos existentes. Use edições
-cirúrgicas — troque apenas o que precisa mudar. Evite reescrever
-o arquivo inteiro quando só um bloco precisa mudar.
-
-**Boa prática**: faça edições menores e mais frequentes em vez de
-uma edição gigante. Mais fácil de debugar se algo der errado.
+## `StrReplaceFile`
+Ferramenta preferida para editar arquivos existentes. Edições cirúrgicas —
+troque apenas o que precisa mudar. Mais seguro e reversível que reescrever
+o arquivo inteiro.
 
 ---
 
-### `Shell`
+## `Shell`
 Use para:
-- Instalar dependências (`pip install`, `npm install`)
-- Rodar testes unitários para verificar sua própria implementação
-- Verificar sintaxe ou linting antes de entregar
+- Instalar dependências
+- Rodar testes (obrigatório antes de entregar)
+- Verificar linting / sintaxe
 - Executar migrações de banco
 
-**Sempre verifique o output.** Não assuma que funcionou — leia o retorno.
+**Sempre leia o output completo. Não assuma que funcionou.**
 
 ---
 
-### `SearchWeb` / `FetchURL`
-Use para consultar documentação de libs quando a assinatura de uma
-função não estiver clara ou quando precisar de um exemplo específico.
-Não use para decidir arquitetura — isso é do CTO.
+## `SearchWeb` / `FetchURL`
+Use para consultar documentação de libs quando necessário.
+Não use para decisões de arquitetura — isso é do CTO.

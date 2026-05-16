@@ -57,12 +57,13 @@ def extrair_ids_por_tipo(docs: List[Dict[str, Any]], tipos: List[str]) -> str:
 
 # ---- Cível ----
 # Sucumbente: quem foi condenado a pagar (exclui custas/honorários do contexto)
+# Bounds nos quantificadores para evitar backtracking catastrófico em textos longos.
 RE_CIVEL_SUCUMBENTE = re.compile(
-    r"condeno\s+(?:(?:o\s+(?:r[eé]u|autor|embargad[oa])|a)\s+)?([A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇ][A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇa-záéíóúãõàâêîôûç\s\.]+?)\s+ao\s+cumprimento.*?montante\s+de\s+R\$",
+    r"condeno\s+(?:(?:o\s+(?:r[eé]u|autor|embargad[oa])|a)\s+)?([A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇ][A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇa-záéíóúãõàâêîôûç\s\.]{1,200}?)\s+ao\s+cumprimento[^.]{0,100}montante\s+de\s+R\$",
     re.IGNORECASE | re.DOTALL,
 )
 RE_CIVEL_SUCUMBENTE_FALLBACK = re.compile(
-    r"condeno\s+(?:(?:o\s+(?:r[eé]u|autor|embargad[oa])|a)\s+)?([A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇ][A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇa-záéíóúãõàâêîôûç\s\.]+?)\s+ao\s+(?:cumprimento|pagamento)",
+    r"condeno\s+(?:(?:o\s+(?:r[eé]u|autor|embargad[oa])|a)\s+)?([A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇ][A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇa-záéíóúãõàâêîôûç\s\.]{1,200}?)\s+ao\s+(?:cumprimento|pagamento)",
     re.IGNORECASE,
 )
 RE_CIVEL_VALOR_CONDENACAO = re.compile(
@@ -258,7 +259,11 @@ def _chamar_llm(texto: str, area: str) -> Dict[str, Any]:
             response_format={"type": "json_object"},
         )
         conteudo = resposta.choices[0].message.content or "{}"
-        llm_json = json.loads(conteudo)
+        try:
+            llm_json = json.loads(conteudo)
+        except json.JSONDecodeError as exc:
+            erro(f"Resposta LLM inválida (JSONDecodeError): {conteudo[:200]!r}")
+            return {}
 
         # Normaliza campos
         resultado = {
@@ -310,6 +315,37 @@ def salvar_padrao(texto: str, resultado: Dict[str, Any], metodo: str, score: flo
 def buscar_padrao(texto: str) -> Optional[Dict[str, Any]]:
     h = _hash_texto(texto)
     return _cache_padroes.get(h)
+
+
+def parse_comprovante_pagamento(texto: str) -> Dict[str, Any]:
+    """Extrai data, valor e número da guia de comprovante de pagamento."""
+    resultado = {"data": "", "valor": "", "numero_guia": ""}
+
+    m = re.search(
+        r"(?:data\s+d[eo]\s+pagamento|pago\s+em)[:\s]+(\d{2}/\d{2}/\d{4})",
+        texto,
+        re.IGNORECASE,
+    )
+    if m:
+        resultado["data"] = m.group(1)
+
+    m = re.search(
+        r"(?:valor\s+(?:pago|das\s+custas\s+pagas)|valor\s+recolhido)[:\s]+R?\$?\s*([\d.,]+)",
+        texto,
+        re.IGNORECASE,
+    )
+    if m:
+        resultado["valor"] = m.group(1)
+
+    m = re.search(
+        r"(?:guia\s+n[º°\.]+\s*|número\s+da\s+guia[:\s]+)(\d+)",
+        texto,
+        re.IGNORECASE,
+    )
+    if m:
+        resultado["numero_guia"] = m.group(1)
+
+    return resultado
 
 
 def aplicar_correcao(texto: str, correcao: Dict[str, Any]) -> None:

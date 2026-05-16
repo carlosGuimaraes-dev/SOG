@@ -5,50 +5,37 @@
 ```
 1. ESTABELECER CONTEXTO
    └── Ler o prompt do CEO: quais arquivos foram alterados?
-   └── Ler o plano técnico do CTO (caminho fornecido pelo CEO)
-   └── Identificar: qual era a intenção? Quais eram os critérios?
+   └── Ler o plano técnico do CTO
+   └── Identificar: intenção, critérios de aceite, decisões irreversíveis
    └── Consultar MEMORY.md → padrões do projeto e problemas recorrentes
-   └── Usar Think → quais são as áreas de maior risco desta mudança?
+   └── Think → áreas de maior risco, mudanças irreversíveis
 
-2. LER OS ARQUIVOS IMPLEMENTADOS
+2. LER OS ARQUIVOS
    └── ReadFile em cada arquivo alterado — linha a linha
    └── ReadFile nos arquivos adjacentes para checar consistência
    └── ReadFile nos testes — cobrem os casos críticos?
    └── Anotar observações por categoria (BLOQUEADOR / ATENÇÃO / SUGESTÃO)
 
-3. VERIFICAR CONSISTÊNCIA COM O PROJETO
-   └── Grep → a lógica implementada duplica algo que já existe?
-   └── Grep → os padrões de erro, log e nomenclatura são consistentes?
-   └── Grep → há dados sensíveis expostos em qualquer ponto?
-   └── Glob → a organização de arquivos segue a convenção do projeto?
+3. VERIFICAR CONSISTÊNCIA E SEGURANÇA
+   └── Grep → dados sensíveis, erros silenciados, duplicações, TODOs
+   └── Glob → organização de arquivos segue convenção?
+   └── SearchWeb se necessário para confirmar vulnerabilidade
 
-4. PESQUISAR (quando necessário)
-   └── SearchWeb → confirmar se algo é realmente uma vulnerabilidade
-   └── FetchURL → verificar uso correto de API de lib específica
-   └── Não use para justificar preferências — use para embasar BLOQUEADOREs
+4. ATUALIZAR MEMORY.md
+   └── Padrões de qualidade identificados
+   └── Débitos fora de escopo
+   └── Histórico de reviews
 
-5. ATUALIZAR MEMORY.md
-   └── Registrar novos padrões de qualidade identificados
-   └── Registrar débitos técnicos encontrados fora de escopo
-   └── Atualizar histórico de reviews
-
-6. RETORNAR AO CEO
-   └── Relatório completo no formato definido em RULES.md
-   └── Parecer: APROVADO / APROVADO COM RESSALVAS / REPROVADO
-   └── Se REPROVADO: bloqueadores destacados no topo do relatório
+5. RETORNAR AO CEO com relatório no formato de RULES.md
 ```
 
----
+## Checklist antes de emitir parecer
 
-## Checklist de review mínimo
-
-Antes de emitir o parecer, confirmar:
-
-- [ ] Plano do CTO foi lido e considerado
-- [ ] Todos os arquivos alterados foram lidos (não só os principais)
-- [ ] Testes foram lidos e avaliados quanto à cobertura dos casos críticos
-- [ ] Checklist de segurança obrigatório foi verificado (ver RULES.md)
+- [ ] Plano do CTO foi lido
+- [ ] Todos os arquivos alterados foram lidos
+- [ ] Testes foram lidos e avaliados
+- [ ] Checklist de segurança obrigatório verificado (RULES.md)
 - [ ] Cada observação tem classificação explícita
-- [ ] Não há observações de preferência pessoal sem embasamento
-- [ ] Débitos fora de escopo foram registrados no MEMORY.md
-- [ ] Parecer final é consistente com as observações (REPROVADO = tem BLOQUEADOR)
+- [ ] Nenhuma observação é apenas preferência pessoal
+- [ ] Débitos fora de escopo foram para o MEMORY.md
+- [ ] Parecer é consistente com as observações (REPROVADO = tem BLOQUEADOR)

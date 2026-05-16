@@ -15,12 +15,14 @@ Regras de seletor aplicadas:
 import re
 from typing import Dict, Any, Optional, List
 
-from playwright.sync_api import sync_playwright, Page, Browser, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, Browser, TimeoutError as PlaywrightTimeout
 
-from config import SISTJ_URL, SISTJ_USUARIO, SISTJ_SENHA, HEADLESS, TIMEOUT_PADRAO, SCREENSHOTS_DIR, DEMONSTRATIVOS_DIR
+from config import SISTJ_URL, SISTJ_USUARIO, SISTJ_SENHA, SCREENSHOTS_DIR, DEMONSTRATIVOS_DIR
 from utils.logger import info, erro, aviso
 from regras import detectar_area, obter_regras_outros_itens
-from modulos.retry import retry_on_exception, is_session_expired
+from modulos.retry import retry_on_exception
+from modulos.pje import escape_for_css
+from modulos.playwright_client import PlaywrightClient
 
 # Importa constantes de seletores organizadas por seção do sistema
 from modulos.selectors import (
@@ -94,7 +96,8 @@ def _resolve_locator(page: Page, selectors: List[str], timeout: int = 5000):
             return first
         except PlaywrightTimeout:
             continue
-        except Exception:
+        except Exception as exc:
+            aviso(f"_resolve_locator falhou para '{sel[:60]}...': {exc}")
             continue
     return None
 
@@ -169,55 +172,20 @@ def safe_get_input_value(page: Page, selectors: List[str], timeout: int = 3000) 
     if locator:
         try:
             return locator.input_value() or ""
-        except Exception:
+        except PlaywrightTimeout:
+            aviso(f"Timeout ao ler input_value de seletores: {selectors}")
+            return ""
+        except Exception as exc:
+            aviso(f"Erro ao ler input_value de seletores {selectors}: {exc}")
             return ""
     return ""
 
 
-class SistjClient:
+class SistjClient(PlaywrightClient):
     """Cliente de automação para o SISTJWEB (planilha de custas TJDFT)."""
 
-    def __init__(self):
-        self.browser: Optional[Browser] = None
-        self.page: Optional[Page] = None
-        self._playwright = None
-
-    def iniciar(self):
-        """Inicializa o navegador Playwright com viewport fixo."""
-        self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=HEADLESS)
-        context = self.browser.new_context(viewport={"width": 1920, "height": 1080})
-        self.page = context.new_page()
-        self.page.set_default_timeout(TIMEOUT_PADRAO)
-
-    def fechar(self):
-        """Fecha o navegador e libera recursos do Playwright."""
-        if self.browser:
-            self.browser.close()
-        if self._playwright:
-            self._playwright.stop()
-
-    def verificar_sessao(self) -> bool:
-        """Retorna True se a sessão estiver expirada ou inválida."""
-        if not self.page:
-            return True
-        return is_session_expired(self.page)
-
-    def reconectar(self) -> bool:
-        """Refaz login no SISTJWEB. Retorna True em caso de sucesso."""
-        try:
-            info("Reconectando ao SISTJWEB...")
-            if self.login():
-                info("Reconexão SISTJWEB bem-sucedida.")
-                return True
-            erro("Reconexão SISTJWEB falhou: login retornou False.")
-            return False
-        except Exception as e:
-            erro(f"Falha na reconexão SISTJWEB: {e}")
-            return False
-
     @retry_on_exception(
-        exceptions=(Exception, PlaywrightTimeout),
+        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
         max_retries=3,
         backoff=2,
     )
@@ -248,7 +216,7 @@ class SistjClient:
             return False
 
     @retry_on_exception(
-        exceptions=(Exception, PlaywrightTimeout),
+        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
         max_retries=3,
         backoff=2,
     )
@@ -351,9 +319,10 @@ class SistjClient:
                     try:
                         # Tenta preencher usando a lista completa de seletores da peça
                         safe_fill(self.page, seletores_peca, str(valor), timeout=3000)
-                    except Exception:
-                        # Peças são opcionais; falha silenciosa para não quebrar o fluxo
-                        pass
+                    except PlaywrightTimeout:
+                        aviso(f"Timeout ao preencher peça {campo_id} — peça opcional, prosseguindo.")
+                    except Exception as exc:
+                        aviso(f"Erro ao preencher peça {campo_id}: {exc} — peça opcional, prosseguindo.")
 
             # ── Passo 4: Outros Itens ──
             area = detectar_area(dados.get("classe", ""), dados.get("feito", ""))
@@ -408,8 +377,13 @@ class SistjClient:
                 sibling_locator = self.page.locator(VALOR_TOTAL_RECOLHER_SIBLING[0])
                 if sibling_locator.count() > 0:
                     resultado["valor_total_recolher"] = sibling_locator.first.inner_text(timeout=5000)
-            except Exception:
-                # Estratégia 2: regex no HTML bruto como último recurso
+            except PlaywrightTimeout:
+                aviso("Timeout ao extrair valor_total_recolher via sibling.")
+            except Exception as exc:
+                aviso(f"Erro ao extrair valor_total_recolher via sibling: {exc}")
+
+            # Estratégia 2: regex no HTML bruto como último recurso
+            if not resultado["valor_total_recolher"]:
                 try:
                     html = self.page.content()
                     m = re.search(
@@ -417,8 +391,8 @@ class SistjClient:
                     )
                     if m:
                         resultado["valor_total_recolher"] = m.group(1)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    aviso(f"Erro ao extrair valor_total_recolher via regex: {exc}")
 
             # Screenshot de resumo
             screenshot_path = SCREENSHOTS_DIR / f"{numero_processo}_sistjweb.png"
@@ -437,7 +411,7 @@ class SistjClient:
             raise
 
     @retry_on_exception(
-        exceptions=(Exception, PlaywrightTimeout),
+        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
         max_retries=3,
         backoff=2,
     )
@@ -461,7 +435,12 @@ class SistjClient:
             self.page.wait_for_timeout(2000)
 
             # Abre o processo na lista de resultados
-            self.page.click(f"text='{numero_processo}'", timeout=5000)
+            try:
+                self.page.get_by_text(numero_processo, exact=True).click(timeout=5000)
+            except PlaywrightTimeout:
+                # Fallback com seletor CSS escapado
+                numero_escapado = escape_for_css(numero_processo)
+                self.page.locator(f"td:has-text('{numero_escapado}'), a:has-text('{numero_escapado}')").first.click(timeout=5000)
             self.page.wait_for_timeout(2000)
 
             # Clica em Gravar e Aprovar, capturando o download do PDF

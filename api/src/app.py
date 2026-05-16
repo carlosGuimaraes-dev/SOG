@@ -1,16 +1,24 @@
 """
 API FastAPI para dashboard de aprovação de custas TJDFT.
 """
+import os
 import time
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from limiter import limiter
+from schemas import HealthResponse
 
-from banco import db
+from sog_shared import db
+from sog_shared.config import DASHBOARD_SENHA_HASH, init_config
 from rotas import auth, processos, aprovacao, historico
+from auth import _hash_valido
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,8 +27,14 @@ logging.basicConfig(
 logger = logging.getLogger("custas_api")
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_config()
+    if not _hash_valido(DASHBOARD_SENHA_HASH):
+        logger.error("DASHBOARD_SENHA_HASH ausente ou inválido. Aplicação não pode iniciar.")
+        raise RuntimeError("DASHBOARD_SENHA_HASH ausente ou inválido")
+    db.init_db()
     logger.info("API iniciada")
     yield
     logger.info("API encerrada")
@@ -31,12 +45,16 @@ app = FastAPI(
     version="1.1.0",
     description="API de gerenciamento de custas processuais",
     lifespan=lifespan,
+    root_path="/api/v1",
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS
+_frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[_frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,7 +77,26 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# Tratamento global de exceções
+# Tratamento de exceções — handlers específicos primeiro
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning("Erro de validação em %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "Dados de entrada inválidos"},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.warning("HTTPException em %s: %d — %s", request.url.path, exc.status_code, exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+
+
+# Catch-all genérico — NUNCA expõe str(exc) ao cliente
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     logger.error("Erro não tratado em %s: %s", request.url.path, exc, exc_info=True)
@@ -70,7 +107,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 
 # Health check (público, sem auth)
-@app.get("/health", tags=["health"])
+@app.get("/health", response_model=HealthResponse, tags=["health"])
 def health():
     db_ok = True
     try:

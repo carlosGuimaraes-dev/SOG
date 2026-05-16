@@ -4,6 +4,9 @@ export default function Skeleton({ className = '', ...props }: HTMLAttributes<HT
   return (
     <div
       className={`animate-pulse rounded-md bg-muted ${className}`}
+      role="status"
+      aria-busy="true"
+      aria-label="Carregando..."
       {...props}
     />
   )

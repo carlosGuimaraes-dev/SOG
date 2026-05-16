@@ -1,38 +1,40 @@
 # MEMORY — Docs Writer
 
-> Arquivo dinâmico. Registre convenções de documentação adotadas,
-> padrões de escrita definidos e lacunas identificadas entre o código
-> e a documentação existente.
+> Arquivo dinâmico. Registre convenções de documentação, mapa de docs
+> existentes e lacunas identificadas.
 
 ---
 
 ## Convenções de documentação do projeto
 
-- Idioma: português para documentação interna/enterprise
-- Formato: Markdown com tabelas extensivas para rastreabilidade
-- Estilo: tom enterprise — objetivo, quantificado, sem alarmismo mas sem minimizar riscos
-- IDs de issue: prefixo por severidade (CRIT-, HIGH-, MED-, LOW-) + categoria (SEC, ARC, PERF, DEV, FE)
+- Idioma: português para docs internas/técnicas.
+- Formato: Markdown puro com tabelas para checklists e matrizes.
+- Estilo de changelog: N/A (usamos documento de correções incremental).
+- Docstrings: Google style (Args, Returns, Raises) quando aplicável.
+- Exemplos de código: sempre verificados contra o código real antes de publicar.
 
 ---
 
-## Documentação existente (mapa)
+## Mapa de documentação existente
 
-- `ENTERPRISE_CODE_REVIEW_REPORT.md` — Relatório enterprise consolidado de 4 waves de code review (2026-05-15)
-  - Seções: Executive Summary, Risk Heat Map, Critical Issues (13), High Issues (15), Medium/Low por categoria, Positive Findings, Strategic Roadmap (Immediate/Short-term/Medium-term), Compliance & Governance, Appendices (Scorecards, Matriz de Responsabilidade, Referências)
+- `README.md` — visão geral + instalação (presumido existente, não revisado nesta sessão)
+- `docs/code-review-enterprise-report.md` — relatório original do code review (555 linhas, confidencial)
+- `.kimi/context/cto/code-review-fixes.md` — plano técnico das 8 waves (752 linhas)
+- `docs/correcoes-code-review.md` — **documentação produzida nesta sessão** (correções técnicas das 95 issues)
 
 ---
 
 ## Lacunas de documentação identificadas
 
-- README.md principal do projeto não documenta riscos de segurança conhecidos
-- Ausência de guia de contribuição (CONTRIBUTING.md)
-- Ausência de CHANGELOG.md
-- Ausência de ADRs para decisões arquiteturais críticas (SQLite vs PostgreSQL, localStorage vs httpOnly cookies)
-- Documentação de deploy não cobre hardening de containers
-- Variáveis de ambiente não documentam riscos de segurança associados
+- `docs/api.md` — Referência completa de API REST ainda não existe (endpoints estão parcialmente cobertos em `correcoes-code-review.md`)
+- `docs/adr/` — Nenhum ADR registrado. Decisões arquiteturais (httpOnly cookies, shared package, adiar PostgreSQL) estão documentadas apenas em `correcoes-code-review.md`.
+- `CONTRIBUTING.md` — Não existe guia de contribuição.
+- `CHANGELOG.md` — Não existe.
+- Documentação do agente (Playwright) — `agente/src/modulos/` não tem README; conhecimento está disperso nos docstrings.
+- Documentação de deploy em produção — o `docker-compose.yml` está documentado, mas não existe runbook de failover/backup.
 
 ---
 
 ## Histórico de documentações produzidas
 
-- 2026-05-15: `ENTERPRISE_CODE_REVIEW_REPORT.md` — consolidação enterprise-grade de 4 waves de code review (Agente, API, Frontend, Infra)
+- 2026-05-15: `docs/correcoes-code-review.md` — Resumo executivo, guia de configuração, decisões arquiteturais, como rodar, checklist de segurança e roadmap das 95 correções do code review enterprise.

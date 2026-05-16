@@ -1,1 +1,1 @@
-0 * * * * cd /app && python src/main.py >> /var/log/custas.log 2>&1
+0 * * * * cd /app && python src/main.py

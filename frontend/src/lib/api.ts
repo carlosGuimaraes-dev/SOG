@@ -1,36 +1,30 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '/api',
-})
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
+  baseURL: '/api/v1',
+  withCredentials: true,
 })
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    if (error.code === 'ERR_NETWORK') {
+      window.dispatchEvent(
+        new CustomEvent('api:network-error', {
+          detail: 'Sem conexão com o servidor',
+        })
+      )
+    }
+
     const originalRequest = error.config
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (refreshToken) {
-        try {
-          const res = await axios.post('/api/auth/refresh', { refresh_token: refreshToken })
-          localStorage.setItem('access_token', res.data.access_token)
-          localStorage.setItem('refresh_token', res.data.refresh_token)
-          originalRequest.headers.Authorization = `Bearer ${res.data.access_token}`
-          return api(originalRequest)
-        } catch {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          window.location.href = '/login'
-        }
+      try {
+        await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true })
+        return api(originalRequest)
+      } catch (refreshError) {
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
       }
     }
     return Promise.reject(error)

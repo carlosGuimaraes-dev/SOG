@@ -4,7 +4,18 @@ Testes TDD para o extrator de sentenças.
 Foco: identificar quem foi condenado e os encargos de custas/honorários.
 """
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+
+from modulos.extrator_sentenca import (
+    extrair_ids_por_tipo,
+    extrair_sentenca_regex,
+    extrair_sentenca,
+    _chamar_llm,
+    salvar_padrao,
+    buscar_padrao,
+    aplicar_correcao,
+    extrair_completo,
+)
 
 
 # ========================================================================
@@ -63,19 +74,15 @@ Custas pela reclamada, observada a gratuidade de justiça."""
 class TestExtrairSumario:
 
     def test_ids_mandados(self, sumario_tjdft_civel):
-        from modulos.extrator_sentenca import extrair_ids_por_tipo
         assert extrair_ids_por_tipo(sumario_tjdft_civel, ["Mandado"]) == "207553631"
 
     def test_ids_diligencias(self, sumario_tjdft_civel):
-        from modulos.extrator_sentenca import extrair_ids_por_tipo
         assert extrair_ids_por_tipo(sumario_tjdft_civel, ["Diligência"]) == "213349177"
 
     def test_ids_sentenca(self, sumario_tjdft_civel):
-        from modulos.extrator_sentenca import extrair_ids_por_tipo
         assert extrair_ids_por_tipo(sumario_tjdft_civel, ["Sentença"]) == "268016633"
 
     def test_ids_comprovante_custas(self, sumario_tjdft_civel):
-        from modulos.extrator_sentenca import extrair_ids_por_tipo
         assert extrair_ids_por_tipo(sumario_tjdft_civel, ["Comprovante de Pagamento das Custas"]) == "275442991"
 
 
@@ -86,33 +93,27 @@ class TestExtrairSumario:
 class TestSentencaCivel:
 
     def test_sucumbente_nome(self, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_civel, area="civel")
         assert r["sucumbente_nome"] == "MARIA APARECIDA HERUNDINA DOS SANTOS SOUZA"
 
     def test_sucumbente_tipo(self, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_civel, area="civel")
         # No dispositivo não há "réu" antes do nome, mas inferimos que é réu
         assert r["sucumbente_tipo"] == "réu"
 
     def test_valor_condenacao(self, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_civel, area="civel")
         assert r["valor_condenacao"] == "10.158,00"
 
     def test_honorarios_percentual(self, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_civel, area="civel")
         assert r["honorarios_percentual"] == "10"
 
     def test_suspensao_exigibilidade(self, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_civel, area="civel")
         assert r["suspensao_exigibilidade"] is True
 
     def test_score_alto(self, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_civel, area="civel")
         assert r["_score"] >= 0.8
         assert r["_metodo"] == "regex"
@@ -125,24 +126,20 @@ class TestSentencaCivel:
 class TestSentencaTrabalhista:
 
     def test_sucumbente(self, dispositivo_trabalhista):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_trabalhista, area="trabalhista")
         assert r["sucumbente_nome"] == "EMPRESA XYZ LTDA"
         assert r["sucumbente_tipo"] == "reclamada"
 
     def test_valor_total(self, dispositivo_trabalhista):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_trabalhista, area="trabalhista")
         # Deve pegar o TOTAL, não o primeiro valor individual
         assert r["valor_condenacao"] == "32.045,00"
 
     def test_honorarios(self, dispositivo_trabalhista):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_trabalhista, area="trabalhista")
         assert r["honorarios_percentual"] == "15"
 
     def test_gratuidade(self, dispositivo_trabalhista):
-        from modulos.extrator_sentenca import extrair_sentenca_regex
         r = extrair_sentenca_regex(dispositivo_trabalhista, area="trabalhista")
         assert r["suspensao_exigibilidade"] is True
 
@@ -155,7 +152,6 @@ class TestLLMFallback:
 
     @patch("modulos.extrator_sentenca._chamar_llm")
     def test_llm_usado_quando_regex_fraco(self, mock_llm):
-        from modulos.extrator_sentenca import extrair_sentenca
         mock_llm.return_value = {
             "sucumbente_nome": "FULANO",
             "valor_condenacao": "5.000,00",
@@ -166,14 +162,12 @@ class TestLLMFallback:
         assert r["_metodo"] == "llm"
 
     def test_regex_usado_quando_score_alto(self, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca
         r = extrair_sentenca(dispositivo_civel, area="civel")
         assert r["_metodo"] == "regex"
 
     @patch("modulos.extrator_sentenca._chamar_llm")
     def test_llm_preenche_campos_faltantes(self, mock_llm):
         """Quando regex acha sucumbente mas não valor, LLM completa."""
-        from modulos.extrator_sentenca import extrair_sentenca
         mock_llm.return_value = {
             "sucumbente_nome": "",
             "valor_condenacao": "7.500,00",
@@ -189,7 +183,6 @@ class TestLLMFallback:
 
     @patch("modulos.extrator_sentenca._chamar_llm")
     def test_forcar_llm_mesmo_com_score_alto(self, mock_llm, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_sentenca
         mock_llm.return_value = {
             "sucumbente_nome": "NOME CORRIGIDO PELO LLM",
             "valor_condenacao": "99.999,99",
@@ -205,15 +198,11 @@ class TestLLMFallback:
     @patch("modulos.extrator_sentenca._OPENAI_DISPONIVEL", False)
     def test_llm_indisponivel_falha_silenciosa(self):
         """Se OpenAI não instalado, extrair_sentenca continua com regex."""
-        from modulos.extrator_sentenca import _chamar_llm
         resultado = _chamar_llm("texto", "civel")
         assert resultado == {}
 
     def test_chamar_llm_mock_openai(self):
         """Testa _chamar_llm com mock do cliente OpenAI."""
-        from unittest.mock import MagicMock
-        from modulos.extrator_sentenca import _chamar_llm
-
         mock_resposta = MagicMock()
         mock_resposta.choices = [MagicMock()]
         mock_resposta.choices[0].message.content = '{"sucumbente_nome": "EMPRESA TESTE", "sucumbente_tipo": "réu", "valor_condenacao": "15.000,00", "honorarios_percentual": "10", "suspensao_exigibilidade": false}'
@@ -239,6 +228,22 @@ class TestLLMFallback:
         assert r["honorarios_percentual"] == "10"
         assert r["suspensao_exigibilidade"] is False
 
+    @patch("modulos.extrator_sentenca._OPENAI_DISPONIVEL", True)
+    @patch("modulos.extrator_sentenca.OPENAI_API_KEY", "fake-key")
+    @patch("modulos.extrator_sentenca.openai")
+    def test_chamar_llm_json_malformado_loga_erro(self, mock_openai_mod):
+        """json.loads malformada deve logar erro e retornar dict vazio sem crash."""
+        mock_resposta = MagicMock()
+        mock_resposta.choices = [MagicMock()]
+        mock_resposta.choices[0].message.content = "não é json"
+
+        mock_cliente = MagicMock()
+        mock_cliente.chat.completions.create.return_value = mock_resposta
+        mock_openai_mod.OpenAI = lambda **kwargs: mock_cliente
+
+        r = _chamar_llm("dispositivo de teste", "civel")
+        assert r == {}
+
 
 # ========================================================================
 # TESTES - Cache / Aprendizado
@@ -247,7 +252,6 @@ class TestLLMFallback:
 class TestCache:
 
     def test_salvar_e_buscar_padrao(self, dispositivo_civel):
-        from modulos.extrator_sentenca import salvar_padrao, buscar_padrao
         resultado = {"sucumbente_nome": "MARIA SOUZA", "honorarios_percentual": "10"}
         salvar_padrao(dispositivo_civel, resultado, "regex", 0.95)
         encontrado = buscar_padrao(dispositivo_civel)
@@ -255,7 +259,6 @@ class TestCache:
         assert encontrado["score"] == 0.95
 
     def test_correcao_usuario(self, dispositivo_civel):
-        from modulos.extrator_sentenca import salvar_padrao, aplicar_correcao, buscar_padrao
         salvar_padrao(dispositivo_civel, {"sucumbente_nome": "ERRADO"}, "regex", 0.3)
         aplicar_correcao(dispositivo_civel, {"sucumbente_nome": "MARIA SOUZA"})
         encontrado = buscar_padrao(dispositivo_civel)
@@ -270,7 +273,6 @@ class TestCache:
 class TestExtracaoCompleta:
 
     def test_civel(self, sumario_tjdft_civel, dispositivo_civel):
-        from modulos.extrator_sentenca import extrair_completo
         r = extrair_completo(sumario_tjdft_civel, dispositivo_civel, area="civel")
 
         # Do sumário
@@ -288,7 +290,6 @@ class TestExtracaoCompleta:
         assert r["_score"] >= 0.8
 
     def test_trabalhista(self, dispositivo_trabalhista):
-        from modulos.extrator_sentenca import extrair_completo
         sumario = [
             {"doc_id": "999001", "tipo": "Petição Inicial", "nome": "Reclamação"},
             {"doc_id": "999002", "tipo": "Sentença", "nome": "Sentença"},

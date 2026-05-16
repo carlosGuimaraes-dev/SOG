@@ -8,8 +8,14 @@ capa do processo no PJE (PDF).
 import requests
 from typing import Dict, Any, Optional
 from config import DATAJUD_API_KEY, DATAJUD_URL
+from modulos.retry import retry_on_exception
 
 
+@retry_on_exception(
+    exceptions=(ConnectionError, TimeoutError),
+    max_retries=3,
+    backoff=2,
+)
 def consultar(numero_sem_mascara: str) -> Dict[str, Any]:
     """
     Consulta o processo na API Datajud.
@@ -27,7 +33,7 @@ def consultar(numero_sem_mascara: str) -> Dict[str, Any]:
         }
     }
 
-    resp = requests.post(DATAJUD_URL, json=payload, headers=headers, timeout=30)
+    resp = requests.post(DATAJUD_URL, json=payload, headers=headers, timeout=(5, 30))
     resp.raise_for_status()
     data = resp.json()
 
@@ -39,7 +45,10 @@ def consultar(numero_sem_mascara: str) -> Dict[str, Any]:
 
     # Detecta instância pelo segmento TT (posições 15-16 do número CNJ, 0-based 14:16)
     # Formato CNJ 20 dígitos: NNNNNNN(7) DD(2) AAAA(4) J(1) TR(2) OOOO(4)
-    segmento = numero_sem_mascara[14:16] if len(numero_sem_mascara) >= 16 else ""
+    if len(numero_sem_mascara) != 20 or not numero_sem_mascara.isdigit():
+        segmento = ""
+    else:
+        segmento = numero_sem_mascara[14:16]
     instancia = "1ª Instância" if segmento == "07" else "2ª Instância" if segmento == "08" else ""
 
     # Partes — nem todos os tribunais disponibilizam via Datajud (ex: TJDFT)

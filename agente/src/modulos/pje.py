@@ -10,14 +10,17 @@ Seletores baseados na estrutura RichFaces/JSF do PJE:
   • menus: .menu-lateral, .item-menu, links com textos fixos
   • formulários: inputs com name/id gerados pelo JSF (ex: formulario:username)
 """
+import json
+import os
 import re
 from typing import List, Dict, Any, Optional, Tuple
-from playwright.sync_api import sync_playwright, Page, Browser, FrameLocator, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, Browser, FrameLocator, TimeoutError as PlaywrightTimeout
 
-from config import PJE_URL, PJE_USUARIO, PJE_SENHA, PJE_ETIQUETA, HEADLESS, TIMEOUT_PADRAO
+from config import PJE_URL, PJE_USUARIO, PJE_SENHA, PJE_ETIQUETA
 from utils.logger import info, erro, aviso
 from banco import db
-from modulos.retry import retry_on_exception, is_session_expired
+from modulos.retry import retry_on_exception
+from modulos.playwright_client import PlaywrightClient
 
 
 # ─────────────────────────────────────────────────────────────
@@ -57,6 +60,11 @@ def _extrair_numeros_processo(html: str) -> List[str]:
 # FUNÇÕES AUXILIARES RESILIENTES
 # ─────────────────────────────────────────────────────────────
 
+def escape_for_css(texto: str) -> str:
+    """Escapa aspas simples e duplas para uso seguro em seletores CSS."""
+    return texto.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
+
+
 def _tentar_seletores(page_or_locator, seletores: List[str], **kwargs) -> bool:
     """
     Tenta cada seletor da lista até encontrar um elemento visível.
@@ -66,7 +74,10 @@ def _tentar_seletores(page_or_locator, seletores: List[str], **kwargs) -> bool:
         try:
             if page_or_locator.locator(sel).first.is_visible(timeout=2000):
                 return True
-        except Exception:
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"_tentar_seletores falhou para '{sel[:60]}...': {exc}")
             continue
     return False
 
@@ -82,7 +93,10 @@ def _safe_click(page: Page, seletores: List[str], timeout: int = 10000) -> bool:
             if loc.count() > 0:
                 loc.first.click(timeout=timeout)
                 return True
-        except Exception:
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"_safe_click falhou para '{sel[:60]}...': {exc}")
             continue
     return False
 
@@ -95,7 +109,10 @@ def _safe_fill(page: Page, seletores: List[str], valor: str, timeout: int = 1000
             if loc.count() > 0 and loc.first.is_visible(timeout=2000):
                 loc.first.fill(valor, timeout=timeout)
                 return True
-        except Exception:
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"_safe_fill falhou para '{sel[:60]}...': {exc}")
             continue
     return False
 
@@ -114,17 +131,26 @@ def _safe_wait(page: Page, seletores: List[str], timeout: int = 15000) -> bool:
 def _clicar_por_texto_exato(page: Page, texto: str, timeout: int = 10000) -> bool:
     """
     Clica em elemento cujo texto exato corresponda.
-    Tenta estratégias: text=, role=link, role=button, span, a, td.
+    Usa get_by_text como primeira estratégia (seguro contra injeção CSS).
+    Fallback com seletores CSS escapados.
     """
+    try:
+        page.get_by_text(texto, exact=True).click(timeout=timeout)
+        return True
+    except PlaywrightTimeout:
+        pass
+    except Exception as exc:
+        aviso(f"get_by_text falhou para '{texto[:60]}...': {exc}")
+
+    texto_escapado = escape_for_css(texto)
     estrategias = [
-        f"text='{texto}'",
-        f"a:has-text('{texto}')",
-        f"span:has-text('{texto}')",
-        f"div:has-text('{texto}')",
-        f"td:has-text('{texto}')",
-        f"li:has-text('{texto}')",
-        f"[role='link']:has-text('{texto}')",
-        f"[role='button']:has-text('{texto}')",
+        f"a:has-text('{texto_escapado}')",
+        f"span:has-text('{texto_escapado}')",
+        f"div:has-text('{texto_escapado}')",
+        f"td:has-text('{texto_escapado}')",
+        f"li:has-text('{texto_escapado}')",
+        f"[role='link']:has-text('{texto_escapado}')",
+        f"[role='button']:has-text('{texto_escapado}')",
     ]
     return _safe_click(page, estrategias, timeout=timeout)
 
@@ -136,8 +162,13 @@ def _entrar_iframe_login(page: Page, timeout: int = 15000) -> Optional[Page]:
     interagir com os campos de autenticação.
     """
     # Primeiro verifica se o campo já está na página principal
-    if page.locator("input[name='username'], #username").count() > 0:
-        return page
+    try:
+        if page.locator("input[name='username'], #username").count() > 0:
+            return page
+    except PlaywrightTimeout:
+        pass
+    except Exception as exc:
+        aviso(f"Erro ao verificar página principal no iframe login: {exc}")
 
     # Procura iframe de login por id ou name parciais
     iframe_seletores = [
@@ -154,7 +185,10 @@ def _entrar_iframe_login(page: Page, timeout: int = 15000) -> Optional[Page]:
                 iframe = loc.first.content_frame()
                 if iframe and iframe.locator("input[name='username'], #username").count() > 0:
                     return iframe
-        except Exception:
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"Erro ao inspecionar iframe '{sel[:40]}...': {exc}")
             continue
     return page  # fallback: trabalha na página mesmo assim
 
@@ -162,14 +196,24 @@ def _entrar_iframe_login(page: Page, timeout: int = 15000) -> Optional[Page]:
 def _aguardar_e_clicar_menu(page: Page, texto_menu: str, timeout: int = 10000) -> bool:
     """
     Alguns menus do PJE exigem hover ou aguardam animação antes do click.
-    Tenta scrollIntoViewIfNeeded + click com retry.
+    Tenta get_by_text (seguro) primeiro, depois seletores CSS escapados.
     """
+    try:
+        loc = page.get_by_text(texto_menu, exact=True)
+        loc.scroll_into_view_if_needed(timeout=timeout)
+        loc.click(timeout=timeout)
+        return True
+    except PlaywrightTimeout:
+        pass
+    except Exception as exc:
+        aviso(f"get_by_text falhou no menu '{texto_menu[:60]}...': {exc}")
+
+    texto_escapado = escape_for_css(texto_menu)
     seletores = [
-        f"text='{texto_menu}'",
-        f"a:has-text('{texto_menu}')",
-        f"span:has-text('{texto_menu}')",
-        f"li:has-text('{texto_menu}') >> a",
-        f"[class*='menu']:has-text('{texto_menu}')",
+        f"a:has-text('{texto_escapado}')",
+        f"span:has-text('{texto_escapado}')",
+        f"li:has-text('{texto_escapado}') >> a",
+        f"[class*='menu']:has-text('{texto_escapado}')",
     ]
     for sel in seletores:
         try:
@@ -177,7 +221,10 @@ def _aguardar_e_clicar_menu(page: Page, texto_menu: str, timeout: int = 10000) -
             loc.scroll_into_view_if_needed(timeout=timeout)
             loc.click(timeout=timeout)
             return True
-        except Exception:
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"_aguardar_e_clicar_menu falhou para '{sel[:60]}...': {exc}")
             continue
     return False
 
@@ -186,49 +233,10 @@ def _aguardar_e_clicar_menu(page: Page, texto_menu: str, timeout: int = 10000) -
 # PJE CLIENT
 # ─────────────────────────────────────────────────────────────
 
-class PjeClient:
-    def __init__(self):
-        self.browser: Optional[Browser] = None
-        self.page: Optional[Page] = None
-        self._playwright = None
-
+class PjeClient(PlaywrightClient):
     def iniciar(self):
-        self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=HEADLESS)
-        context = self.browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            accept_downloads=True,
-        )
-        self.page = context.new_page()
-        self.page.set_default_timeout(TIMEOUT_PADRAO)
-
-    def fechar(self):
-        if self.browser:
-            self.browser.close()
-        if self._playwright:
-            self._playwright.stop()
-
-    # ─────────────────────────────────────────────────────────
-    # LOGIN
-    # ─────────────────────────────────────────────────────────
-    def verificar_sessao(self) -> bool:
-        """Retorna True se a sessão estiver expirada ou inválida."""
-        if not self.page:
-            return True
-        return is_session_expired(self.page)
-
-    def reconectar(self) -> bool:
-        """Refaz login no PJE. Retorna True em caso de sucesso."""
-        try:
-            info("Reconectando ao PJE...")
-            if self.login():
-                info("Reconexão PJE bem-sucedida.")
-                return True
-            erro("Reconexão PJE falhou: login retornou False.")
-            return False
-        except Exception as e:
-            erro(f"Falha na reconexão PJE: {e}")
-            return False
+        """Inicializa com accept_downloads=True (necessário para anexar PDFs)."""
+        super().iniciar(accept_downloads=True)
 
     def login(self) -> bool:
         if not self.page:
@@ -277,23 +285,54 @@ class PjeClient:
             self.page.wait_for_load_state("networkidle")
             self.page.wait_for_timeout(4000)
 
-            # Verifica login: nome do usuário, avatar, menu principal ou barra superior
-            indicadores_sucesso = [
-                "text='SHEILA'",
-                "text='Sheila'",
+            # Verifica login: indicadores configuráveis via env var + seletores genéricos
+            _indicadores_raw = os.getenv("PJE_INDICADORES_SUCESSO", "")
+            indicadores_texto = []
+            if _indicadores_raw:
+                try:
+                    indicadores_texto = json.loads(_indicadores_raw)
+                    if not isinstance(indicadores_texto, list):
+                        indicadores_texto = []
+                except json.JSONDecodeError:
+                    aviso(f"PJE_INDICADORES_SUCESSO inválido (não é JSON list): {_indicadores_raw[:100]}")
+                    indicadores_texto = []
+
+            logado = False
+            if indicadores_texto:
+                for texto in indicadores_texto:
+                    try:
+                        if self.page.get_by_text(texto, exact=True).count() > 0:
+                            logado = True
+                            break
+                    except PlaywrightTimeout:
+                        continue
+                    except Exception as exc:
+                        aviso(f"Erro ao verificar indicador de login '{texto[:40]}...': {exc}")
+                        continue
+
+            if logado:
+                info("Login PJE realizado com sucesso.")
+                return True
+
+            # Se não há indicadores textuais configurados, ou nenhum bateu,
+            # verifica seletores genéricos de DOM (menu, avatar, botão sair)
+            seletores_genericos = [
                 ".nome-usuario",
                 ".usuario-logado",
                 "[class*='menu-lateral']",
                 "#menuPrincipal",
-                "a:has-text('Sair')",
-                "a:has-text('Logout')",
             ]
-            logado = any(
-                self.page.locator(sel).count() > 0 for sel in indicadores_sucesso
-            )
-            if logado:
-                info("Login PJE realizado com sucesso.")
-                return True
+            try:
+                logado_dom = any(
+                    self.page.locator(sel).count() > 0 for sel in seletores_genericos
+                )
+                if logado_dom:
+                    info("Login PJE realizado com sucesso (indicadores genéricos).")
+                    return True
+            except PlaywrightTimeout:
+                pass
+            except Exception as exc:
+                aviso(f"Erro ao verificar indicadores genéricos de login: {exc}")
 
             # Último recurso: verifica se a URL mudou para algo diferente de login
             if "login" not in self.page.url.lower():
@@ -310,7 +349,7 @@ class PjeClient:
     # COLETA DE PROCESSOS POR ETIQUETA
     # ─────────────────────────────────────────────────────────
     @retry_on_exception(
-        exceptions=(Exception, PlaywrightTimeout),
+        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
         max_retries=3,
         backoff=2,
     )
@@ -334,7 +373,8 @@ class PjeClient:
             # O PJE pode renderizar etiquetas como links, spans ou badges
             if not _clicar_por_texto_exato(self.page, PJE_ETIQUETA):
                 aviso(f"Etiqueta '{PJE_ETIQUETA}' não encontrada via texto; tentando seletores genéricos.")
-                _safe_click(self.page, [f"a:has-text('{PJE_ETIQUETA}')", f"span:has-text('{PJE_ETIQUETA}')"])
+                etiqueta_escapada = escape_for_css(PJE_ETIQUETA)
+                _safe_click(self.page, [f"a:has-text('{etiqueta_escapada}')", f"span:has-text('{etiqueta_escapada}')"])
 
             # Aguarda a grade/tabela de processos carregar
             seletores_tabela = [
@@ -362,7 +402,7 @@ class PjeClient:
     # COLETA DE DOCUMENTOS
     # ─────────────────────────────────────────────────────────
     @retry_on_exception(
-        exceptions=(Exception, PlaywrightTimeout),
+        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
         max_retries=3,
         backoff=2,
     )
@@ -375,11 +415,11 @@ class PjeClient:
         textos: Dict[str, str] = {}
         try:
             # Clica no número do processo (pode estar em link, td ou span)
+            numero_escapado = escape_for_css(numero_processo)
             seletores_processo = [
-                f"a:has-text('{numero_processo}')",
-                f"td:has-text('{numero_processo}')",
-                f"span:has-text('{numero_processo}')",
-                f"text='{numero_processo}'",
+                f"a:has-text('{numero_escapado}')",
+                f"td:has-text('{numero_escapado}')",
+                f"span:has-text('{numero_escapado}')",
             ]
             if not _safe_click(self.page, seletores_processo, timeout=15000):
                 aviso(f"Não foi possível clicar no processo {numero_processo}")
@@ -405,7 +445,10 @@ class PjeClient:
                 try:
                     # Células podem ter classe .rich-table-cell ou ser <td> comuns
                     celulas = linha.locator(".rich-table-cell, td").all_inner_texts()
-                except Exception:
+                except PlaywrightTimeout:
+                    continue
+                except Exception as exc:
+                    aviso(f"Erro ao extrair células de linha da tabela de documentos: {exc}")
                     continue
                 if len(celulas) >= 4:
                     doc_id = re.sub(r"\D", "", celulas[0]) or ""
@@ -444,7 +487,10 @@ class PjeClient:
                                     texto = iframe.locator("body").inner_text(timeout=8000)
                                     if texto.strip():
                                         break
-                            except Exception:
+                            except PlaywrightTimeout:
+                                continue
+                            except Exception as exc:
+                                aviso(f"Erro ao ler iframe '{if_sel[:40]}...' do doc {doc['doc_id']}: {exc}")
                                 continue
 
                         # Estratégia 2: popup / nova aba (menos comum)
@@ -462,7 +508,10 @@ class PjeClient:
                                         texto = self.page.locator(m_sel).first.inner_text(timeout=8000)
                                         if texto.strip():
                                             break
-                                except Exception:
+                                except PlaywrightTimeout:
+                                    continue
+                                except Exception as exc:
+                                    aviso(f"Erro ao ler modal '{m_sel[:40]}...' do doc {doc['doc_id']}: {exc}")
                                     continue
 
                         # Estratégia 3: conteúdo direto na página
@@ -475,9 +524,10 @@ class PjeClient:
                         self.page.go_back()
                         self.page.wait_for_load_state("networkidle")
                         self.page.wait_for_timeout(2000)
-                    except Exception:
-                        # Ignora falhas de leitura de documento individual
-                        pass
+                    except (PlaywrightTimeout, TimeoutError) as exc:
+                        aviso(f"Timeout ao ler documento {doc['doc_id']} ({doc['nome']}): {exc}")
+                    except Exception as exc:
+                        erro(f"Erro inesperado ao ler documento {doc['doc_id']} ({doc['nome']}): {exc}")
 
             info(f"Coletados {len(docs)} documentos do processo {numero_processo}.")
             return docs, textos
@@ -489,7 +539,7 @@ class PjeClient:
     # ANEXAR DEMONSTRATIVO
     # ─────────────────────────────────────────────────────────
     @retry_on_exception(
-        exceptions=(Exception, PlaywrightTimeout),
+        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
         max_retries=3,
         backoff=2,
     )
@@ -500,11 +550,11 @@ class PjeClient:
             self.page.goto(PJE_URL, wait_until="networkidle")
             self.page.wait_for_timeout(2000)
 
+            numero_escapado = escape_for_css(numero_processo)
             seletores_processo = [
-                f"a:has-text('{numero_processo}')",
-                f"td:has-text('{numero_processo}')",
-                f"span:has-text('{numero_processo}')",
-                f"text='{numero_processo}'",
+                f"a:has-text('{numero_escapado}')",
+                f"td:has-text('{numero_escapado}')",
+                f"span:has-text('{numero_escapado}')",
             ]
             if not _safe_click(self.page, seletores_processo, timeout=15000):
                 raise RuntimeError(f"Processo {numero_processo} não encontrado para anexação.")
@@ -513,11 +563,10 @@ class PjeClient:
 
             # Botão "Anexar" ou "Anexar Documento"
             seletores_anexar = [
-                "text='Anexar'",
                 "a:has-text('Anexar')",
                 "button:has-text('Anexar')",
-                "text='Anexar Documento'",
                 "a:has-text('Anexar Documento')",
+                "button:has-text('Anexar Documento')",
                 "input[value*='Anexar']",
             ]
             if not _safe_click(self.page, seletores_anexar, timeout=15000):
@@ -539,23 +588,34 @@ class PjeClient:
                         loc.first.set_input_files(caminho_pdf)
                         anexado = True
                         break
-                except Exception:
+                except PlaywrightTimeout:
+                    continue
+                except Exception as exc:
+                    aviso(f"Erro ao localizar input file para upload: {exc}")
                     continue
             if not anexado:
                 raise RuntimeError("Campo de upload de arquivo não encontrado.")
 
-            # Confirma upload
-            seletores_confirmar = [
-                "text='Confirmar'",
-                "button:has-text('Confirmar')",
-                "input[value='Confirmar']",
-                "text='Enviar'",
-                "button:has-text('Enviar')",
-                "input[value='Enviar']",
-                "text='Salvar'",
-                "button:has-text('Salvar')",
-            ]
-            _safe_click(self.page, seletores_confirmar, timeout=15000)
+            # Confirma upload — tenta get_by_text (seguro) primeiro, depois seletores CSS
+            confirmado = False
+            for texto_btn in ("Confirmar", "Enviar", "Salvar"):
+                try:
+                    self.page.get_by_text(texto_btn, exact=True).click(timeout=5000)
+                    confirmado = True
+                    break
+                except PlaywrightTimeout:
+                    continue
+                except Exception as exc:
+                    aviso(f"get_by_text falhou para botão '{texto_btn}': {exc}")
+            if not confirmado:
+                seletores_confirmar = [
+                    "button:has-text('Confirmar')",
+                    "input[value='Confirmar']",
+                    "button:has-text('Enviar')",
+                    "input[value='Enviar']",
+                    "button:has-text('Salvar')",
+                ]
+                _safe_click(self.page, seletores_confirmar, timeout=15000)
             self.page.wait_for_timeout(3000)
 
             info(f"Demonstrativo anexado ao processo {numero_processo}.")

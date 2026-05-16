@@ -1,43 +1,34 @@
-import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
+import React, { Suspense } from 'react'
+import { Routes, Route, Navigate, Link, useLocation, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
-import { useTheme } from './lib/theme'
+import { ToastProvider } from './components/ToastProvider'
+import ErrorBoundary from './components/ErrorBoundary'
+import ThemeToggle from './components/ThemeToggle'
 import Button from './components/ui/Button'
+import Skeleton from './components/ui/Skeleton'
 import Login from './pages/Login'
 import Fila from './pages/Fila'
-import Detalhe from './pages/Detalhe'
-import Historico from './pages/Historico'
 
-function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
-  return (
-    <Button variant="ghost" size="sm" onClick={toggleTheme} aria-label="Alternar tema">
-      {theme === 'light' ? (
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-        </svg>
-      ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2" />
-          <path d="M12 20v2" />
-          <path d="m4.93 4.93 1.41 1.41" />
-          <path d="m17.66 17.66 1.41 1.41" />
-          <path d="M2 12h2" />
-          <path d="M20 12h2" />
-          <path d="m6.34 17.66-1.41 1.41" />
-          <path d="m19.07 4.93-1.41 1.41" />
-        </svg>
-      )}
-    </Button>
-  )
+const Detalhe = React.lazy(() => import('./pages/Detalhe'))
+const Historico = React.lazy(() => import('./pages/Historico'))
+
+function RequireAuth() {
+  const { user, isLoading } = useAuth()
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
+          role="status"
+          aria-label="Carregando autenticação"
+        />
+      </div>
+    )
+  }
+  return user ? <Outlet /> : <Navigate to="/login" replace />
 }
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
-  return user ? <>{children}</> : <Navigate to="/login" replace />
-}
-
-function Layout({ children }: { children: React.ReactNode }) {
+function Layout() {
   const { logout } = useAuth()
   const location = useLocation()
 
@@ -51,12 +42,14 @@ function Layout({ children }: { children: React.ReactNode }) {
               <Link
                 to="/"
                 className={`transition-colors hover:text-primary ${location.pathname === '/' ? 'font-medium text-primary' : 'text-muted-foreground'}`}
+                aria-label="Ir para fila de aprovação"
               >
                 Fila de Aprovação
               </Link>
               <Link
                 to="/historico"
                 className={`transition-colors hover:text-primary ${location.pathname === '/historico' ? 'font-medium text-primary' : 'text-muted-foreground'}`}
+                aria-label="Ir para histórico"
               >
                 Histórico
               </Link>
@@ -64,13 +57,15 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={logout}>
+            <Button variant="ghost" size="sm" onClick={logout} aria-label="Sair da conta">
               Sair
             </Button>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        <Outlet />
+      </main>
     </div>
   )
 }
@@ -78,23 +73,34 @@ function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/*"
-          element={
-            <RequireAuth>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Fila />} />
-                  <Route path="/detalhe/:id" element={<Detalhe />} />
-                  <Route path="/historico" element={<Historico />} />
-                </Routes>
-              </Layout>
-            </RequireAuth>
-          }
-        />
-      </Routes>
+      <ToastProvider>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route element={<RequireAuth />}>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Fila />} />
+                <Route
+                  path="/detalhe/:id"
+                  element={
+                    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+                      <Detalhe />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/historico"
+                  element={
+                    <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+                      <Historico />
+                    </Suspense>
+                  }
+                />
+              </Route>
+            </Route>
+          </Routes>
+        </ErrorBoundary>
+      </ToastProvider>
     </AuthProvider>
   )
 }

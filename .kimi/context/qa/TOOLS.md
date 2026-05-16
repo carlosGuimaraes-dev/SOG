@@ -1,71 +1,46 @@
-# TOOLS — QA
+# TOOLS — QA Engineer
 
-## Ferramentas disponíveis e quando usar
-
----
-
-### `Think`
-Use antes de começar a validar. Planeje:
-- Quais são os critérios de aceite? (leia do prompt do CEO)
-- Quais são os casos felizes (happy path)?
+## `Think`
+Use antes de validar. Planeje:
+- Quais são os critérios de aceite? (do prompt do CEO)
+- Quais são os happy paths?
 - Quais são os casos de borda?
 - Quais são os casos de erro esperados?
-- O que pode ter efeito colateral nos módulos vizinhos?
+- Há efeitos colaterais em módulos vizinhos?
+- Os testes podem afetar dados reais? (guardrail Karpathy #3)
 
 ---
 
-### `Shell`
-Sua ferramenta principal de validação. Use para:
-
-**Rodar a suite de testes:**
+## `Shell`
+Ferramenta principal de validação.
 ```bash
-pytest tests/ -v                    # Python
-npm test                            # Node
-go test ./...                       # Go
+pytest tests/ -v                  # Python
+npm test                          # Node
+go test ./...                     # Go
+jest --coverage                   # Jest com cobertura
 ```
-
-**Rodar testes específicos:**
-```bash
-pytest tests/test_auth.py -v -k "test_login"
-```
-
-**Verificar cobertura:**
-```bash
-pytest --cov=src tests/
-```
-
-**Testar endpoints HTTP (se aplicável):**
-```bash
-curl -X POST http://localhost:8000/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{"username": "test", "password": "test"}'
-```
-
-**Sempre leia o output completo.** Não assuma que passou.
+**Sempre leia o output completo. Não assuma que passou.**
 
 ---
 
-### `ReadFile`
+## `ReadFile`
 Use para:
-- Ler os arquivos implementados e entender o comportamento esperado
-- Ler os testes existentes para entender o que já está coberto
-- Verificar o tratamento de erros (o que o código faz em casos de exceção)
+- Ler arquivos implementados e entender comportamento esperado
+- Ler testes existentes (o que já está coberto?)
+- Verificar tratamento de erros em todos os fluxos
 
 ---
 
-### `Grep`
-Use para:
-- Encontrar todos os pontos de entrada do código validado
-- Verificar se há tratamento de erro em todos os fluxos
-- Encontrar chamadas a serviços externos que precisam de mock nos testes
-
+## `Grep`
+Use para auditar:
 ```
-Grep: "except\|catch\|error"  → verificar tratamento de erros
-Grep: "TODO\|FIXME\|HACK"     → encontrar código incompleto
+"except\|catch\|error"   → verificar tratamento de erros
+"TODO\|FIXME\|HACK"      → código incompleto
+"password\|token"        → dados sensíveis expostos
 ```
 
 ---
 
-### `Glob`
-Use para mapear os arquivos alterados e garantir que validou
-todos eles — não apenas os mencionados pelo dev_senior.
+## `Glob`
+Use para mapear arquivos alterados e garantir que validou todos,
+não apenas os mencionados pelo executor.

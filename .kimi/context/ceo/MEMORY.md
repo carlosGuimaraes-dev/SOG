@@ -1,46 +1,56 @@
 # MEMORY — CEO
 
-> Este arquivo é dinâmico. O CEO deve atualizá-lo ao longo dos projetos,
-> registrando decisões estratégicas, padrões identificados e aprendizados
-> que devem persistir entre sessões.
+> Arquivo dinâmico. Atualizado ao longo dos projetos registrando decisões
+> estratégicas, padrões identificados e aprendizados entre sessões.
 
 ---
 
 ## Projetos ativos
 
 ### SOG — Sistema de Ordem de Guias (Custas Processuais TJDFT)
-- **Iniciado em:** 2026-05-15
-- **Stack:** Python 3.12 + Playwright (agente), FastAPI + SQLite (API), React 18 + Vite + Tailwind (frontend), Docker Compose + Nginx (infra)
-- **Status:** em andamento — code review enterprise-grade concluído
-- **Última ação:** Code review completo em 4 waves (Agente, API, Frontend, Cross-cutting). Relatório enterprise-grade consolidado e entregue.
-- **Próximo passo:** Correção dos 15 bloqueadores críticos identificados no relatório. Aguardando direção do usuário.
+- **Iniciado em**: 2026-05-15
+- **Stack**: Python 3.12 + Playwright (Agente), FastAPI + SQLite (API), React 18 + Vite (Frontend), Docker Compose + Nginx (Infra)
+- **Status**: 95/98 issues corrigidas e aprovadas. Documentação entregue.
+- **Última ação**: Wave 7 aprovada, ressalvas P1 do reviewer corrigidas e validadas, documentação produzida.
+- **Próximo passo**: Reavaliação formal do code review (score atual estimado ~8.0/10) antes do deploy em produção com dados reais.
 
 ---
 
 ## Decisões estratégicas tomadas
 
-- **2026-05-15:** Code review do SOG revelou 98 issues (15 críticas, 38 altas, 29 médias, 16 baixas). Veredicto global: REPROVADO para produção. Correção dos bloqueadores é pré-requisito para qualquer deploy.
-- **2026-05-15:** Identificada necessidade de migração de SQLite para PostgreSQL como deuda técnica estrutural (race conditions, HA, backups).
-- **2026-05-15:** Armazenamento de JWT em localStorage foi classificado como bloqueador de segurança. Migração para httpOnly cookies é mandatória antes de produção.
+- **2026-05-15**: Implementar todas as 98 issues do code review enterprise, divididas em 8 waves incrementais.
+- **2026-05-15**: Wave 8 (PostgreSQL) adiada — volume atual < 50 processos/dia; SQLite com WAL + backup sidecar é adequado.
+- **2026-05-15**: Rate limiting usa `slowapi` em memória (sem Redis) até escala horizontal justificar.
+- **2026-05-15**: httpOnly cookies com `Secure=false` em dev, `Secure=true` em produção — requer TLS ativo no ambiente de produção.
 
 ---
 
 ## Padrões de delegação aprendidos
 
-- **Reviewer em background:** Funciona bem para tarefas longas e independentes, mas o timeout padrão (15min) pode ser insuficiente para reviews extensos. Recomenda-se usar timeout=1800s.
-- **Reviewer em foreground:** Mais confiável para garantir entrega quando o resultado é bloqueante. Usar para waves finais ou quando o background falhar.
-- **Docs_writer:** Não performa bem com prompts extremamente longos (>3000 palavras de contexto). Para documentos enterprise-grade extensos, o CEO deve consolidar diretamente a partir dos outputs dos agents especializados.
-- **Code review enterprise-grade:** Dividir em waves por módulo (Agente, API, Frontend, Infra) e depois consolidar em documento único é a abordagem mais eficaz. Cada wave deve ter critérios explícitos e formato de saída padronizado.
+- **QA performa melhor** quando recebe os caminhos exatos dos arquivos alterados e critérios de aceite mensuráveis.
+- **DevOps precisa de instrução explícita** para NÃO fazer build do Docker durante a implementação (evita timeout em downloads pesados como Chromium).
+- **Frontend precisa de contrato claro** com backend (endpoints, formato de resposta) antes de implementar.
+- **Wave 6 (pacote compartilhado)** exige verificação pós-implementação de que TODOS os consumidores (agente + API) realmente usam o pacote, não mantêm cópia local.
+- **Reviewer identifica ressalvas que QA não pega** — especialmente em arquitetura e inconsistências entre módulos.
 
 ---
 
-## Preferências do usuário/cliente
+## Preferências do usuário / cliente
 
-- Solicitou relatório "enterprise grade" para code review completo do projeto.
-- Sistema lida com dados judiciais sensíveis (processos, CPF/CNPJ, valores) — segurança e LGPD são prioridades absolutas.
+- Decisões rápidas; não gosta de bloqueios burocráticos.
+- Valida argumentos técnicos antes de decidir escopo (ex: questionou Wave 8 antes de aprovar).
+- Prefere adiar complexidade desnecessária quando o volume de negócio não justifica.
 
 ---
 
 ## Log de entregas
 
-- **2026-05-15:** Code Review Enterprise-Grade do SOG — 4 waves, 61 artefatos revisados, 98 issues identificados. Relatório consolidado em `docs/code-review-enterprise-report.md`. Todos os módulos reprovados (bloqueadores críticos presentes).
+- **2026-05-15**: Wave 1 — Segurança Crítica I (Infra + Auth Core) — aprovada por QA.
+- **2026-05-15**: Wave 2 — Segurança Crítica II (Agente + Playwright) — aprovada por QA.
+- **2026-05-15**: Wave 3 — Auth Cross-Cutting (httpOnly cookies + Screenshots API) — aprovada por QA após correção de endpoints /auth/me e /auth/logout.
+- **2026-05-15**: Wave 4 — Backend API (Concorrência, Paginação, Models) — aprovada por QA.
+- **2026-05-15**: Wave 5 — Frontend (Refatoração, UX, Testes) — aprovada por QA.
+- **2026-05-15**: Wave 6 — Arquitetura Python (Pacote shared, SRP) — aprovada por QA.
+- **2026-05-15**: Wave 7 — Infra Hardening (Containers non-root, nginx limits) — aprovada por QA após correção de backup hardening + .gitignore.
+- **2026-05-15**: Reviewer — APROVADO COM RESSALVAS. Ressalvas P1 (HSTS em HTTP, db.py duplicado no agente) corrigidas e re-validadas por QA.
+- **2026-05-15**: Documentação — `docs/correcoes-code-review.md` produzida pelo docs_writer.

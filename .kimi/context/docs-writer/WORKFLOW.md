@@ -13,45 +13,44 @@
        [ ] ADR (Architecture Decision Record)
        [ ] Guia de contribuição
    └── Quem é o leitor? (dev interno, dev externo, usuário final, stakeholder)
-   └── Usar Think para definir estrutura antes de escrever
+   └── Think: estrutura antes de escrever
 
 2. LER O CÓDIGO (fonte da verdade)
-   └── ReadFile nos arquivos implementados
+   └── ReadFile nos arquivos implementados e aprovados
    └── Grep para mapear funções públicas, endpoints, variáveis de ambiente
    └── ReadFile nos testes — revelam comportamentos esperados
-   └── Glob para ter visão geral da estrutura se necessário
+   └── Glob para visão geral da estrutura se necessário
 
 3. MAPEAR DOCUMENTAÇÃO EXISTENTE
    └── Glob: docs/**/*.md, README*, CHANGELOG*
-   └── ReadFile nos docs existentes para manter consistência de tom e formato
+   └── ReadFile nos docs existentes para manter consistência
    └── Consultar MEMORY.md → convenções adotadas anteriormente
 
 4. REDIGIR
    └── Estrutura primeiro, conteúdo depois
-   └── Exemplos de código sempre verificados contra o código real
+   └── Exemplos de código verificados contra o código real
    └── Linguagem adequada ao leitor definido no passo 1
+   └── Seções sem conteúdo removidas (nunca "a ser preenchido")
 
 5. ATUALIZAR MEMORY.md
-   └── Registrar convenções novas adotadas
-   └── Registrar lacunas encontradas mas fora do escopo
-   └── Atualizar mapa de documentação existente
+   └── Convenções novas adotadas
+   └── Lacunas encontradas mas fora do escopo
+   └── Mapa de documentação atualizado
 
 6. RETORNAR AO CEO
    └── Lista de arquivos produzidos com caminho completo
    └── Audiência de cada documento
-   └── Pontos ambíguos encontrados no código e como foram interpretados
-   └── Lacunas de documentação que ficaram fora do escopo
+   └── Pontos ambíguos no código e como foram interpretados
+   └── Lacunas de documentação fora do escopo
 ```
 
 ---
 
-## Tipos de documento e seus templates mentais
+## Templates mentais por tipo de documento
 
 ### README
 ```
-# Nome do Projeto
-Descrição em 2 frases.
-
+# Nome do Projeto — descrição em 2 frases
 ## O que faz
 ## Requisitos
 ## Instalação
@@ -66,24 +65,15 @@ Descrição em 2 frases.
 ```
 ## POST /recurso
 Descrição do endpoint.
-
-**Request**
-- Headers obrigatórios
-- Body (schema + exemplo)
-
-**Response**
-- 200: schema + exemplo
-- 4xx: casos de erro
-
-**Exemplo completo** (cURL ou código)
+**Request**: headers, body (schema + exemplo)
+**Response**: 200 (schema + exemplo), 4xx (casos de erro)
+**Exemplo completo** (cURL)
 ```
 
-### ADR (Architecture Decision Record)
+### ADR
 ```
 # ADR-NNN: Título
-**Data**: YYYY-MM-DD
-**Status**: Aceito / Depreciado / Substituído por ADR-XXX
-
+Data / Status
 ## Contexto
 ## Decisão
 ## Consequências
@@ -93,10 +83,5 @@ Descrição do endpoint.
 ### Changelog (Keep a Changelog)
 ```
 ## [versão] - YYYY-MM-DD
-### Added
-### Changed
-### Deprecated
-### Removed
-### Fixed
-### Security
+### Added / Changed / Deprecated / Removed / Fixed / Security
 ```

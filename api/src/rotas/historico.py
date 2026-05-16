@@ -1,24 +1,23 @@
 """
 Rotas de histórico de processos emitidos/rejeitados.
 """
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "agente" / "src"))
-
-from fastapi import APIRouter, Depends
-from typing import List, Dict, Any
+from fastapi import APIRouter, Depends, Query, Request
+from typing import List
 
 from auth import get_current_user
-from banco import db
+from sog_shared import db
+from limiter import limiter
+from schemas import HistoricoItemResponse
 
 router = APIRouter(prefix="/historico", tags=["historico"])
 
 
-@router.get("", response_model=List[Dict[str, Any]])
+@router.get("", response_model=List[HistoricoItemResponse])
+@limiter.limit("30/minute")
 def historico(
-    limit: int = 50,
-    offset: int = 0,
+    request: Request,
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     user: str = Depends(get_current_user),
 ):
     with db.get_conn() as conn:

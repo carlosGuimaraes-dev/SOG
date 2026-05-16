@@ -1,27 +1,19 @@
 import { useEffect, useState } from 'react'
 import api from '../lib/api'
-import { useToast } from '../hooks/useToast'
+import { ENDPOINTS } from '../lib/endpoints'
+import { useToast } from '../components/ToastProvider'
 import Badge from '../components/ui/Badge'
 import { Card, CardContent } from '../components/ui/Card'
 import Skeleton from '../components/ui/Skeleton'
-
-interface Processo {
-  id: number
-  numero: string
-  polo_ativo: string
-  valor_total_recolher: string
-  status: string
-  atualizado_em: string
-  obs_operador: string
-}
+import type { ProcessoHistorico } from '../types/processo'
 
 export default function Historico() {
-  const [items, setItems] = useState<Processo[]>([])
+  const [items, setItems] = useState<ProcessoHistorico[]>([])
   const [loading, setLoading] = useState(true)
-  const { toasts, addToast, removeToast } = useToast()
+  const { addToast } = useToast()
 
   useEffect(() => {
-    api.get('/historico')
+    api.get(ENDPOINTS.HISTORICO)
       .then((res) => setItems(res.data))
       .catch(() => addToast('Erro ao carregar histórico', 'error'))
       .finally(() => setLoading(false))
@@ -38,23 +30,6 @@ export default function Historico() {
 
   return (
     <div className="space-y-4">
-      {/* Toasts */}
-      {toasts.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 space-y-2">
-          {toasts.map((t) => (
-            <div
-              key={t.id}
-              className={`rounded-lg px-4 py-3 text-sm shadow-lg cursor-pointer ${
-                t.type === 'error' ? 'bg-destructive text-destructive-foreground' : t.type === 'success' ? 'bg-success text-success-foreground' : 'bg-primary text-primary-foreground'
-              }`}
-              onClick={() => removeToast(t.id)}
-            >
-              {t.message}
-            </div>
-          ))}
-        </div>
-      )}
-
       <h2 className="text-xl font-semibold">Histórico</h2>
 
       {items.length === 0 ? (

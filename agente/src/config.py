@@ -6,9 +6,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Carrega .env do projeto
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-load_dotenv(PROJECT_ROOT / ".env")
 
 # PJE
 PJE_URL = os.getenv("PJE_URL", "https://pje.tjdft.jus.br")
@@ -43,24 +41,12 @@ EMAIL_DESTINO = os.getenv("EMAIL_DESTINO", "")
 _db_path_env = os.getenv("DB_PATH", "")
 if _db_path_env:
     DB_PATH = _db_path_env
-    # Se o path absoluto não for acessível (ex: /dados em dev local), fallback para relativo
-    try:
-        Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        DB_PATH = str(PROJECT_ROOT / "dados" / "custas.db")
 else:
     DB_PATH = str(PROJECT_ROOT / "dados" / "custas.db")
 
 DADOS_DIR = Path(DB_PATH).parent
 SCREENSHOTS_DIR = DADOS_DIR / "screenshots"
 DEMONSTRATIVOS_DIR = DADOS_DIR / "demonstrativos"
-
-# Cria diretórios se não existirem (silencioso se sem permissão)
-try:
-    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    DEMONSTRATIVOS_DIR.mkdir(parents=True, exist_ok=True)
-except OSError:
-    pass
 
 # Playwright
 HEADLESS = os.getenv("HEADLESS", "true").lower() in ("1", "true", "yes")
@@ -72,3 +58,37 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "500"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
+
+
+def init_config():
+    """Inicializa configuração: carrega .env e cria diretórios necessários.
+    
+    Deve ser chamada explicitamente no startup da aplicação.
+    """
+    global DB_PATH, DADOS_DIR, SCREENSHOTS_DIR, DEMONSTRATIVOS_DIR
+
+    load_dotenv(PROJECT_ROOT / ".env")
+
+    # Recarrega DB_PATH após load_dotenv, pois pode ter mudado
+    _db_path_env = os.getenv("DB_PATH", "")
+    if _db_path_env:
+        DB_PATH = _db_path_env
+        # Se o path absoluto não for acessível (ex: /dados em dev local), fallback para relativo
+        try:
+            Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            DB_PATH = str(PROJECT_ROOT / "dados" / "custas.db")
+    else:
+        DB_PATH = str(PROJECT_ROOT / "dados" / "custas.db")
+
+    DADOS_DIR = Path(DB_PATH).parent
+    SCREENSHOTS_DIR = DADOS_DIR / "screenshots"
+    DEMONSTRATIVOS_DIR = DADOS_DIR / "demonstrativos"
+
+    # Cria diretórios se não existirem (silencioso se sem permissão)
+    try:
+        Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+        SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+        DEMONSTRATIVOS_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass

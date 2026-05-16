@@ -3,6 +3,8 @@
 .env.local
 .env.*.local
 .envrc
+.env*
+dados/
 
 # Python
 __pycache__/
@@ -44,9 +46,8 @@ dados/demonstrativos/
 *.sqlite3
 
 # Dados dos Processos
-docs/*
-image/*
-
+image/* # Imagens dos processos (grandes demais para git)
+docs/processos
 # IDE
 .vscode/
 .idea/

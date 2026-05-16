@@ -1,19 +1,15 @@
 # TOOLS — Docs Writer
 
-## Ferramentas disponíveis e quando usar
-
----
-
-### `Think`
-Use antes de começar a redigir. Decida:
+## `Think`
+Use antes de redigir. Decida:
 - Quem é o leitor desta documentação?
-- Qual é o formato mais adequado? (README, docstring, changelog, guia, ADR)
+- Qual formato? (README, docstring, changelog, guia, ADR)
 - Qual nível de detalhe é necessário?
 - O que o leitor precisa saber ANTES de ler este documento?
 
 ---
 
-### `ReadFile`
+## `ReadFile`
 Sua ferramenta principal. Leia sempre:
 - O código implementado (fonte da verdade — não confie no plano, confie no código)
 - Documentação existente (para manter consistência de formato e tom)
@@ -25,54 +21,46 @@ deveria fazer. Leia o código antes de escrever uma linha.
 
 ---
 
-### `Glob`
-Use para mapear o projeto antes de escrever documentação de alto nível
-(README, guia de contribuição, visão geral de arquitetura).
-
+## `Glob`
+Use para mapear o projeto antes de escrever documentação de alto nível.
 ```
-Glob: src/**/*.py     → mapear módulos existentes
-Glob: docs/**/*.md    → encontrar documentação existente
-Glob: **/*.env*       → encontrar variáveis de ambiente
+src/**/*.py        → mapear módulos existentes
+docs/**/*.md       → encontrar documentação existente
+**/*.env*          → encontrar variáveis de ambiente
 ```
 
 ---
 
-### `Grep`
-Use para encontrar todos os usos de uma função/endpoint/variável antes
-de documentá-los — garante que você cobre todos os contextos relevantes.
-
+## `Grep`
+Use para encontrar todos os usos de uma função/endpoint antes de documentá-los.
 ```
-Grep: "def "          → listar todas as funções públicas de um módulo
-Grep: "@router\."     → listar todos os endpoints de um router FastAPI
-Grep: "process\.env"  → listar todas as variáveis de ambiente usadas
+"def "             → listar funções públicas de um módulo
+"@router\."        → listar endpoints de um router FastAPI
+"process\.env"     → listar variáveis de ambiente usadas
 ```
 
 ---
 
-### `WriteFile`
-Use para criar os documentos finais. Sempre escreva o arquivo completo.
-Salve na localização correta conforme o tipo:
+## `WriteFile`
+Use para criar documentos finais. Sempre escreva o arquivo completo.
 
-| Tipo de doc          | Localização padrão              |
-|----------------------|---------------------------------|
-| README principal     | `README.md`                     |
-| Guia de instalação   | `docs/setup.md`                 |
-| Referência de API    | `docs/api.md`                   |
-| Changelog            | `CHANGELOG.md`                  |
-| ADR (decisão)        | `docs/adr/NNN-titulo.md`        |
-| Docstrings           | No próprio arquivo de código    |
-| Guia de contribuição | `CONTRIBUTING.md`               |
+| Tipo de doc          | Localização padrão          |
+|----------------------|-----------------------------|
+| README principal     | `README.md`                 |
+| Guia de instalação   | `docs/setup.md`             |
+| Referência de API    | `docs/api.md`               |
+| Changelog            | `CHANGELOG.md`              |
+| ADR                  | `docs/adr/NNN-titulo.md`    |
+| Guia de contribuição | `CONTRIBUTING.md`           |
 
 ---
 
-### `StrReplaceFile`
+## `StrReplaceFile`
 Use para atualizar documentação existente — adicionar seção de changelog,
 atualizar versão no README, corrigir exemplo desatualizado.
 
 ---
 
-### `SearchWeb` / `FetchURL`
-Use para consultar:
-- Convenções de formato (ex: Keep a Changelog, Conventional Commits)
-- Padrões de documentação de APIs (OpenAPI, JSDoc, etc.)
-- Verificar se uma lib referenciada tem docs oficiais para linkar
+## `SearchWeb` / `FetchURL`
+Use para consultar convenções de formato (Keep a Changelog, Conventional
+Commits, OpenAPI) e verificar se libs referenciadas têm docs para linkar.

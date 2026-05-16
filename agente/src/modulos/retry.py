@@ -148,7 +148,11 @@ def _is_credential_error(exc: Exception) -> bool:
 
 
 def retry_on_exception(
-    exceptions: Union[Type[Exception], Tuple[Type[Exception], ...]] = (Exception,),
+    exceptions: Union[Type[Exception], Tuple[Type[Exception], ...]] = (
+        PlaywrightTimeout,
+        ConnectionError,
+        TimeoutError,
+    ),
     max_retries: int = 3,
     backoff: int = 2,
 ):

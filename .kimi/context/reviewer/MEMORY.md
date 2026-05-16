@@ -1,60 +1,48 @@
 # MEMORY — Reviewer
 
-> Arquivo dinâmico. Registre padrões de problemas recorrentes,
-> débitos técnicos encontrados fora de escopo e aprendizados sobre
-> os padrões de qualidade do projeto.
+> Arquivo dinâmico. Registre padrões de qualidade, problemas recorrentes
+> e débitos encontrados fora de escopo.
 
 ---
 
 ## Padrões de qualidade do projeto
 
-<!-- Convenções e padrões reais observados no codebase — a régua
-que você usa para avaliar consistência.
-Exemplo:
-- Erros HTTP sempre retornam `{"detail": "mensagem"}` (FastAPI padrão)
-- Funções de serviço nunca acessam request/response diretamente
-- Toda função pública tem docstring no estilo Google
-- Logs usam `logger = logging.getLogger(__name__)` por módulo
+<!-- Convenções reais observadas — a régua usada para avaliar consistência.
+Ex:
+- Erros HTTP sempre retornam {"detail": "mensagem"} com status adequado
+- Logs usam logger = logging.getLogger(__name__) por módulo
+- Toda função pública tem docstring
 -->
-
 _Nenhum padrão registrado ainda._
 
 ---
 
-## Problemas recorrentes identificados
+## Problemas recorrentes nas entregas
 
-<!-- Tipos de problemas que aparecem com frequência nas entregas do dev_senior.
-Exemplo:
+<!-- Tipos de problemas que aparecem com frequência.
+Ex:
 - Ausência de tratamento de erro em chamadas a serviços externos
-- Variáveis de configuração acessadas diretamente via os.environ
-  em vez de usar o módulo config centralizado
-- Testes sem assert de status code, apenas de estrutura do response
+- Variáveis de configuração acessadas via os.environ em vez do módulo config
 -->
-
-_Nenhum padrão registrado ainda._
+_Nenhum problema recorrente registrado ainda._
 
 ---
 
-## Débitos técnicos fora de escopo (encontrados durante reviews)
+## Débitos técnicos fora de escopo
 
-<!-- Problemas encontrados em código não alterado — para o CEO priorizar.
-Exemplo:
-- `services/email.py` linha 34: sem retry em caso de falha de SMTP
-- `models/product.py`: campo `price` como float (risco de precisão monetária)
-- `routers/admin.py`: sem verificação de role de admin nos endpoints DELETE
+<!-- Problemas em código não alterado — para o CEO priorizar.
+Ex:
+- services/email.py linha 34: sem retry em falha de SMTP
+- models/product.py: campo price como float (risco de precisão monetária)
 -->
-
 _Nenhum débito registrado ainda._
 
 ---
 
 ## Histórico de reviews
 
-<!-- Registro dos reviews realizados com resultado.
-Exemplo:
+<!-- Ex:
 - 2024-01-20: auth/jwt.py — APROVADO (1 sugestão de nomenclatura)
 - 2024-01-22: routers/users.py — REPROVADO (credencial exposta em log)
-- 2024-01-23: routers/users.py (v2) — APROVADO COM RESSALVAS
 -->
-
 _Nenhum review registrado ainda._

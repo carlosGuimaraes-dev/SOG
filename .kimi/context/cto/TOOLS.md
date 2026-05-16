@@ -1,59 +1,49 @@
 # TOOLS — CTO
 
-## Ferramentas disponíveis e quando usar
+## `Think`
+Use **antes de qualquer proposta**. Raciocine sobre:
+- O que o codebase já resolve? Qual a menor mudança que entrega o resultado?
+- Quais dependências entre componentes afetados?
+- Há risco de regressão? Há decisão de baixa reversibilidade?
 
 ---
 
-### `Think`
-Use **antes de qualquer proposta técnica**. Raciocine sobre:
-- O que o codebase atual já resolve?
-- Qual a menor mudança que entrega o resultado?
-- Quais as dependências entre componentes afetados?
-- Há riscos de regressão?
-
----
-
-### `ReadFile`
-Leia os arquivos-chave antes de propor qualquer arquitetura.
-Nunca assuma como o código está estruturado — verifique.
-
-Priorize ler:
-- Arquivos de configuração (package.json, pyproject.toml, etc.)
+## `ReadFile`
+Leia os arquivos-chave antes de propor qualquer arquitetura. Priorize:
+- Arquivos de configuração (package.json, pyproject.toml, go.mod, etc.)
 - Entry points da aplicação
 - Módulos diretamente relacionados à tarefa
 - Testes existentes (revelam contratos implícitos)
 
 ---
 
-### `Glob`
-Use para mapear a estrutura do projeto antes de planejar.
+## `Glob`
+Use para mapear a estrutura antes de planejar.
 ```
-Glob pattern: src/**/*.ts   → todos os TypeScript em src/
-Glob pattern: **/*router*   → encontrar arquivos de rotas
-Glob pattern: **/models/**  → encontrar camada de dados
-```
-
----
-
-### `Grep`
-Use para encontrar onde interfaces, classes ou funções são usadas.
-Essencial para avaliar o impacto de mudanças em contratos existentes.
-```
-Grep pattern: "class UserService"  → onde é definida e importada
-Grep pattern: "from auth import"   → dependências do módulo auth
+src/**/*.ts        → todos os TypeScript em src/
+**/*router*        → arquivos de rota
+**/models/**       → camada de dados
+.github/workflows/ → pipelines CI/CD existentes
 ```
 
 ---
 
-### `SearchWeb` / `FetchURL`
-Use para validar versões de bibliotecas, verificar compatibilidades,
-consultar documentação oficial antes de recomendar uma dependência.
-Não recomende libs sem verificar se estão ativas e mantidas.
+## `Grep`
+Use para entender impacto de mudanças em contratos existentes.
+```
+"class UserService"   → onde é definida e importada
+"from auth import"    → dependências do módulo auth
+"@app.route"          → todos os endpoints Flask
+```
 
 ---
 
-### `WriteFile`
-Use para gravar o plano técnico em arquivo estruturado que o CEO e
-o dev_senior possam consultar. Salve em:
-`.kimi/context/cto/MEMORY.md` (decisões persistentes) ou
-`.kimi/plans/<nome-da-tarefa>.md` (plano executável da tarefa atual).
+## `SearchWeb` / `FetchURL`
+Valide versões de libs, compatibilidades e documentação oficial antes de
+recomendar uma dependência. Não recomende libs sem verificar manutenção ativa.
+
+---
+
+## `WriteFile`
+Salve o plano técnico em `.kimi/plans/<nome-da-tarefa>.md`.
+Atualize `.kimi/context/cto/MEMORY.md` com decisões arquiteturais.

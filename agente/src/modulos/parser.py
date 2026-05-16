@@ -1,9 +1,13 @@
 """
-Extração de dados a partir dos documentos do PJE.
-Regex para sentenças, comprovantes de pagamento, etc.
+Orquestração de extração de dados a partir dos documentos do PJE.
+
+As funções de parsing propriamente ditas foram movidas para extrator_sentenca.py.
+Este módulo mantém wrappers para compatibilidade temporária e a função
+processar_documentos que orquestra a extração.
 """
-import re
 from typing import List, Dict, Any
+
+from modulos.extrator_sentenca import extrair_sentenca_regex, parse_comprovante_pagamento
 
 
 def extrair_ids(docs: List[Dict[str, Any]], tipo_doc: str) -> str:
@@ -15,77 +19,18 @@ def extrair_ids(docs: List[Dict[str, Any]], tipo_doc: str) -> str:
 def parse_sentenca(texto: str) -> Dict[str, Any]:
     """
     Extrai informações da sentença.
+
+    .. deprecated::
+        Use extrator_sentenca.extrair_sentenca_regex() diretamente.
+        Mantido para compatibilidade temporária.
     """
-    resultado = {
-        "sucumbente_nome": "",
-        "honorarios_percentual": "",
-        "suspensao_exigibilidade": False,
-        "valor_condenacao": "",
+    resultado_regex = extrair_sentenca_regex(texto, area="civel")
+    return {
+        "sucumbente_nome": resultado_regex.get("sucumbente_nome", ""),
+        "honorarios_percentual": resultado_regex.get("honorarios_percentual", ""),
+        "suspensao_exigibilidade": resultado_regex.get("suspensao_exigibilidade", False),
+        "valor_condenacao": resultado_regex.get("valor_condenacao", ""),
     }
-
-    # Sucumbente (ex: "condeno FULANO ao pagamento", "condeno o réu FULANO ao pagamento", "condeno a EMPRESA ao pagamento")
-    m = re.search(
-        r"condeno\s+(?:(?:o\s+(?:r[eé]u|autor|embargad[oa])|a)\s+)?([A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇ][A-ZÁÉÍÓÚÃÕÀÂÊÎÔÛÇa-záéíóúãõàâêîôûç\s\.]+?)\s+ao\s+pagamento",
-        texto,
-        re.IGNORECASE,
-    )
-    if m:
-        resultado["sucumbente_nome"] = m.group(1).strip().replace("\n", " ")
-
-    # Honorários
-    m = re.search(r"honorários[^%]+?(\d+(?:,\d+)?)\s*%", texto, re.IGNORECASE)
-    if m:
-        resultado["honorarios_percentual"] = m.group(1)
-
-    # Suspensão de exigibilidade (art 98 § 3)
-    if re.search(r"art(?:igo)?\.?\s*98.{0,50}§\s*3", texto, re.IGNORECASE | re.DOTALL):
-        resultado["suspensao_exigibilidade"] = True
-
-    # Valor da condenação
-    # Tenta vários padrões: "valor da condenação de R$", "montante de R$", "condeno...montante de R$"
-    padroes_valor = [
-        r"valor\s+d[ae]\s+condena[çc][ãa]o\s+de\s+R\$\s*([\d.,]+)",
-        r"condeno.*?ao\s+cumprimento.*?montante\s+de\s+R\$\s*([\d.,]+)",
-        r"montante\s+de\s+R\$\s*([\d.,]+)",
-    ]
-    for padrao in padroes_valor:
-        m = re.search(padrao, texto, re.IGNORECASE | re.DOTALL)
-        if m:
-            resultado["valor_condenacao"] = m.group(1).rstrip(".")
-            break
-
-    return resultado
-
-
-def parse_comprovante_pagamento(texto: str) -> Dict[str, Any]:
-    """Extrai data, valor e número da guia de comprovante de pagamento."""
-    resultado = {"data": "", "valor": "", "numero_guia": ""}
-
-    m = re.search(
-        r"(?:data\s+d[eo]\s+pagamento|pago\s+em)[:\s]+(\d{2}/\d{2}/\d{4})",
-        texto,
-        re.IGNORECASE,
-    )
-    if m:
-        resultado["data"] = m.group(1)
-
-    m = re.search(
-        r"(?:valor\s+(?:pago|das\s+custas\s+pagas)|valor\s+recolhido)[:\s]+R?\$?\s*([\d.,]+)",
-        texto,
-        re.IGNORECASE,
-    )
-    if m:
-        resultado["valor"] = m.group(1)
-
-    m = re.search(
-        r"(?:guia\s+n[º°\.]+\s*|número\s+da\s+guia[:\s]+)(\d+)",
-        texto,
-        re.IGNORECASE,
-    )
-    if m:
-        resultado["numero_guia"] = m.group(1)
-
-    return resultado
 
 
 def processar_documentos(docs: List[Dict[str, Any]], textos: Dict[str, str]) -> Dict[str, Any]:

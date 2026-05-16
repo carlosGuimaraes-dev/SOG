@@ -4,6 +4,7 @@ Envio de alertas por e-mail quando há processos pendentes de aprovação.
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import html
 from typing import List, Dict, Any
 
 from config import SMTP_HOST, SMTP_PORTA, SMTP_USUARIO, SMTP_SENHA, EMAIL_DESTINO
@@ -23,7 +24,9 @@ def enviar_alerta(processos: List[Dict[str, Any]]):
 
     linhas = []
     for p in processos:
-        linhas.append(f"<li>{p['numero']} — {p.get('status', '')}</li>")
+        numero_escapado = html.escape(str(p.get('numero', '')))
+        status_escapado = html.escape(str(p.get('status', '')))
+        linhas.append(f"<li>{numero_escapado} — {status_escapado}</li>")
 
     corpo = f"""
     <html>

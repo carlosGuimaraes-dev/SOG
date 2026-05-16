@@ -38,21 +38,29 @@ export default function Login() {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Usuário</label>
+              <label htmlFor="username" className="text-sm font-medium">
+                Usuário
+              </label>
               <Input
+                id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="admin"
+                aria-label="Nome de usuário"
                 required
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Senha</label>
+              <label htmlFor="password" className="text-sm font-medium">
+                Senha
+              </label>
               <Input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••"
+                aria-label="Senha"
                 required
               />
             </div>
