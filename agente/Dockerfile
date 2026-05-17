@@ -13,11 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install chromium
 
 COPY shared/ ./shared/
-RUN pip install --no-cache-dir -e ./shared
+RUN pip install --no-cache-dir ./shared
 
 # Baixar supercronic no builder para evitar wget no runtime
-ARG SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.33/supercronic-linux-amd64
-ARG SUPERCRONIC_SHA1SUM=71b0d58cc53f6bd72cf2f293e09e294b79c666d8
+ARG SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.43/supercronic-linux-amd64
+ARG SUPERCRONIC_SHA1SUM=f97b92132b61a8f827c3faf67106dc0e4467ccf2
 RUN wget -q "$SUPERCRONIC_URL" -O /tmp/supercronic && \
     echo "${SUPERCRONIC_SHA1SUM}  /tmp/supercronic" | sha1sum -c - && \
     chmod +x /tmp/supercronic
@@ -62,8 +62,20 @@ RUN chmod 0600 /app/crontab
 USER appuser
 WORKDIR /app
 
-# Healthcheck em Python puro — verifica se o processo PID 1 é supercronic
+# Healthcheck em Python puro — verifica se supercronic está rodando em qualquer processo
+RUN printf '%s\n' \
+    'import os, sys' \
+    'for pid in os.listdir("/proc"):' \
+    '    if pid.isdigit():' \
+    '        try:' \
+    '            with open(f"/proc/{pid}/cmdline", "rb") as f:' \
+    '                if b"supercronic" in f.read():' \
+    '                    sys.exit(0)' \
+    '        except Exception:' \
+    '            pass' \
+    'sys.exit(1)' > /app/healthcheck.py
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import os; cmdline=open('/proc/1/cmdline','rb').read().decode().replace('\x00',' '); exit(0 if 'supercronic' in cmdline else 1)"
+  CMD python /app/healthcheck.py
 
 CMD ["supercronic", "/app/crontab"]

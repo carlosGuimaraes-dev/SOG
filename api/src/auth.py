@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 
 from sog_shared import db
 from sog_shared.config import DASHBOARD_USUARIO, DASHBOARD_SENHA_HASH
@@ -29,7 +29,6 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 JWT_ISSUER = os.getenv("JWT_ISSUER", "sog-api")
 JWT_AUDIENCE = "custas-dashboard"
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
 
@@ -40,13 +39,13 @@ def verify_password(plain: str, hashed: str) -> bool:
     if not hashed or len(hashed) < 10:
         return False
     try:
-        return pwd_context.verify(plain, hashed)
-    except ValueError:
+        return bcrypt.checkpw(plain.encode(), hashed.encode())
+    except Exception:
         return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 # ---------------------------------------------------------------------------

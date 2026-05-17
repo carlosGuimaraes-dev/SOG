@@ -36,6 +36,44 @@
 
 ---
 
+## Histórico de implementações (continuação)
+
+### 2026-05-16 — Bugfixes PDF + Extração de documentos da capa
+- **Bugs corrigidos:**
+  - `agente/scripts/testar_pdf.py:201` — parser agora usa `dispositivo` em vez de `texto_completo` (evita match de honorários em petições).
+  - `agente/src/modulos/extrator_sentenca.py:146` — `valor.rstrip(".")` → `valor.rstrip(".,;")` (remove vírgula residual do regex).
+- **Evolução:**
+  - `agente/src/modulos/extrator_pdf.py` — nova função `extrair_documentos_capa()` que extrai a tabela de documentos do PJe das primeiras páginas do PDF. Heurística: state machine por linhas, separação nome/tipo via lista de tipos conhecidos. Retorna `[]` em caso de falha (nunca quebra).
+  - Campo `documentos_capa` adicionado ao dict retornado por `extrair_texto_pdf()` — contrato preservado, campo novo apenas.
+  - `agente/scripts/testar_pdf.py` — exibe tabela de documentos da capa no output (rich + ANSI fallback).
+  - `agente/tests/test_extrator_pdf.py` — teste `test_extrair_documentos_capa` valida extração do PDF real (120 docs, tipos como Mandado/Diligência/Comprovante de Pagamento de Custas identificados).
+- **Testes:** 57/57 agente + 30/30 API passaram.
+
+### 2026-05-16 — Função utilitária `mapear_tipo_sistjweb`
+- **`agente/src/modulos/extrator_pdf.py`** — adicionada função `mapear_tipo_sistjweb(tipo_pje: str) -> str` que mapeia tipos de documento do PJe para os campos do payload SISTJWEB:
+  - Mandado → `ids_mandados`
+  - Ofício → `ids_oficios`
+  - Alvará → `ids_alvaras`
+  - Traslado → `ids_traslados`
+  - Carta de Sentença → `ids_cartas_sentenca`
+  - AR → `ids_ar`
+  - AR/MP → `ids_armp`
+  - Diligência → `ids_circunscricao_origem`
+  - Comprovante de Pagamento de Custas → `custas_pagas`
+  - Tipos não mapeados retornam `""`.
+- **Nota:** A função `extrair_documentos_capa()` e o campo `documentos_capa` no retorno de `extrair_texto_pdf()` já existiam no arquivo (implementados na sessão anterior). A adição desta sessão foi apenas `mapear_tipo_sistjweb`.
+
+### 2026-05-16 — Script CLI de teste de PDFs judiciais
+- **Arquivo modificado:** `agente/scripts/testar_pdf.py` — ajustado para seguir especificação exata:
+  - `sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))` no topo
+  - Fallback ANSI colors quando `rich` não está instalado (cores para sucesso/erro/aviso)
+  - `try/except` generoso no `main()` capturando falhas de extração e parsing
+  - Aviso de PDF scanned em vermelho (`\033[31m`)
+  - Saída JSON indentada com `--verbose`
+- **Arquivos já existentes (não modificados):** `agente/tests/test_extrator_pdf.py` (já atendia requisitos), `agente/requirements.txt` (já tinha `pymupdf==1.24.5`).
+
+---
+
 ## Débitos técnicos identificados (fora do escopo)
 
 1. **`agente/src/modulos/selectors.py`** contém templates com placeholders CSS inseguros (`text='{etiqueta}'`, `text='{numero}'`, `text='{nome}'`). Essas constantes não são usadas no código atual (código morto), mas representam risco se forem reativadas. Recomendação: remover na Wave 7 ou 8.
@@ -123,3 +161,18 @@
   - `api/tests/conftest.py`, `agente/tests/conftest.py` — adicionado `shared/` ao `sys.path` para importar `sog_shared` sem instalação.
   - `api/tests/test_api.py` — monkeypatch atualizado de `"banco.db.*"` para `"sog_shared.db.*"`.
 - **Testes:** API 28/28 passaram em 4.15s. Agente 50/50 passaram em 0.88s. Nenhum `sys.path.insert` restante em `api/src/` ou `agente/src/`.
+
+### 2026-05-16 — Ponte PDF: extrator + script CLI + testes
+- **Arquivos criados:**
+  - `agente/src/modulos/extrator_pdf.py` — extrai texto de PDF local com PyMuPDF; isola DISPOSITIVO via heurística de coordenadas (descarta cabeçalho/rodapé) + regex; detecta PDFs scanned.
+  - `agente/scripts/testar_pdf.py` — CLI que recebe caminho de PDF, extrai texto, envia para `extrair_sentenca` e `processar_documentos`, imprime resumo colorido (rich) e JSON.
+  - `agente/tests/test_extrator_pdf.py` — testes unitários: PDF real, scanned mock, arquivo inexistente, heurística de dispositivo.
+- **Arquivos alterados:**
+  - `agente/requirements.txt` — adicionado `pymupdf==1.24.5`.
+- **Heurística DISPOSITIVO:**
+  - Busca por `DISPOSITIVO` e `ANTE O EXPOSTO` com terminadores (`Assinado`, `LOCAL E DATA`, `Intimem-se`).
+  - Prioriza match que contenha `"condeno"` (evita falsos positivos de petições/razões de recurso).
+  - Fallback: últimos 25% do texto.
+- **Scanned detection:** por página, se `len(texto_bruto.strip()) < 30` e `page.get_images()` não vazio.
+- **Desvio do plano (sinalizado):** O regex `DISPOSITIVO` isolado capturava "Dispositivo de iluminação diurna" de documentos de seguro no PDF real (falso positivo). Foi necessário adicionar priorização por `"condeno"` nos matches para garantir que o dispositivo da sentença seja isolado corretamente.
+- **Testes:** 56/56 passaram (6 novos em `test_extrator_pdf.py` + 50 existentes). PDF real extrai corretamente: sucumbente=MARIA APARECIDA HERUNDINA DOS SANTOS SOUZA, valor=10.158,00, honorários=10%, suspensão=Sim, score=1.00, método=regex.

@@ -143,7 +143,7 @@ def extrair_sentenca_regex(texto: str, area: str = "civel") -> Dict[str, Any]:
         m = RE_CIVEL_VALOR_CONDENACAO.search(texto)
         if m:
             valor = next((g for g in m.groups() if g), "")
-            resultado["valor_condenacao"] = valor.rstrip(".")
+            resultado["valor_condenacao"] = valor.rstrip(".,;")
 
         # Honorários
         m = RE_CIVEL_HONORARIOS.search(texto)

@@ -86,3 +86,29 @@
   - Testes agente: 50/50 passaram
   - Testes API: 28/28 passaram em 1.91s
   - Warnings: 18 preexistentes (deprecation passlib/jose), nenhum novo
+
+- 2026-05-16: Extrator PDF + Script CLI — REPROVADO
+  - Código de produção: APROVADO — funciona conforme especificado (validado manualmente)
+  - Script CLI: APROVADO — extração correta do PDF real, flags --verbose e --area funcionam
+  - Regressão: APROVADO — test_extrator_sentenca.py 25/25, test_parser.py 12/12
+  - Bug #1 (teste): `test_extrair_texto_pdf_real` asserção rígida — PDF real contém "condenação"/"Deixo de condenar", não "condeno" literal — ALTO
+  - Bug #2 (teste): `test_detectar_scanned_pdf` não mocka `os.path.exists`, retornando "Arquivo não encontrado" antes de processar — ALTO
+  - Sem imports circulares, tratamento de erros adequado, nenhum arquivo existente modificado indevidamente
+
+- 2026-05-16: Análise estática — Extrator PDF + Script CLI + Testes + Requirements — APROVADO
+  - Sintaxe Python: 3/3 arquivos compilam sem erros
+  - Imports: todos corretos, com fallbacks graciosos (fitz, rich, utils.logger)
+  - Tratamento de erros: validado manualmente (None, vazio, int, inexistente, exceção em fitz.open)
+  - Nenhuma operação de escrita/remoção/subprocess/eval/exec encontrada
+  - PDF real existe em docs/processos/0732384-63.2024.8.07.0001-1778736791355-34616-processo.pdf
+  - requirements.txt: pymupdf==1.24.5 presente na linha 4
+  - Testes automatizados: 6/6 passaram em 13.14s
+  - Bugs anteriores corrigidos: asserção flexível em test_extrair_texto_pdf_real, mock os.path.exists em test_detectar_scanned_pdf
+  - Warnings: nenhum
+
+- 2026-05-16: Extração de documentos da capa — APROVADO
+  - Critério 1 (Dispositivo): todos os campos corretos — sucumbente, valor, honorários 10%, suspensão Sim, score 1.00
+  - Critério 2 (Documentos da capa): 120 documentos extraídos, tipos preenchidos, IDs com 9 dígitos
+  - Documentos esperados verificados: Petição Inicial (206423284), Mandado (207553631), Diligência (213349177), Comprovante de Pagamento de Custas (206426309), Decisão (206765849), Contestação (215626895)
+  - Critério 3 (Regressão): 7/7 testes em test_extrator_pdf.py passaram; suite completa do agente: 57/57 passaram
+  - Warnings: nenhum

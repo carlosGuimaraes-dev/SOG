@@ -20,7 +20,8 @@
 - `README.md` — visão geral + instalação (presumido existente, não revisado nesta sessão)
 - `docs/code-review-enterprise-report.md` — relatório original do code review (555 linhas, confidencial)
 - `.kimi/context/cto/code-review-fixes.md` — plano técnico das 8 waves (752 linhas)
-- `docs/correcoes-code-review.md` — **documentação produzida nesta sessão** (correções técnicas das 95 issues)
+- `docs/correcoes-code-review.md` — correções técnicas das 95 issues
+- `docs/testar-pdf.md` — **documentação produzida nesta sessão** (guia do script CLI `testar_pdf.py`)
 
 ---
 
@@ -38,3 +39,4 @@
 ## Histórico de documentações produzidas
 
 - 2026-05-15: `docs/correcoes-code-review.md` — Resumo executivo, guia de configuração, decisões arquiteturais, como rodar, checklist de segurança e roadmap das 95 correções do code review enterprise.
+- 2026-05-16: `docs/testar-pdf.md` — Guia de uso do script CLI `testar_pdf.py`: instalação, flags, interpretação de resultados, códigos de saída e limitações.

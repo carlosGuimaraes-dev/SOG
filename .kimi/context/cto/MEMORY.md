@@ -62,6 +62,12 @@
   Motivo: Schema do banco e emissor usam `erro`. O TODO_frontend.md menciona `erro_emissao` incorretamente.
   Reversibilidade: alta — se `erro_emissao` for introduzido no futuro, basta adicionar ao enum de status.
 
+- **2026-05-16 | Script utilitário de extração de sentença de PDF**
+  Decidido: `pymupdf` (fitz) para extração de texto com análise de layout; script em `tools/testar_pdf.py` na raiz; heurística regex para isolar DISPOSITIVO (`ANTE O EXPOSTO`/`DISPOSITIVO`/`DECIDO`); detecção de PDF scanned via `get_text()` + presença de imagens.
+  Alternativas: `pdfplumber` (MIT) — mais lenta, sem vantagem de layout para este caso; colocar script dentro de `agente/tools/` — reforça acoplamento com runtime.
+  Motivo: PyMuPDF oferece extração por blocos (melhor para localizar dispositivo) e detecção nativa de scanned; script em raiz indica claramente que é ferramenta de dev/teste.
+  Reversibilidade: alta para localização e heurística; **média** para biblioteca (AGPL-3.0) — trocar por `pdfplumber` requer apenas refatorar a função de extração de texto, pois o script isola a lib.
+
 ---
 
 ## Padrões do projeto
@@ -93,3 +99,4 @@
 
 - `.kimi/context/cto/code-review-fixes.md` — Plano técnico para 98 issues do code review enterprise (2026-05-15)
 - `.kimi/context/cto/todo-frontend.md` — Plano técnico para 14 features de UX do dashboard, decomposto em 3 waves (2026-05-15)
+- `.kimi/plans/extrator-pdf.md` — Plano técnico para script utilitário de extração de sentença de PDF (2026-05-16)

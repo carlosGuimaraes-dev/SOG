@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import BotaoExportar from './BotaoExportar'
 import api from '../../lib/api'
@@ -61,7 +61,7 @@ describe('BotaoExportar', () => {
   })
 
   it('mostra loading e desabilita botão durante download', async () => {
-    let resolveGet: (value: { data: Blob }) => void
+    let resolveGet!: (value: { data: Blob }) => void
     const promise = new Promise<{ data: Blob }>((resolve) => {
       resolveGet = resolve
     })
