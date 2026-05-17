@@ -112,3 +112,36 @@
   - Documentos esperados verificados: Petição Inicial (206423284), Mandado (207553631), Diligência (213349177), Comprovante de Pagamento de Custas (206426309), Decisão (206765849), Contestação (215626895)
   - Critério 3 (Regressão): 7/7 testes em test_extrator_pdf.py passaram; suite completa do agente: 57/57 passaram
   - Warnings: nenhum
+
+- 2026-05-17: Re-validação — Correções P2/P3 extrator de custas iniciais — APROVADO
+  - test_extrator_pdf.py: 13/13 passaram
+  - Suite completa agente: 63/63 passaram
+  - PDF real: valor_total="266,95", valor_total_centavos=26695, doc_id="206426308"
+  - Correções confirmadas:
+    1. _parse_valor_monetario: parsing inteiro sem float (aritmética direta)
+    2. _extrair_valor_guia: regex "Valor total" primeiro; soma do detalhamento como fallback
+    3. Fallback estratégia 2: cobre "comprovante de pagamento de custas" além de "guia"
+    4. Dead code removido: nenhum `encontrado = False` solto
+    5. Typo corrigido: `_JANELA_GUIA_EXPANDIDA` (linha 131)
+    6. Teste renomeado: `test_extrair_valor_guia_sem_detalhamento` (linha 214)
+  - Edge cases _parse_valor_monetario validados: R$ 1.234,56, 1234,56, R$ 266,95, 10,74, vazio, inválido, R$0,01, 1.000.000,00
+  - Warnings: nenhum
+
+- 2026-05-17: Correções P2 extrator de PDF — APROVADO
+  - test_extrator_pdf.py: 15/15 passaram
+  - Suite completa agente: 65/65 passaram
+  - Correções confirmadas:
+    1. Double-close PyMuPDF: doc.close() removido do except; permanece apenas no finally
+    2. Falso positivo scanned: heurística agregada — scanned=True apenas se >80% páginas image-without-text E média texto/página < 100 chars
+  - PDF real validado: scanned=False, valor_total="266,95", num_paginas=722, erro=''
+  - Warnings: nenhum
+
+- 2026-05-17: Re-validação — Correções P3 extrator de PDF — APROVADO
+  - test_extrator_pdf.py: 15/15 passaram
+  - Suite completa agente: 65/65 passaram
+  - Correções confirmadas:
+    1. resultado_base inclui "custas_iniciais" com contrato uniforme (linha 574)
+    2. Threshold scanned: >= 0.8 (linha 638) — PDFs com exatamente 80% páginas image-only marcados como scanned
+    3. Comentário explicativo adicionado na heurística de scanned (linhas 631-633)
+  - PDF real validado: scanned=False, valor_total="266,95", num_paginas=722, erro=''
+  - Warnings: nenhum

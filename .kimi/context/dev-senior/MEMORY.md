@@ -176,3 +176,43 @@
 - **Scanned detection:** por página, se `len(texto_bruto.strip()) < 30` e `page.get_images()` não vazio.
 - **Desvio do plano (sinalizado):** O regex `DISPOSITIVO` isolado capturava "Dispositivo de iluminação diurna" de documentos de seguro no PDF real (falso positivo). Foi necessário adicionar priorização por `"condeno"` nos matches para garantir que o dispositivo da sentença seja isolado corretamente.
 - **Testes:** 56/56 passaram (6 novos em `test_extrator_pdf.py` + 50 existentes). PDF real extrai corretamente: sucumbente=MARIA APARECIDA HERUNDINA DOS SANTOS SOUZA, valor=10.158,00, honorários=10%, suspensão=Sim, score=1.00, método=regex.
+
+### 2026-05-17 — Extração de valor das custas iniciais de PDF
+- **Arquivos alterados:**
+  - `agente/src/modulos/extrator_pdf.py` — adicionadas funções `_parse_valor_monetario()`, `_extrair_valor_guia()`, `extrair_custas_iniciais()`. Regex específicos ao TJDFT para valor total, detalhamento por item (Distribuidor, Mandados, Ofícios, Contador, Custas, Diligências), número da guia e vencimento. Campo `"custas_iniciais"` adicionado ao dict retornado por `extrair_texto_pdf()` — sem dupla abertura de PDF (reuso de dados já extraídos).
+  - `agente/tests/test_extrator_pdf.py` — 7 novos testes: PDF real (valor_total="266,95", detalhamento com 6/6 itens, numero_guia="001-9"), guia sem detalhamento (mock), sem guia (mock), scanned (mock), `extrair_texto_pdf` inclui campo, e utilitário `_parse_valor_monetario`.
+  - `agente/scripts/testar_pdf.py` — exibe `Custas Iniciais` na tabela rich e saída ANSI; inclui JSON de custas na saída.
+- **Gotcha identificado:** O cabeçalho `Num. {doc_id} - Pág. N` da página da guia é descartado pelo filtro de coordenadas de `extrair_texto_pdf()` (cabeçalho/rodapé). Isso impede a localização da guia pelo `doc_id` no texto filtrado. Solução: fallback que busca por `"Guia de Custas e Emolumentos"` no texto quando o doc_id não produz match.
+- **Gotcha identificado:** Em formulários de guia do TJDFT, o rótulo "Vencimento" pode aparecer fisicamente abaixo da data no PDF, causando inversão na extração de texto (`11/08/2024` vem antes de `Vencimento`). Solução: fallback de vencimento que busca datas em janela de ±200 chars ao redor de qualquer ocorrência de "Vencimento".
+- **Testes:** 13/13 passaram em `test_extrator_pdf.py` (6 originais + 7 novos).
+
+### 2026-05-17 — Correções P2/P3 na extração de custas iniciais (review)
+- **Arquivos alterados:**
+  - `agente/src/modulos/extrator_pdf.py`:
+    - `_parse_valor_monetario()` — substituído parsing via `float` por aritmética inteira (remove imprecisão decimal em valores monetários). Separa na vírgula em `inteiros * 100 + centavos`.
+    - `_extrair_valor_guia()` — `valor_total` agora é extraído do regex explícito `"Valor total"` primeiro; soma do detalhamento é usada apenas como fallback quando o regex falha.
+    - `extrair_custas_iniciais()` — fallback estratégia 2 (busca por `"Guia de Custas e Emolumentos"`) agora cobre também `"comprovante de pagamento de custas"`.
+    - Typo corrigido: `_JANELA_GUIA_EXPandida` → `_JANELA_GUIA_EXPANDIDA`.
+    - Dead code removido: `encontrado = False` (linha 498).
+  - `agente/tests/test_extrator_pdf.py` — teste renomeado: `test_extrair_custas_iniciais_guia_sem_detalhamento` → `test_extrair_valor_guia_sem_detalhamento`.
+- **Testes:** 13/13 passaram. PDF real continua retornando `valor_total="266,95"`.
+
+### 2026-05-17 — Correções P2 no extrator de PDF (double-close + falso positivo scanned)
+- **Arquivos alterados:**
+  - `agente/src/modulos/extrator_pdf.py`:
+    - Removido `doc.close()` do bloco `except` de `extrair_texto_pdf()` (linha 629). O recurso agora é liberado exclusivamente no `finally`, eliminando double-close em exceção.
+    - Heurística de scanned detection reescrita: de "qualquer página image-only marca tudo" para agregada — `proporcao_scanned > 0.8 and media_texto < 100`. Isso elimina falsos positivos em PDFs cuja capa tenha brasão/imagem com poucas palavras, mas cujo corpo seja texto selecionável.
+    - Variáveis `paginas_scanned` e `total_texto_bruto` acumuladas durante o loop; cálculo aplicado após o loop com guarda `num_paginas > 0`.
+  - `agente/tests/test_extrator_pdf.py`:
+    - Teste `test_detectar_scanned_pdf` — verificado, continua passando (2/2 páginas scanned, 100% > 0.8, média 1 < 100).
+    - Novo `test_nao_marcar_scanned_capa_imagem` — 5 páginas (1 image-only + 4 texto extenso), verifica `scanned=False`.
+    - Novo `test_double_close_nao_ocorre` — mock que lança exceção no loop, verifica `doc.close.assert_called_once()`.
+- **Testes:** 15/15 passaram (13 originais + 2 novos). PDF real continua `scanned=False`.
+
+### 2026-05-17 — Correções P3 no extrator de PDF (reviewer — ressalvas desejáveis)
+- **Arquivos alterados:**
+  - `agente/src/modulos/extrator_pdf.py`:
+    - `resultado_base` em `extrair_texto_pdf()` agora inclui `"custas_iniciais": {"encontrado": False, "scanned": False}` — elimina inconsistência de contrato quando exceção ocorre no loop de páginas (o `return` do `except` devolvia dict sem essa chave).
+    - Threshold scanned: `proporcao_scanned > 0.8` → `>= 0.8`. PDFs com exatamente 80% de páginas image-only agora são corretamente marcados como scanned.
+    - Comentário explicativo adicionado acima da heurística de scanned detection documentando a racionalidade dos thresholds (0.8 e 100).
+- **Testes:** 15/15 passaram. PDF real continua `scanned=False`.

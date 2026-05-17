@@ -20,6 +20,18 @@
 
 <!-- Nunca delete — apenas adicione. -->
 
+- **2026-05-17 | Extrator PDF: correções P2 (double-close + scanned detection)**
+  Decidido: (1) Remover `doc.close()` do `except`, mantendo apenas no `finally` de `extrair_texto_pdf()`; (2) Substituir heurística de scanned de "qualquer página" para heurística agregada: `proporcao_scanned > 0.8 and media_texto < 100`.
+  Alternativas para scanned: manter página-a-página (falso positivo aceitável); usar apenas proporção; usar apenas média de texto.
+  Motivo: Double-close é bug puro — `finally` já garante o close. Heurística agregada elimina falsos positivos em PDFs com capa image-only (brasão) sem perder detecção de PDFs 100% scanned.
+  Reversibilidade: alta — thresholds (`0.8`, `100`) são constantes internas; ajustáveis sem quebrar contratos.
+
+- **2026-05-17 | Extrator PDF: extração de custas iniciais**
+  Decidido: Adicionar `extrair_custas_iniciais()` que reusa `extrair_texto_pdf()` + `extrair_documentos_capa()`, localiza guias pela ocorrência do `doc_id` no texto completo (janela de ±1500 chars) e aplica regex para extrair valor total, detalhamento, número da guia e vencimento.
+  Alternativas: Extrair diretamente por coordenadas da página da guia; usar LLM para parse da guia.
+  Motivo: Coordenadas são frágeis (variam entre PDFs); LLM é overkill e lento para um padrão bem definido. Busca por doc_id + janela + regex é determinística, rápida e testável.
+  Reversibilidade: alta — feature puramente aditiva (novo campo no dict de retorno); remoção não quebra callers existentes.
+
 - **2026-05-15 | Auth: JWT em localStorage → httpOnly cookies**
   Decidido: Migrar tokens de `localStorage` para `httpOnly Secure SameSite=Strict` cookies emitidos pelo backend.
   Alternativas: Manter localStorage + CSP strita; usar sessionStorage.
@@ -100,3 +112,5 @@
 - `.kimi/context/cto/code-review-fixes.md` — Plano técnico para 98 issues do code review enterprise (2026-05-15)
 - `.kimi/context/cto/todo-frontend.md` — Plano técnico para 14 features de UX do dashboard, decomposto em 3 waves (2026-05-15)
 - `.kimi/plans/extrator-pdf.md` — Plano técnico para script utilitário de extração de sentença de PDF (2026-05-16)
+- `.kimi/plans/extracao-custas-iniciais.md` — Plano técnico para extração de valor das custas iniciais de PDF judicial (2026-05-17)
+- `.kimi/plans/correcoes-p2-extrator-pdf.md` — Plano técnico para correções P2 no extrator de PDF (double-close + scanned detection) (2026-05-17)

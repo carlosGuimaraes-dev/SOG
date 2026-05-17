@@ -164,6 +164,8 @@ SOG/
 │   │   │   ├── pje.py
 │   │   │   ├── sistjweb.py
 │   │   │   ├── datajud.py
+│   │   │   ├── extrator_pdf.py
+│   │   │   ├── extrator_sentenca.py
 │   │   │   ├── parser.py
 │   │   │   ├── emissor.py
 │   │   │   ├── retry.py
@@ -173,6 +175,7 @@ SOG/
 │   │       └── schema.sql
 │   └── tests/
 │       ├── test_datajud.py
+│       ├── test_extrator_pdf.py
 │       ├── test_parser.py
 │       └── test_regras.py
 ├── api/                 # FastAPI + JWT
@@ -232,7 +235,7 @@ SOG/
 ## Fluxo de Trabalho
 
 1. **Agente** (cron horário) coleta processos do PJE
-2. Para cada processo: consulta Datajud + extrai documentos + preenche SISTJWEB
+2. Para cada processo: consulta Datajud + extrai documentos + extrai custas iniciais do PDF + preenche SISTJWEB
 3. Status → `aguardando_aprovacao`
 4. **Operador** revisa no dashboard e clica **Aprovar** ou **Rejeitar**
 5. Ao aprovar: agente emite PDF e anexa no PJE

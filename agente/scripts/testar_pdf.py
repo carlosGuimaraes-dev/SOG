@@ -77,11 +77,20 @@ def _montar_saida_colorida_rich(
     tabela.add_row("Método", resultado_sentenca.get("_metodo", "—"))
     tabela.add_row("Score", f"{resultado_sentenca.get('_score', 0):.2f}")
     tabela.add_row("Páginas", str(resultado_pdf.get("num_paginas", 0)))
+
+    custas = resultado_pdf.get("custas_iniciais", {})
+    if custas.get("encontrado"):
+        tabela.add_row("Custas Iniciais", f"R$ {custas.get('valor_total', '—')}")
+    else:
+        tabela.add_row("Custas Iniciais", "Não encontradas")
+
     tabela.add_row("Tempo", f"{tempo_total:.2f}s")
 
     console.print(tabela)
     console.print("\n[bold]JSON — Resultado da sentença[/bold]")
     console.print(JSON.from_data(resultado_sentenca))
+    console.print("\n[bold]JSON — Custas Iniciais[/bold]")
+    console.print(JSON.from_data(custas))
     console.print("\n[bold]JSON — Resultado do parser[/bold]")
     console.print(JSON.from_data(resultado_parser))
 
@@ -128,11 +137,20 @@ def _montar_saida_ansi(
     print(f"{_ANSI_CYAN}Método{_ANSI_RESET}     : {resultado_sentenca.get('_metodo', '—')}")
     print(f"{_ANSI_CYAN}Score{_ANSI_RESET}      : {resultado_sentenca.get('_score', 0):.2f}")
     print(f"{_ANSI_CYAN}Páginas{_ANSI_RESET}    : {resultado_pdf.get('num_paginas', 0)}")
+
+    custas = resultado_pdf.get("custas_iniciais", {})
+    if custas.get("encontrado"):
+        print(f"{_ANSI_CYAN}Custas Iniciais{_ANSI_RESET} : R$ {custas.get('valor_total', '—')}")
+    else:
+        print(f"{_ANSI_CYAN}Custas Iniciais{_ANSI_RESET} : Não encontradas")
+
     print(f"{_ANSI_CYAN}Tempo{_ANSI_RESET}      : {tempo_total:.2f}s")
     print(f"{_ANSI_GREEN}{'=' * 60}{_ANSI_RESET}")
 
     print(f"\n{_ANSI_BOLD}--- JSON Sentença ---{_ANSI_RESET}")
     print(json.dumps(resultado_sentenca, indent=2, ensure_ascii=False))
+    print(f"\n{_ANSI_BOLD}--- JSON Custas Iniciais ---{_ANSI_RESET}")
+    print(json.dumps(custas, indent=2, ensure_ascii=False))
     print(f"\n{_ANSI_BOLD}--- JSON Parser ---{_ANSI_RESET}")
     print(json.dumps(resultado_parser, indent=2, ensure_ascii=False))
 

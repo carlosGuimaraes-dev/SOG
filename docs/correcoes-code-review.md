@@ -424,4 +424,51 @@ docker-compose restart agente
 
 ---
 
+## 9. Entregas Incrementais (pós-code-review)
+
+### 9.1 Extração de custas iniciais do PDF
+
+**Data:** 2026-05-17  
+**Status:** ✅ Entregue
+
+O extrator de PDF passou a identificar e extrair o valor das custas iniciais a partir de guias de pagamento presentes no processo judicial. O algoritmo:
+
+1. Lê a tabela de documentos da capa e filtra tipos `"Guia"` e `"Comprovante de Pagamento de Custas"`.
+2. Localiza o `doc_id` da guia no texto completo do PDF (pode estar em qualquer página).
+3. Isola uma janela de texto ao redor do `doc_id` e aplica regex para extrair:
+   - Valor total e valor total em centavos (aritmética inteira, sem float)
+   - Detalhamento por item (distribuidor, mandados, ofícios, contador, custas, diligências)
+   - Número da guia e data de vencimento
+4. Inclui o resultado no dict de retorno de `extrair_texto_pdf()` sob a chave `"custas_iniciais"`.
+
+**Arquivos alterados:**
+- `agente/src/modulos/extrator_pdf.py` — funções `_parse_valor_monetario`, `_extrair_valor_guia`, `extrair_custas_iniciais`
+- `agente/tests/test_extrator_pdf.py` — testes da feature
+- `agente/scripts/testar_pdf.py` — CLI atualizado para exibir custas iniciais
+
+**Plano técnico:** `.kimi/plans/extracao-custas-iniciais.md`
+
+**Limitação conhecida:** Os regex de extração são específicos ao formato de guia do TJDFT. Guias de outros tribunais podem exigir ajustes.
+
+### 9.2 Correções no extrator de PDF (ressalvas do reviewer)
+
+**Data:** 2026-05-17  
+**Status:** ✅ Entregue
+
+Correções aplicadas ao extrator de PDF (`agente/src/modulos/extrator_pdf.py`) após revisão de código (ressalvas P2 e ajustes P3):
+
+| # | Severidade | Descrição | Detalhe técnico |
+|---|-----------|-----------|-----------------|
+| 1 | 🔴 P2 | Double-close do PyMuPDF | Removido `doc.close()` do bloco `except` (linha 641–642). O documento agora é fechado **apenas no `finally`**, eliminando o risco de `ValueError` (`document closed`) caso uma exceção ocorra durante o processamento das páginas. |
+| 2 | 🔴 P2 | Falso positivo em `scanned` | A heurística de detecção de PDF image-only passou a ser **agregada**: `scanned=True` somente se **≥80% das páginas** forem candidatas a image-without-text **E** a média de texto por página for **< 100 caracteres** (linhas 631–638). Isso evita classificar como scanned PDFs cuja primeira página (capa) é predominantemente imagem mas o restante contém texto selecionável. |
+| 3 | 🟡 P3 | Contrato uniforme do `resultado_base` | O dict base retornado por `extrair_texto_pdf()` passou a incluir `"custas_iniciais": {"encontrado": False, "scanned": False}` (linha 574). Antes, o campo só aparecia após a chamada de `extrair_custas_iniciais()`. Agora o contrato é uniforme: todo resultado possui a chave, mesmo quando a extração de custas não é executada. |
+| 4 | 🟡 P3 | Threshold inclusivo `>= 0.8` | O operador de comparação da proporção de páginas scanned foi alterado de `> 0.8` para `>= 0.8` (linha 638). PDFs com exatamente 80% de páginas image-only agora são corretamente marcados como scanned. |
+| 5 | 🟡 P3 | Comentário explicativo na heurística | Adicionado comentário de bloco acima da lógica de scanned detection (linhas 631–633) documentando as duas condições da heurística e o objetivo (evitar falso positivo em capas). |
+
+**Arquivos alterados:**
+- `agente/src/modulos/extrator_pdf.py` — correções na função `extrair_texto_pdf()`
+- `agente/tests/test_extrator_pdf.py` — testes ajustados para cobrir os novos thresholds
+
+---
+
 > *Documentação produzida com base no código fonte verificado. Se algum comportamento no código divergir do descrito aqui, o código é a fonte da verdade — reporte ao mantenedor.*
