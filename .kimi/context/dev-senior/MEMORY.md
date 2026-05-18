@@ -6,7 +6,7 @@
 
 ## Padrões de código do projeto
 
-1. **Escaping CSS em Playwright:** Sempre usar `page.get_by_text(texto, exact=True)` como primeira estratégia. Quando necessário usar seletores CSS com `:has-text()`, escapar via `escape_for_css()` (importável de `modulos.pje`).
+1. **Escaping CSS em Playwright:** Sempre usar `page.get_by_text(texto, exact=True)` como primeira estratégia. Quando necessário usar seletores CSS com `:has-text()`, escapar via `escape_for_css()` (importável de `modulos.css_escape`).
 2. **Retry:** O decorator `@retry_on_exception` tem default `(PlaywrightTimeout, ConnectionError, TimeoutError)`. Nunca usar `(Exception,)` como default.
 3. **PII em logs:** Nunca logar dicts completos de dados de processo. Logar apenas `processo_id`, `etapa`, `status`, e contagens (`len(dados)`, `campos=N`).
 4. **HTML em emails:** Sempre usar `html.escape()` em valores interpolados em templates HTML.
@@ -37,6 +37,63 @@
 ---
 
 ## Histórico de implementações (continuação)
+
+### 2026-05-18 — Bugfix: Duplicação de `custas_pagas` no pipeline
+- **Arquivo modificado:** `agente/src/pipeline.py`
+  - Removido parâmetro `custas_iniciais` de `_construir_payload()`.
+  - Removido bloco de mesclagem de custas iniciais de `_construir_payload()` (linhas 80-90 originais).
+  - Removido argumento `custas_iniciais=custas_extraidas` da chamada de `_construir_payload` em `processar_processo()`.
+  - `custas_extraidas` ainda é passada para `processar_documentos(docs, textos, custas_iniciais=custas_extraidas)` — o `parser.py` continua sendo a única fonte de mesclagem.
+- **Razão:** O `parser.py` já mesclava `custas_iniciais` em `resultado["custas_pagas"]`. O `_construir_payload` mesclava novamente sobre `dados_parser.get("custas_pagas", [])`, causando duplicação.
+- **Testes:** 74/74 agente passaram. Build frontend passou.
+
+### 2026-05-18 — Fase 4: Integração de Custas Iniciais no Payload SISTJWEB
+- **Arquivos modificados:**
+  - `agente/src/modulos/pje.py` — adicionado método `baixar_documento_pdf(doc_id, caminho_destino)` com `@retry_on_exception`. Localiza linha do doc_id na tabela de documentos, procura links clicáveis na linha, usa `page.expect_download()` para capturar o PDF e salva em `caminho_destino`.
+  - `agente/src/pipeline.py` — reestruturado fluxo de `processar_processo`:
+    - `_coletar_documentos` agora retorna apenas `(docs, textos)` (parser movido para fora).
+    - Após coleta, itera docs do tipo `"Comprovante de Pagamento de Custas"` ou `"Guia"`, baixa PDF temporário via `pje.baixar_documento_pdf`, extrai custas via `extrair_texto_pdf`.
+    - Se `custas_iniciais["scanned"] == True`: registra log de aviso e ignora.
+    - Se `custas_iniciais["encontrado"] == True`: converte para formato `{data, valor, numero_guia}` e acumula em `custas_extraidas`.
+    - `processar_documentos(docs, textos, custas_iniciais=custas_extraidas)` agora recebe as custas do PDF.
+    - `_construir_payload` recebe `custas_iniciais` e mescla com `dados_parser.get("custas_pagas", [])` sem duplicar por `numero_guia`.
+  - `agente/src/modulos/parser.py` — `processar_documentos` agora aceita parâmetro opcional `custas_iniciais: Optional[List[Dict[str, Any]]]`. Mescla com `custas_pagas` existentes (deduplicação por `numero_guia`).
+  - `agente/tests/test_parser.py` — 3 novos testes: inclusão de custas_iniciais, deduplicação por numero_guia, e entradas sem numero_guia.
+- **Testes:** 74/74 agente (+3 novos), 37/37 API, build frontend passou. Sem regressões.
+- **Pontos de atenção para QA:**
+  - O download do PDF depende do PJe renderizar um link clicável na linha da tabela. Se o DOM mudar (ex: ícone de download em elemento não-link), o `baixar_documento_pdf` pode falhar silenciosamente (retorna False).
+  - O `expect_download` requer `accept_downloads=True` no contexto do Playwright — já configurado no `AuthManager` do PJe.
+
+### 2026-05-17 — Fase 3: Correção CR-002 (Escaping CSS em seletores)
+- **Arquivos criados:**
+  - `agente/src/modulos/css_escape.py` — módulo utilitário com `escape_for_css(texto: str) -> str` (escapa `\`, `'`, `"`).
+  - `agente/tests/test_css_escape.py` — 6 casos de teste (string vazia, aspas simples/duplas, backslash, string comum, múltiplos especiais).
+- **Arquivos modificados:**
+  - `agente/src/modulos/pje.py` — `escape_for_css` removido do módulo; importado de `css_escape`. Todos os seletores dinâmicos já usavam escaping (sem regressão).
+  - `agente/src/modulos/sistjweb.py` — import de `escape_for_css` migrado para `css_escape`; uso de `.format()` em `RADIO_ITEM_CALCULO` substituído por f-strings com escape explícito inline.
+  - `agente/src/modulos/selectors.py` — templates com placeholders (`PJE_ETIQUETA_LINK`, `PJE_LINK_PROCESSO`, `PJE_DOC_LINK_NOME`, `RADIO_ITEM_CALCULO`) transformados em funções geradoras ou removidos. Nenhuma constante global com placeholder `{...}` restante.
+- **Testes:** 71/71 passaram (6 novos em `test_css_escape.py` + 65 existentes).
+- **Scan estático:** zero ocorrências de `:has-text(` + `f"` ou `.format` em seletores sem escaping em `agente/src/modulos/`.
+
+### 2026-05-17 — Fase 1.3: Agente como Serviço Longo
+- **Arquivos criados:**
+  - `agente/src/servico.py` — entry point do serviço longo com máquina de estados (`parado → autenticando → executando → dormindo → ...`), graceful shutdown via `threading.Event` + signals (SIGINT/SIGTERM), heartbeat no SQLite a cada iteração, PID persistido no banco.
+  - `agente/src/pipeline.py` — renomeado de `main.py`; contém toda a lógica de processamento existente (`_obter_ou_criar_processo`, `_coletar_datajud`, `_coletar_documentos`, `_construir_payload`, `_preencher_sistj`, `_notificar_erro`, `processar_processo`) + nova função `rodar_pipeline(pje, sistj)` que executa UMA iteração completa (coleta + processamento + notificação).
+  - `run_agente.sh` — script wrapper executável que ativa venv, seta PYTHONPATH e executa `servico.py`.
+- **Arquivos modificados:**
+  - `shared/sog_shared/schema.sql` — adicionada tabela `agente_controle` (monorregistro com `CHECK (id = 1)`).
+  - `shared/sog_shared/db.py` — adicionadas `obter_controle_agente()`, `criar_ou_atualizar_controle_agente()`, `listar_aprovados()`.
+  - `agente/src/modulos/emissor.py` — adaptado para receber clients instanciados (`emitir_e_anexar(processo_id, sistj, pje)` e `emitir_pendentes(sistj, pje)`); elimina criação/destruição de clients a cada emissão.
+  - `agente/src/banco/db.py` — wrapper atualizado para re-exportar as novas funções do `sog_shared.db`.
+- **Arquivos deletados:**
+  - `agente/src/main.py` — renomeado para `pipeline.py`.
+  - `agente/crontab` — não é mais necessário no modelo de serviço longo.
+- **Decisões:**
+  - Autenticação no estado `autenticando` ainda usa `login()` programático (Fase 2 virá com `AuthManager`).
+  - `_preencher_sistj` preserva `sistj.login()` interno (lógica original do `main.py`). Redundância será eliminada na Fase 2 com `garantir_autenticado()`.
+  - Heartbeat atualiza `atualizado_em` e `pid` no início de cada iteração do loop via `_atualizar_heartbeat()`.
+  - Sleep no estado `dormindo` usa `self._stop_event.wait(timeout=30)` para permitir interrupção imediata.
+- **Testes:** 65/65 passaram. Importação de `pipeline` e `servico` verificada sem side-effects.
 
 ### 2026-05-16 — Bugfixes PDF + Extração de documentos da capa
 - **Bugs corrigidos:**
@@ -76,12 +133,15 @@
 
 ## Débitos técnicos identificados (fora do escopo)
 
-1. **`agente/src/modulos/selectors.py`** contém templates com placeholders CSS inseguros (`text='{etiqueta}'`, `text='{numero}'`, `text='{nome}'`). Essas constantes não são usadas no código atual (código morto), mas representam risco se forem reativadas. Recomendação: remover na Wave 7 ou 8.
+1. ~~**`agente/src/modulos/selectors.py`** contém templates com placeholders CSS inseguros.~~ Resolvido na Fase 3 (CR-002). Templates transformados em funções geradoras com escaping via `css_escape.py`.
 2. **`agente/src/modulos/extrator_sentenca.py:277`** — o `except Exception` fallback do LLM ainda silencia erros da API OpenAI sem log. O plano não exigiu alteração aqui, mas para debug futuro pode ser útil adicionar `erro()`.
 3. **`agente/src/modulos/retry.py`** — os `except Exception: pass` em `is_session_expired` (linhas 82, 86, 103) são intencionalmente resilientes, mas poderiam logar em nível DEBUG.
 4. **`api/src/rotas/processos.py`** — `SCREENSHOTS_BASE_DIR` é hardcoded para `/dados/screenshots`. Na Wave 8 (PostgreSQL) ou quando mudar volumes, extrair para variável de ambiente `SCREENSHOTS_DIR`.
 5. **`api/tests/test_api.py`** — O teste de concorrência (`test_aprovar_race_condition_apenas_uma_aprovacao`) não simula verdadeira concorrência porque `:memory:` não é compartilhável entre threads de forma segura. Para teste de carga real, usar arquivo `.db` temporário com múltiplos TestClient em threads.
+9. **Isolamento de testes API + Agente:** Quando `pytest api/tests/ agente/tests/` é executado em uma única invocação, os testes `test_iniciar_agente` e `test_parar_agente` falham com `no such table: agente_controle`. Rodados isoladamente (`pytest api/tests/` e `pytest agente/tests/` separadamente), ambos passam 100%. Possível causa: conflito de monkeypatch entre os dois `conftest.py` ou cache de schema SQL. Não é regressão da Fase 2.
 6. **`agente/src/config.py` vs `shared/sog_shared/config.py`:** Duplicação sutil de `DB_PATH`, `TIMEOUT_PADRAO`, `HEADLESS`, `MAX_TENTATIVAS`. O agente ainda mantém seu próprio `config.py` com todas as variáveis (incluindo específicas como PJE/SISTJ/SMTP/LLM). A longo prazo, migrar o agente para importar as variáveis comuns do `sog_shared.config` eliminaria a duplicação.
+7. ~~**`agente/src/servico.py` — autenticação programática:** Resolvido na Fase 2. `_autenticar_todos()` agora usa `garantir_autenticado()` via `AuthManager`.~~
+8. ~~**`agente/src/pipeline.py` — `_preencher_sistj` chama `sistj.login()` internamente:** Resolvido na Fase 2. `login()` agora é alias para `garantir_autenticado()`, que é no-op se a sessão já estiver viva.~~
 
 ---
 
@@ -208,6 +268,54 @@
     - Novo `test_nao_marcar_scanned_capa_imagem` — 5 páginas (1 image-only + 4 texto extenso), verifica `scanned=False`.
     - Novo `test_double_close_nao_ocorre` — mock que lança exceção no loop, verifica `doc.close.assert_called_once()`.
 - **Testes:** 15/15 passaram (13 originais + 2 novos). PDF real continua `scanned=False`.
+
+### 2026-05-18 — Fase 2: AuthManager + Storage State + Fallback Interativo
+- **Arquivos criados:**
+  - `agente/src/modulos/auth_manager.py` — `AuthManager` com storage state Playwright (`context.storage_state()`) e fallback interativo (`headless=False`, polling a cada 2s, timeout 10min). Classe `ReautenticacaoNecessariaError(Exception)` com atributo `sistema`.
+- **Arquivos modificados:**
+  - `agente/src/config.py` — adicionados `STORAGE_STATE_DIR`, `STORAGE_STATE_PJE`, `STORAGE_STATE_SISTJ` (default `~/.sog/auth/`).
+  - `agente/src/modulos/playwright_client.py` — removida inicialização direta de browser; `page`/`browser` agora são properties delegando para `self._auth`; `fechar()` delega para `self._auth.fechar()`.
+  - `agente/src/modulos/pje.py` — `PjeClient.__init__` instancia `AuthManager(STORAGE_STATE_PJE)`; `garantir_autenticado()` chama `verificar_e_autenticar()`; `login()` é alias para `garantir_autenticado()`; lógica de verificação de login extraída para `_esta_logado(page)`.
+  - `agente/src/modulos/sistjweb.py` — `SistjClient.__init__` instancia `AuthManager(STORAGE_STATE_SISTJ)`; `garantir_autenticado()` + `_esta_logado(page)` + `login()` alias; removido login programático.
+  - `agente/src/modulos/retry.py` — na seção de reconexão: se `instance._auth` existe, lança `ReautenticacaoNecessariaError` em vez de tentar reconexão programática; comportamento legado preservado quando `_auth` não existe.
+  - `agente/src/modulos/emissor.py` — `sistj.login()`/`pje.login()` trocados por `garantir_autenticado()`.
+  - `agente/src/servico.py` — `_autenticar_todos()` chama `garantir_autenticado()`; adicionado `_autenticar_interativo()`; estados `autenticando` e `executando` capturam `ReautenticacaoNecessariaError` e transicionam para `aguardando_login`; estado `aguardando_login` chama `_autenticar_interativo()` e trata `TimeoutError`.
+- **Decisões:**
+  - Login programático (usuário/senha hardcoded no `.env`) foi completamente removido do fluxo ativo. As variáveis `PJE_USUARIO`/`PJE_SENHA`/`SISTJ_USUARIO`/`SISTJ_SENHA` ainda existem no `config.py` para compatibilidade, mas não são mais usadas.
+  - O `_esta_logado` do SISTJWEB usa heurística combinada: ausência de campos de login + presença de menu/elementos logados + URL sem "login".
+  - O `_esta_logado` do PJe reutiliza a mesma lógica de verificação que existia no `login()` original (indicadores via env + seletores genéricos + verificação de URL).
+- **Testes:** 37/37 API, 124/124 frontend, 65/65 agente. Todos passaram.
+
+### 2026-05-18 — Fase 1.1: Backend API — Controle do agente via SQLite
+- **Arquivos criados:**
+  - `api/src/rotas/agente.py` — endpoints `POST /agente/iniciar`, `POST /agente/parar`, `GET /agente/status`
+- **Arquivos modificados:**
+  - `shared/sog_shared/schema.sql` — tabela `agente_controle` com `CHECK (id = 1)` (monorregistro)
+  - `agente/src/banco/schema.sql` — espelho do shared para testes
+  - `shared/sog_shared/db.py` — funções `obter_controle_agente()`, `criar_ou_atualizar_controle_agente()`, `listar_aprovados()`
+  - `api/src/schemas.py` — `AgenteStatusResponse`, `AgenteComandoResponse`
+  - `api/src/app.py` — registro do router `agente`
+  - `api/src/rotas/__init__.py` — export de `agente`
+  - `api/src/rotas/aprovacao.py` — removido `BackgroundTasks` e `_disparar_emissao`; mensagem alterada para "O agente processará a emissão em breve."
+  - `api/tests/test_api.py` — 6 novos testes para endpoints do agente; mensagem de aprovação atualizada
+- **Decisões:**
+  - Campo `online` calculado comparando `atualizado_em` (assumido UTC, pois SQLite retorna naive) com `datetime.now(timezone.utc)`. Sem essa correção, `datetime.now()` local (UTC-7) daria falso positivo de online.
+  - Rate limiting de 10/minute aplicado em todos os 3 endpoints do agente.
+  - A API NUNCA executa o agente (sem subprocess); apenas grava `comando` na tabela.
+- **Testes:** 37/37 passaram em 1.30s.
+
+### 2026-05-17 — Correção de duplicações em shared/sog_shared/schema.sql e db.py
+- **Problema 1:** `shared/sog_shared/schema.sql` continha a tabela `agente_controle` duplicada (linhas 79-86 e 88-95). Segunda cópia removida.
+- **Problema 2:** `shared/sog_shared/db.py` continha as funções `obter_controle_agente`, `criar_ou_atualizar_controle_agente` e `listar_aprovados` duplicadas (linhas 238-296 e 298-355). Segunda cópia removida.
+- **Verificação:** grep confirmou exatamente 1 ocorrência restante de cada entidade duplicada.
+
+### 2026-05-18 — Correções P2 do code review (Fase 1)
+- **Arquivos alterados:**
+  - `agente/src/servico.py` — removido import `from banco import db`; padronizado para importar `init_db`, `obter_controle_agente`, `criar_ou_atualizar_controle_agente` exclusivamente de `sog_shared.db`. Corrigida f-string esquecida na linha 84 (`PID={os.getpid()}` → `f"PID={os.getpid()}"`).
+  - `shared/sog_shared/db.py` — `criar_ou_atualizar_controle_agente()` agora executa `BEGIN IMMEDIATE` no início da transação, `conn.commit()` no sucesso e `conn.rollback()` em caso de exceção, eliminando race condition quando API e agente escrevem simultaneamente no monorregistro.
+  - `api/src/rotas/aprovacao.py` — endpoint `/rejeitar/{id}` agora valida que o processo está em status `aguardando_aprovacao` antes de rejeitar, retornando HTTP 400 caso contrário (paridade com `/aprovar/{id}`).
+- **Decisão:** `agente/src/banco/db.py` (wrapper de 21 linhas) foi mantido pois `main.py`, `modulos/emissor.py` e `modulos/pje.py` ainda o utilizam. Apenas `servico.py` foi padronizado.
+- **Testes:** API 37/37 passaram em 1.26s. Frontend 124/124 passaram em 12.85s.
 
 ### 2026-05-17 — Correções P3 no extrator de PDF (reviewer — ressalvas desejáveis)
 - **Arquivos alterados:**

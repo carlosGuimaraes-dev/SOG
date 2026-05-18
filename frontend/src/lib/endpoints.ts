@@ -9,4 +9,7 @@ export const ENDPOINTS = {
   APROVAR: (id: number | string) => `/aprovar/${id}`,
   REJEITAR: (id: number | string) => `/rejeitar/${id}`,
   SCREENSHOT: (id: number | string) => `/processos/${id}/screenshot`,
+  AGENTE_INICIAR: '/agente/iniciar',
+  AGENTE_PARAR: '/agente/parar',
+  AGENTE_STATUS: '/agente/status',
 } as const

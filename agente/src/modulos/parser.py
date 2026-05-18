@@ -5,7 +5,7 @@ As funções de parsing propriamente ditas foram movidas para extrator_sentenca.
 Este módulo mantém wrappers para compatibilidade temporária e a função
 processar_documentos que orquestra a extração.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from modulos.extrator_sentenca import extrair_sentenca_regex, parse_comprovante_pagamento
 
@@ -33,11 +33,16 @@ def parse_sentenca(texto: str) -> Dict[str, Any]:
     }
 
 
-def processar_documentos(docs: List[Dict[str, Any]], textos: Dict[str, str]) -> Dict[str, Any]:
+def processar_documentos(
+    docs: List[Dict[str, Any]],
+    textos: Dict[str, str],
+    custas_iniciais: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """
     Processa lista de documentos e seus textos.
     docs: lista de dicts com doc_id, tipo, data_assinatura, nome
     textos: dict mapeando doc_id -> texto extraído
+    custas_iniciais: lista de dicts {data, valor, numero_guia} extraídos de PDFs
     """
     resultado = {
         "ids_oficios": extrair_ids(docs, "Ofício"),
@@ -73,5 +78,15 @@ def processar_documentos(docs: List[Dict[str, Any]], textos: Dict[str, str]) -> 
             info = parse_comprovante_pagamento(texto)
             if info["data"] or info["valor"] or info["numero_guia"]:
                 resultado["custas_pagas"].append(info)
+
+    # Mescla custas extraídas de PDFs (sem duplicar por numero_guia)
+    if custas_iniciais:
+        guias_existentes = {c.get("numero_guia", "") for c in resultado["custas_pagas"]}
+        for c in custas_iniciais:
+            if c.get("numero_guia", "") and c["numero_guia"] not in guias_existentes:
+                resultado["custas_pagas"].append(c)
+                guias_existentes.add(c["numero_guia"])
+            elif not c.get("numero_guia"):
+                resultado["custas_pagas"].append(c)
 
     return resultado

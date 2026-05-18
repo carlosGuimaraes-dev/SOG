@@ -12,13 +12,25 @@
 - **Banco:** SQLite (migração para PostgreSQL 15 planejada — Wave 8)
 - **Autenticação:** JWT via `python-jose` + `passlib` (migração para httpOnly cookies — Wave 3)
 - **Testes:** pytest (agente), TestClient (API), Vitest + RTL + MSW (frontend — Wave 5)
-- **Infra:** Docker Compose + Nginx (multi-stage build frontend)
+- **Infra:** Docker Compose + Nginx (multi-stage build frontend). **Agente roda no host nativo** desde 2026-05-17 (operação local com navegador visível para SSO/2FA).
 
 ---
 
 ## Decisões arquiteturais
 
 <!-- Nunca delete — apenas adicione. -->
+
+- **2026-05-17 | Agente: script de execução única → serviço longo (daemon)**
+  Decidido: (1) Agente passa a rodar como processo longo com loop infinito (coleta → preenche → emite → dorme 30s → repete); (2) Comunicação bidirecional entre dashboard e agente via tabela `agente_controle` no SQLite (API escreve `comando`, agente escreve `status`); (3) Graceful shutdown via signal handlers (SIGINT/SIGTERM) com `threading.Event`; (4) Emissão pós-aprovação integrada no loop síncrono (não mais BackgroundTasks nem script separado).
+  Alternativas: Agente como script executado pelo dashboard via subprocess (impossível — API está em container, agente no host); WebSocket entre agente e API (overkill — requer servidor HTTP no agente); file watcher (frágil — sem garantia de entrega).
+  Motivo: O modelo de script único exige cron ou execução manual repetida, o que é incompatível com autenticação interativa (o operador não pode ficar digitando senha a cada 30 minutos). Serviço longo permite que o operador faça login uma vez pela manhã e o agente trabalhe o dia inteiro. SQLite como canal de comunicação é o mecanismo mais simples e confiável dado que ambos já compartilham o banco.
+  Reversibilidade: **baixa** — altera o entry point do agente (`main.py` → `servico.py`), remove cron, muda modelo de emissão, e introduz máquina de estados. Rollback requer restaurar `main.py` como entry point, reintroduzir cron, e restaurar `BackgroundTasks` na API.
+
+- **2026-05-17 | Autenticação: SSO Microsoft + 2FA → Operação local com Storage State**
+  Decidido: (1) Agente passa a operar no host nativo (fora do Docker) para acesso ao display e Chrome do operador; (2) Autenticação via Playwright Storage State persistente (`context.storage_state()`) como mecanismo primário, com fallback para navegador visível quando a sessão expirar; (3) Emissão pós-aprovação migrada da API para o agente via fila baseada em status do banco (`status='aprovado'` consumido pelo agente).
+  Alternativas: `connect_over_cdp` com Chrome já aberto (rejeitado — UX ruim, conflito de perfis); login programático (impossível — Microsoft Authenticator não expõe secret TOTP); espera interativa a cada execução (rejeitado — bloqueia cron e UX péssima).
+  Motivo: SSO Microsoft com 2FA via app móvel impossibilita qualquer login automatizado. A operação local com operador humano presente exige que o login seja feito por ele, mas pode ser reutilizado por horas via cookies de sessão. Rodar o agente no host elimina complexidade de X11/VNC no Docker.
+  Reversibilidade: **baixa** — altera arquitetura de deploy (agente fora do container), remove BackgroundTasks da API, e remove cron como mecanismo primário. Rollback requer restaurar serviço `agente` no docker-compose, mover credenciais de volta para `.env.agente`, e reintroduzir emissão na API.
 
 - **2026-05-17 | Extrator PDF: correções P2 (double-close + scanned detection)**
   Decidido: (1) Remover `doc.close()` do `except`, mantendo apenas no `finally` de `extrair_texto_pdf()`; (2) Substituir heurística de scanned de "qualquer página" para heurística agregada: `proporcao_scanned > 0.8 and media_texto < 100`.
@@ -97,11 +109,12 @@
 
 - `api/src/auth.py:19`: JWT secret derivado de hash bcrypt com fallback hardcoded — **bloqueia deploy** (CR-003).
 - `docker-compose.yml:59`: Volume de screenshots exposto no nginx sem autenticação — **bloqueia deploy** (CR-005).
-- `agente/src/banco/db.py:174`: `_init_db()` executa no import global — causa side-effects e dificulta testes (M-012).
-- `api/src/rotas/aprovacao.py:50`: Race condition entre SELECT e UPDATE em conexões diferentes — **bloqueia deploy** (CR-004).
+- `agente/src/banco/db.py:174`: `_init_db()` executa no import global — causa side-effects e dificulta testes (M-012). **Nota:** `sog_shared/db.py` já corrigiu isso; verificar se `agente/src/banco/db.py` ainda existe ou foi consolidado.
+- `api/src/rotas/aprovacao.py:50`: Race condition entre SELECT e UPDATE em conexões diferentes — **bloqueia deploy** (CR-004). **Nota:** Corrigido em `sog_shared/db.py` com `get_conn()` + `BEGIN IMMEDIATE`; verificar se API ainda usa padrão antigo em algum lugar.
 - `frontend/src/lib/api.ts:8`: Tokens em `localStorage` — vetor XSS (CR-006).
 - `api/src/rotas/auth.py:39-55`: Refresh token reutilizável infinitamente — **bloqueia deploy** (CR-014).
-- `agente/src/modulos/pje.py:120-128`: Seletores CSS interpolados sem escaping — **bloqueia deploy** (CR-002).
+- `agente/src/modulos/pje.py:120-128`: Seletores CSS interpolados sem escaping — **bloqueia deploy** (CR-002). **Nota:** Parcialmente corrigido com `escape_for_css`, mas templates em `selectors.py` e uso de `.format()` em `sistjweb.py` ainda precisam de auditoria completa.
+- **Novo (2026-05-17)**: Emissão pós-aprovação quebrada — API importa `modulos.emissor` que não existe no container API. **Plano de correção:** `.kimi/plans/agente-servico-longo.md` Fase 1 + Fase 2.
 - **Novo (2026-05-15)**: Endpoint `/historico` não suporta filtros server-side — pode virar gargalo se histórico > 500 registros (mitigação: filtros client-side por enquanto).
 - **Novo (2026-05-15)**: Endpoint `/historico/exportar` (CSV) não existe — precisa ser criado na Wave 3 (W3-F14).
 
@@ -114,3 +127,5 @@
 - `.kimi/plans/extrator-pdf.md` — Plano técnico para script utilitário de extração de sentença de PDF (2026-05-16)
 - `.kimi/plans/extracao-custas-iniciais.md` — Plano técnico para extração de valor das custas iniciais de PDF judicial (2026-05-17)
 - `.kimi/plans/correcoes-p2-extrator-pdf.md` — Plano técnico para correções P2 no extrator de PDF (double-close + scanned detection) (2026-05-17)
+- `.kimi/plans/adaptacao-sso-2fa.md` — Plano técnico para adaptação a SSO Microsoft + 2FA (arquitetura de script única — **SUPERSEDED** por `agente-servico-longo.md`) (2026-05-17)
+- `.kimi/plans/agente-servico-longo.md` — Plano técnico para agente como serviço longo (daemon), comunicação via SQLite, autenticação storage state, emissão em tempo real, e dashboard de controle (2026-05-17)

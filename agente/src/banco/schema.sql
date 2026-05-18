@@ -75,3 +75,12 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     revoked_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS agente_controle (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    comando TEXT NOT NULL DEFAULT 'parar',
+    status TEXT NOT NULL DEFAULT 'parado',
+    mensagem TEXT DEFAULT '',
+    atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    pid INTEGER
+);

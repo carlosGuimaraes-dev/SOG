@@ -145,3 +145,40 @@
     3. Comentário explicativo adicionado na heurística de scanned (linhas 631-633)
   - PDF real validado: scanned=False, valor_total="266,95", num_paginas=722, erro=''
   - Warnings: nenhum
+
+- 2026-05-18: Fase 1 (Serviço longo + comunicação SQLite) — APROVADO
+  - Testes API: 37/37 passaram em 1.30s
+  - Build frontend: passou sem erros TypeScript
+  - Testes frontend: 124/124 passaram
+  - py_compile agente: servico.py e pipeline.py — sintaxe OK
+  - Schema SQLite: validado em banco temporário, sem duplicações
+  - Duplicações: schema.sql (1x), db.py funções (1x cada), app.py router (1x)
+  - run_agente.sh: executável, shebang #!/bin/bash correto
+  - Warnings: 23 preexistentes (deprecation jose/jwt), nenhum novo
+
+- 2026-05-18: Fases 2 e 3 (AuthManager + Storage State + CR-002 Escaping CSS) — APROVADO
+  - Testes agente: 71/71 passaram (inclui 6 novos testes test_css_escape.py)
+  - Testes API: 37/37 passaram em 2.51s
+  - Build frontend: passou sem erros TypeScript
+  - Testes frontend: 124/124 passaram
+  - py_compile: auth_manager.py, css_escape.py, servico.py — sintaxe OK
+  - Duplicação escape_for_css em pje.py: 0 ocorrências (função local removida)
+  - Import css_escape em pje.py: 1 ocorrência (linha 30)
+  - retry.py importa ReautenticacaoNecessariaError: 3 ocorrências (linha 16)
+  - PlaywrightClient usa AuthManager: _auth property, fechar() delega
+  - pje.py e sistjweb.py: garantir_autenticado() e _esta_logado() usam AuthManager
+  - servico.py: captura ReautenticacaoNecessariaError, estados autenticando/aguardando_login/executando
+  - selectors.py: templates transformados em funções geradoras (pje_etiqueta_link, pje_link_processo, pje_doc_link_nome)
+  - Warnings: 23 preexistentes (deprecation jose/jwt), nenhum novo
+
+- 2026-05-18: Fase 4 (Integração custas iniciais PDF no pipeline) — APROVADO
+  - Testes agente: 74/74 passaram em 55.16s
+  - Testes API: 37/37 passaram em 1.50s
+  - Build frontend: passou sem erros TypeScript
+  - Testes frontend: 124/124 passaram em 18.81s
+  - py_compile: pje.py, pipeline.py, parser.py — sintaxe OK
+  - baixar_documento_pdf: existe em pje.py (linha 507), com retry e tratamento de exceção
+  - custas_iniciais propagado: pipeline.py (_construir_payload linha 77, extração linhas 161-201, processar_documentos linha 203) e parser.py (processar_documentos linha 39, mesclagem linhas 83-90)
+  - Deduplicação: numero_guia usado como chave em set, tanto em pipeline.py (linhas 83-87) quanto parser.py (linhas 84-88); custas sem numero_guia adicionadas diretamente
+  - Testes deduplicação: test_processar_documentos_deduplica_custas_por_guia, test_processar_documentos_com_custas_iniciais, test_processar_documentos_custas_iniciais_sem_numero_guia
+  - Warnings: 23 preexistentes (deprecation jose/jwt), nenhum novo

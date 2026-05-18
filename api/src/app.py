@@ -17,7 +17,7 @@ from schemas import HealthResponse
 
 from sog_shared import db
 from sog_shared.config import DASHBOARD_SENHA_HASH, init_config
-from rotas import auth, processos, aprovacao, historico
+from rotas import auth, processos, aprovacao, historico, agente
 from auth import _hash_valido
 
 logging.basicConfig(
@@ -127,3 +127,4 @@ app.include_router(auth.router)
 app.include_router(processos.router)
 app.include_router(aprovacao.router)
 app.include_router(historico.router)
+app.include_router(agente.router)

@@ -53,6 +53,11 @@ HEADLESS = os.getenv("HEADLESS", "true").lower() in ("1", "true", "yes")
 MAX_TENTATIVAS = int(os.getenv("MAX_TENTATIVAS", "3"))
 TIMEOUT_PADRAO = int(os.getenv("TIMEOUT_PADRAO", "30000"))
 
+# Storage State
+STORAGE_STATE_DIR = Path(os.getenv("STORAGE_STATE_DIR", str(Path.home() / ".sog" / "auth")))
+STORAGE_STATE_PJE = Path(os.getenv("STORAGE_STATE_PJE", str(STORAGE_STATE_DIR / "pje_storage.json")))
+STORAGE_STATE_SISTJ = Path(os.getenv("STORAGE_STATE_SISTJ", str(STORAGE_STATE_DIR / "sistj_storage.json")))
+
 # LLM (OpenAI) — usado como fallback quando regex não consegue extrair
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

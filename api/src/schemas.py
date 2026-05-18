@@ -132,3 +132,14 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     database: str
+
+
+class AgenteStatusResponse(BaseModel):
+    status: str
+    mensagem: str
+    atualizado_em: Optional[str] = None
+    online: bool
+
+
+class AgenteComandoResponse(BaseModel):
+    message: str

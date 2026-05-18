@@ -110,3 +110,39 @@ class TestProcessarDocumentos:
         assert resultado["suspensao_exigibilidade"] is True
         assert len(resultado["custas_pagas"]) == 1
         assert resultado["custas_pagas"][0]["data"] == "10/04/2024"
+
+    def test_processar_documentos_com_custas_iniciais(self):
+        docs = [{"doc_id": "111", "tipo": "Guia", "data_assinatura": "01/01/2024", "nome": "Guia 1"}]
+        textos = {}
+        custas_pdf = [{"data": "11/08/2024", "valor": "266,95", "numero_guia": "001-9"}]
+
+        resultado = processar_documentos(docs, textos, custas_iniciais=custas_pdf)
+
+        assert len(resultado["custas_pagas"]) == 1
+        assert resultado["custas_pagas"][0] == {"data": "11/08/2024", "valor": "266,95", "numero_guia": "001-9"}
+
+    def test_processar_documentos_deduplica_custas_por_guia(self):
+        docs = [
+            {"doc_id": "444", "tipo": "Comprovante de Pagamento de Custas", "data_assinatura": "04/01/2024", "nome": "Comprovante 1"},
+        ]
+        textos = {
+            "444": "data do pagamento: 10/04/2024. valor pago: R$ 250,00. guia nº 111222333",
+        }
+        custas_pdf = [{"data": "10/04/2024", "valor": "250,00", "numero_guia": "111222333"}]
+
+        resultado = processar_documentos(docs, textos, custas_iniciais=custas_pdf)
+
+        assert len(resultado["custas_pagas"]) == 1
+        assert resultado["custas_pagas"][0]["data"] == "10/04/2024"
+
+    def test_processar_documentos_custas_iniciais_sem_numero_guia(self):
+        docs = []
+        textos = {}
+        custas_pdf = [
+            {"data": "11/08/2024", "valor": "100,00", "numero_guia": ""},
+            {"data": "12/08/2024", "valor": "200,00", "numero_guia": ""},
+        ]
+
+        resultado = processar_documentos(docs, textos, custas_iniciais=custas_pdf)
+
+        assert len(resultado["custas_pagas"]) == 2

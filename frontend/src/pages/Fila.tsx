@@ -7,6 +7,7 @@ import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import { Card, CardContent } from '../components/ui/Card'
 import Skeleton from '../components/ui/Skeleton'
+import AgenteStatusBar from '../components/agente/AgenteStatusBar'
 import BuscaProcesso from '../components/fila/BuscaProcesso'
 import PrioridadeBadge from '../components/fila/PrioridadeBadge'
 import type { Processo } from '../types/processo'
@@ -62,6 +63,7 @@ export default function Fila() {
 
   return (
     <div className="space-y-8">
+      <AgenteStatusBar />
       <BuscaProcesso valor={busca} onChange={setBusca} />
 
       {nenhumResultado && (

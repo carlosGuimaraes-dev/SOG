@@ -311,6 +311,7 @@ class TestAprovacao:
         client.cookies.set("access_token", token, domain="testserver.local", path="/")
         resp = client.post(f"/api/v1/aprovar/{processo_id}")
         assert resp.status_code == 200
+        assert resp.json()["message"] == "Aprovação registrada. O agente processará a emissão em breve."
 
         row = mock_db.execute(
             "SELECT status FROM processos WHERE id = ?", (processo_id,)
@@ -441,6 +442,108 @@ class TestDbSeguranca:
         with pytest.raises(ValueError) as exc_info:
             db.salvar_dados_processo(1, {"coluna_inexistente": "valor"})
         assert "coluna_inexistente" in str(exc_info.value)
+
+
+class TestAgente:
+    def test_status_sem_registro(self, client, mock_db):
+        from auth import create_access_token
+
+        token = create_access_token({"sub": "admin"})
+        client.cookies.clear()
+        client.cookies.set("access_token", token, domain="testserver.local", path="/")
+        resp = client.get("/api/v1/agente/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "desconhecido"
+        assert data["online"] is False
+        assert "Agente não registrado" in data["mensagem"]
+
+    def test_iniciar_agente(self, client, mock_db):
+        from auth import create_access_token
+
+        token = create_access_token({"sub": "admin"})
+        client.cookies.clear()
+        client.cookies.set("access_token", token, domain="testserver.local", path="/")
+        resp = client.post("/api/v1/agente/iniciar")
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Comando 'iniciar' enviado ao agente."
+
+        row = mock_db.execute("SELECT * FROM agente_controle WHERE id = 1").fetchone()
+        assert row is not None
+        assert row["comando"] == "iniciar"
+
+    def test_parar_agente(self, client, mock_db):
+        from auth import create_access_token
+
+        # Primeiro insere registro
+        mock_db.execute(
+            "INSERT INTO agente_controle (id, comando, status) VALUES (1, 'iniciar', 'executando')"
+        )
+        mock_db.commit()
+
+        token = create_access_token({"sub": "admin"})
+        client.cookies.clear()
+        client.cookies.set("access_token", token, domain="testserver.local", path="/")
+        resp = client.post("/api/v1/agente/parar")
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Comando 'parar' enviado ao agente."
+
+        row = mock_db.execute("SELECT comando FROM agente_controle WHERE id = 1").fetchone()
+        assert row["comando"] == "parar"
+
+    def test_status_online(self, client, mock_db):
+        from auth import create_access_token
+
+        mock_db.execute(
+            "INSERT INTO agente_controle (id, comando, status, mensagem, atualizado_em) VALUES (1, 'iniciar', 'executando', 'OK', datetime('now'))"
+        )
+        mock_db.commit()
+
+        token = create_access_token({"sub": "admin"})
+        client.cookies.clear()
+        client.cookies.set("access_token", token, domain="testserver.local", path="/")
+        resp = client.get("/api/v1/agente/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "executando"
+        assert data["mensagem"] == "OK"
+        assert data["online"] is True
+
+    def test_status_offline_timestamp_velho(self, client, mock_db):
+        from auth import create_access_token
+
+        mock_db.execute(
+            "INSERT INTO agente_controle (id, comando, status, mensagem, atualizado_em) VALUES (1, 'iniciar', 'executando', 'OK', datetime('now', '-120 seconds'))"
+        )
+        mock_db.commit()
+
+        token = create_access_token({"sub": "admin"})
+        client.cookies.clear()
+        client.cookies.set("access_token", token, domain="testserver.local", path="/")
+        resp = client.get("/api/v1/agente/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "executando"
+        assert data["online"] is False
+
+    def test_agente_sem_token_retorna_401(self, client):
+        client.cookies.clear()
+        resp = client.get("/api/v1/agente/status")
+        assert resp.status_code == 401
+
+        resp = client.post("/api/v1/agente/iniciar")
+        assert resp.status_code == 401
+
+        resp = client.post("/api/v1/agente/parar")
+        assert resp.status_code == 401
+
+    def test_monorregistro_check_id(self, mock_db):
+        """Tentativa de INSERT com id=2 deve falhar devido ao CHECK (id = 1)."""
+        with pytest.raises(sqlite3.IntegrityError):
+            mock_db.execute(
+                "INSERT INTO agente_controle (id, comando, status) VALUES (2, 'iniciar', 'executando')"
+            )
+            mock_db.commit()
 
 
 class TestRateLimit:

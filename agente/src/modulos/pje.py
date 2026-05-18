@@ -16,11 +16,18 @@ import re
 from typing import List, Dict, Any, Optional, Tuple
 from playwright.sync_api import Page, Browser, FrameLocator, TimeoutError as PlaywrightTimeout
 
-from config import PJE_URL, PJE_USUARIO, PJE_SENHA, PJE_ETIQUETA
+from config import (
+    PJE_URL,
+    PJE_ETIQUETA,
+    STORAGE_STATE_PJE,
+    HEADLESS,
+)
 from utils.logger import info, erro, aviso
 from banco import db
 from modulos.retry import retry_on_exception
 from modulos.playwright_client import PlaywrightClient
+from modulos.auth_manager import AuthManager
+from modulos.css_escape import escape_for_css
 
 
 # ─────────────────────────────────────────────────────────────
@@ -59,11 +66,6 @@ def _extrair_numeros_processo(html: str) -> List[str]:
 # ─────────────────────────────────────────────────────────────
 # FUNÇÕES AUXILIARES RESILIENTES
 # ─────────────────────────────────────────────────────────────
-
-def escape_for_css(texto: str) -> str:
-    """Escapa aspas simples e duplas para uso seguro em seletores CSS."""
-    return texto.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
-
 
 def _tentar_seletores(page_or_locator, seletores: List[str], **kwargs) -> bool:
     """
@@ -234,57 +236,25 @@ def _aguardar_e_clicar_menu(page: Page, texto_menu: str, timeout: int = 10000) -
 # ─────────────────────────────────────────────────────────────
 
 class PjeClient(PlaywrightClient):
-    def iniciar(self):
-        """Inicializa com accept_downloads=True (necessário para anexar PDFs)."""
-        super().iniciar(accept_downloads=True)
+    def __init__(self):
+        super().__init__()
+        self._auth = AuthManager(STORAGE_STATE_PJE, headless_default=HEADLESS)
+
+    def garantir_autenticado(self) -> bool:
+        """Verifica autenticação; se necessário, dispara fallback interativo."""
+        return self._auth.verificar_e_autenticar(
+            url=PJE_URL,
+            verificar_sucesso_fn=self._esta_logado,
+            accept_downloads=True,
+        )
 
     def login(self) -> bool:
-        if not self.page:
-            self.iniciar()
+        """Alias para garantir_autenticado() — mantido para compatibilidade."""
+        return self.garantir_autenticado()
+
+    def _esta_logado(self, page: Page) -> bool:
+        """Retorna True se a página indicar que o usuário está logado no PJe."""
         try:
-            self.page.goto(PJE_URL, wait_until="networkidle")
-            self.page.wait_for_timeout(2000)
-
-            # Detecta iframe de login (comum no PJE TJDFT)
-            frame = _entrar_iframe_login(self.page)
-
-            # Seletores robustos para usuário / senha / botão
-            seletores_usuario = [
-                "input[name='username']",
-                "#username",
-                "input[id*='username']",
-                "#formulario\\:username",
-                "input[name*='j_username']",
-            ]
-            seletores_senha = [
-                "input[name='password']",
-                "#password",
-                "input[id*='password']",
-                "#formulario\\:password",
-                "input[name*='j_password']",
-                "input[type='password']",
-            ]
-            seletores_submit = [
-                "input[type='submit']",
-                "#btnLogin",
-                "button[type='submit']",
-                "#formulario\\:btnEntrar",
-                "input[value*='Entrar']",
-                "input[value*='Login']",
-            ]
-
-            # Aguarda ao menos um campo de usuário
-            if not _safe_wait(frame, seletores_usuario, timeout=20000):
-                aviso("Campo de usuário não encontrado; tentando continuar mesmo assim.")
-
-            _safe_fill(frame, seletores_usuario, PJE_USUARIO)
-            _safe_fill(frame, seletores_senha, PJE_SENHA)
-            _safe_click(frame, seletores_submit)
-
-            # Aguarda carregamento do painel (sai do iframe / carrega dashboard)
-            self.page.wait_for_load_state("networkidle")
-            self.page.wait_for_timeout(4000)
-
             # Verifica login: indicadores configuráveis via env var + seletores genéricos
             _indicadores_raw = os.getenv("PJE_INDICADORES_SUCESSO", "")
             indicadores_texto = []
@@ -297,22 +267,16 @@ class PjeClient(PlaywrightClient):
                     aviso(f"PJE_INDICADORES_SUCESSO inválido (não é JSON list): {_indicadores_raw[:100]}")
                     indicadores_texto = []
 
-            logado = False
             if indicadores_texto:
                 for texto in indicadores_texto:
                     try:
-                        if self.page.get_by_text(texto, exact=True).count() > 0:
-                            logado = True
-                            break
+                        if page.get_by_text(texto, exact=True).count() > 0:
+                            return True
                     except PlaywrightTimeout:
                         continue
                     except Exception as exc:
                         aviso(f"Erro ao verificar indicador de login '{texto[:40]}...': {exc}")
                         continue
-
-            if logado:
-                info("Login PJE realizado com sucesso.")
-                return True
 
             # Se não há indicadores textuais configurados, ou nenhum bateu,
             # verifica seletores genéricos de DOM (menu, avatar, botão sair)
@@ -324,10 +288,9 @@ class PjeClient(PlaywrightClient):
             ]
             try:
                 logado_dom = any(
-                    self.page.locator(sel).count() > 0 for sel in seletores_genericos
+                    page.locator(sel).count() > 0 for sel in seletores_genericos
                 )
                 if logado_dom:
-                    info("Login PJE realizado com sucesso (indicadores genéricos).")
                     return True
             except PlaywrightTimeout:
                 pass
@@ -335,14 +298,12 @@ class PjeClient(PlaywrightClient):
                 aviso(f"Erro ao verificar indicadores genéricos de login: {exc}")
 
             # Último recurso: verifica se a URL mudou para algo diferente de login
-            if "login" not in self.page.url.lower():
-                info("Login PJE realizado (verificação alternativa por URL).")
+            if "login" not in page.url.lower():
                 return True
 
-            aviso("Login PJE: não foi possível confirmar sucesso, mas prosseguindo.")
-            return True
-        except Exception as e:
-            erro(f"Falha no login PJE: {e}")
+            return False
+        except Exception as exc:
+            aviso(f"Erro ao verificar estado de login no PJe: {exc}")
             return False
 
     # ─────────────────────────────────────────────────────────
@@ -534,6 +495,83 @@ class PjeClient(PlaywrightClient):
         except Exception as e:
             erro(f"Falha ao coletar documentos de {numero_processo}: {e}")
             return docs, textos
+
+    # ─────────────────────────────────────────────────────────
+    # BAIXAR DOCUMENTO PDF
+    # ─────────────────────────────────────────────────────────
+    @retry_on_exception(
+        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
+        max_retries=2,
+        backoff=2,
+    )
+    def baixar_documento_pdf(self, doc_id: str, caminho_destino: str) -> bool:
+        """Baixa o PDF de um documento específico do processo no PJe.
+
+        Assume que a página atual exibe a tabela de documentos do processo.
+        Localiza a linha do documento pelo doc_id, clica no link de download
+        e salva o arquivo em ``caminho_destino``.
+
+        Args:
+            doc_id: Identificador do documento (ex: "206426308").
+            caminho_destino: Caminho absoluto onde o PDF será salvo.
+
+        Returns:
+            True se o download foi bem-sucedido, False caso contrário.
+        """
+        try:
+            # Localiza a linha da tabela que contenha o doc_id
+            # O PJe usa .rich-table-row ou tbody tr; tentamos encontrar
+            # uma linha cujo texto contenha o doc_id.
+            linhas = self.page.locator(".rich-table-row, table tbody tr, .documento-item").all()
+            linha_alvo = None
+            for linha in linhas:
+                try:
+                    texto_linha = linha.inner_text(timeout=3000)
+                    if doc_id in texto_linha:
+                        linha_alvo = linha
+                        break
+                except Exception:
+                    continue
+
+            if linha_alvo is None:
+                aviso(f"Documento {doc_id} não encontrado na tabela para download.")
+                return False
+
+            # Dentro da linha, procura links (a) ou elementos clicáveis.
+            # Prioriza links que pareçam download ou o próprio doc_id.
+            seletores_link = [
+                "a[href*='download']",
+                "a[onclick*='download']",
+                "a",
+                "[role='link']",
+                "span[onclick]",
+            ]
+            for sel in seletores_link:
+                try:
+                    links = linha_alvo.locator(sel).all()
+                    for link in links:
+                        if not link.is_visible():
+                            continue
+                        with self.page.expect_download(timeout=15000) as download_info:
+                            link.click(timeout=10000)
+                        download = download_info.value
+                        download.save_as(caminho_destino)
+                        info(f"PDF do documento {doc_id} baixado em {caminho_destino}.")
+                        return True
+                except PlaywrightTimeout:
+                    continue
+                except Exception as exc:
+                    aviso(f"Tentativa de download falhou para seletor '{sel}': {exc}")
+                    continue
+
+            aviso(f"Nenhum link clicável encontrado para o documento {doc_id}.")
+            return False
+
+        except Exception as exc:
+            aviso(f"Erro ao baixar PDF do documento {doc_id}: {exc}")
+            return False
+
+        return False
 
     # ─────────────────────────────────────────────────────────
     # ANEXAR DEMONSTRATIVO

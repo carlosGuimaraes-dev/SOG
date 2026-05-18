@@ -13,6 +13,7 @@ from typing import Tuple, Type, Union
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
 
+from modulos.auth_manager import ReautenticacaoNecessariaError
 from utils.logger import info, erro, aviso
 
 
@@ -197,15 +198,22 @@ def retry_on_exception(
                     if (
                         instance
                         and hasattr(instance, "verificar_sessao")
-                        and hasattr(instance, "reconectar")
                         and hasattr(instance, "page")
                     ):
                         try:
                             if instance.verificar_sessao():
-                                info(f"Sessão expirada em {func_name}, reconectando antes do retry {attempt + 1}...")
-                                reconectou = instance.reconectar()
-                                if not reconectou:
-                                    aviso(f"Reconexão falhou em {func_name}, prosseguindo com retry mesmo assim.")
+                                info(f"Sessão expirada em {func_name}...")
+                                # NOVO: se o cliente usa AuthManager (serviço longo), não tenta reconectar programaticamente
+                                if hasattr(instance, "_auth") and instance._auth is not None:
+                                    # Lança exceção para o loop principal tratar com fallback interativo
+                                    raise ReautenticacaoNecessariaError(instance.__class__.__name__)
+                                # LEGADO: tenta reconectar (mantido para compatibilidade)
+                                if hasattr(instance, "reconectar"):
+                                    reconectou = instance.reconectar()
+                                    if not reconectou:
+                                        aviso(f"Reconexão falhou em {func_name}, prosseguindo com retry mesmo assim.")
+                        except ReautenticacaoNecessariaError:
+                            raise
                         except Exception as recon_err:
                             aviso(f"Erro ao verificar/reconectar em {func_name}: {recon_err}")
 

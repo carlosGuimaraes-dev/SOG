@@ -233,3 +233,69 @@ def listar_logs(processo_id: int) -> List[Dict[str, Any]]:
             (processo_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# Agente controle ------------------------------------------------------------
+
+def obter_controle_agente() -> Optional[Dict[str, Any]]:
+    """Retorna o registro de controle do agente (id=1) ou None."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM agente_controle WHERE id = 1").fetchone()
+        return dict(row) if row else None
+
+
+def criar_ou_atualizar_controle_agente(
+    comando: Optional[str] = None,
+    status: Optional[str] = None,
+    mensagem: Optional[str] = None,
+    pid: Optional[int] = None,
+) -> None:
+    """
+    Upsert na tabela agente_controle (id=1).
+    Campos None são ignorados (mantêm valor atual).
+    Usa BEGIN IMMEDIATE para evitar race condition entre API e agente.
+    """
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT id FROM agente_controle WHERE id = 1").fetchone()
+            if row:
+                campos = []
+                vals = []
+                if comando is not None:
+                    campos.append("comando = ?")
+                    vals.append(comando)
+                if status is not None:
+                    campos.append("status = ?")
+                    vals.append(status)
+                if mensagem is not None:
+                    campos.append("mensagem = ?")
+                    vals.append(mensagem)
+                if pid is not None:
+                    campos.append("pid = ?")
+                    vals.append(pid)
+                if campos:
+                    campos.append("atualizado_em = CURRENT_TIMESTAMP")
+                    conn.execute(
+                        f"UPDATE agente_controle SET {', '.join(campos)} WHERE id = 1",
+                        vals,
+                    )
+                    conn.commit()
+            else:
+                conn.execute(
+                    "INSERT INTO agente_controle (id, comando, status, mensagem, pid) VALUES (1, ?, ?, ?, ?)",
+                    (comando or 'parar', status or 'parado', mensagem or '', pid),
+                )
+                conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def listar_aprovados(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM processos WHERE status = 'aprovado' ORDER BY atualizado_em LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        return [dict(r) for r in rows]

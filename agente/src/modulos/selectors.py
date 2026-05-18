@@ -14,7 +14,12 @@ Convenções de nomenclatura:
   - BTN_*    : botões de ação
   - TABLE_*  : tabelas/linhas de dados
   - LABEL_*  : labels ou textos de resultado
+
+Templates dinâmicos (valores que vêm de dados de processo) são expostos
+como funções geradoras para garantir escaping CSS antes da interpolação.
 """
+
+from modulos.css_escape import escape_for_css
 
 # ─────────────────────────────────────────────────────────────
 # LOGIN
@@ -223,12 +228,8 @@ SELECT_ITEM_GUIA = [
     "select[id*='itemGuia']",
 ]
 # Radio de item de cálculo: o valor vem dinamicamente do backend (ex: "item1", "item2"...)
-# Portanto usamos template: f"input[value='{{valor}}'][name*='itemCalculo']"
-RADIO_ITEM_CALCULO = [
-    "input[value='{valor}'][name*='itemCalculo']",
-    "input[value='{valor}'][name*='item']",
-    "input[type='radio'][value='{valor}']",
-]
+# Usar f-string com escape explícito no código consumidor (sistjweb.py).
+# Removido template com placeholder para evitar interpolação acidental sem escaping.
 
 INPUT_NUMERO_FOLHAS_OUTROS = [
     "input[name='numeroFolhasOutros']",
@@ -385,13 +386,16 @@ PJE_NAV_SUBMENU_INCLUIR_CALCULO = [
     "span:has-text('Incluir Cálculo')",
 ]
 
-# Etiqueta de processo (texto dinâmico — usar f-string ao instanciar)
-PJE_ETIQUETA_LINK = [
-    "text='{etiqueta}'",
-    "a:has-text('{etiqueta}')",
-    "span:has-text('{etiqueta}')",
-    "li:has-text('{etiqueta}') >> a",
-]
+# Etiqueta de processo (texto dinâmico — usar função geradora)
+def pje_etiqueta_link(etiqueta: str):
+    """Retorna lista de seletores para localizar link de etiqueta no PJe."""
+    e = escape_for_css(etiqueta)
+    return [
+        f"text='{e}'",
+        f"a:has-text('{e}')",
+        f"span:has-text('{e}')",
+        f"li:has-text('{e}') >> a",
+    ]
 
 # ─────────────────────────────────────────────────────────────
 # PJE — TABELAS (processos e documentos)
@@ -425,12 +429,15 @@ PJE_TABELA_CELULA = [
 # ─────────────────────────────────────────────────────────────
 # PJE — PROCESSO (links com número CNJ)
 # ─────────────────────────────────────────────────────────────
-PJE_LINK_PROCESSO = [
-    "a:has-text('{numero}')",
-    "td:has-text('{numero}')",
-    "span:has-text('{numero}')",
-    "text='{numero}'",
-]
+def pje_link_processo(numero: str):
+    """Retorna lista de seletores para localizar link de processo no PJe."""
+    n = escape_for_css(numero)
+    return [
+        f"a:has-text('{n}')",
+        f"td:has-text('{n}')",
+        f"span:has-text('{n}')",
+        f"text='{n}'",
+    ]
 
 # ─────────────────────────────────────────────────────────────
 # PJE — VISUALIZADOR DE DOCUMENTOS
@@ -448,12 +455,15 @@ PJE_DOC_VISUALIZADOR_MODAL = [
     "#visualizadorDocumento",
     "[class*='visualizador']",
 ]
-PJE_DOC_LINK_NOME = [
-    "text='{nome}'",
-    "a:has-text('{nome}')",
-    "span:has-text('{nome}')",
-    "td:has-text('{nome}')",
-]
+def pje_doc_link_nome(nome: str):
+    """Retorna lista de seletores para localizar link de documento no PJe."""
+    n = escape_for_css(nome)
+    return [
+        f"text='{n}'",
+        f"a:has-text('{n}')",
+        f"span:has-text('{n}')",
+        f"td:has-text('{n}')",
+    ]
 
 # ─────────────────────────────────────────────────────────────
 # PJE — ANEXAR DOCUMENTO

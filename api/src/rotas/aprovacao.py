@@ -1,7 +1,7 @@
 """
 Rotas de aprovação e rejeição de processos.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 
 from auth import get_current_user
 from sog_shared import db
@@ -11,25 +11,10 @@ from schemas import AprovacaoResponse, RejeicaoResponse, RejeicaoRequest
 router = APIRouter(tags=["aprovacao"])
 
 
-def _disparar_emissao(processo_id: int) -> None:
-    """Tenta disparar emissão em background; falha silenciosamente se agente não disponível."""
-    try:
-        from modulos.emissor import emitir_e_anexar
-        emitir_e_anexar(processo_id)
-    except Exception as exc:
-        import logging
-        logging.getLogger("custas_api").warning(
-            "Emissor não disponível no container API (falta Playwright). "
-            "Processo %d marcado como aprovado; execute o agente para emissão. Erro: %s",
-            processo_id, exc,
-        )
-
-
 @router.post("/aprovar/{processo_id}", response_model=AprovacaoResponse)
 @limiter.limit("10/minute")
 def aprovar_processo(
     processo_id: int,
-    background_tasks: BackgroundTasks,
     request: Request,
     user: str = Depends(get_current_user),
 ):
@@ -58,9 +43,7 @@ def aprovar_processo(
         )
         conn.commit()
 
-    background_tasks.add_task(_disparar_emissao, processo_id)
-
-    return {"message": "Aprovação registrada. Emissão em andamento."}
+    return {"message": "Aprovação registrada. O agente processará a emissão em breve."}
 
 
 @router.post("/rejeitar/{processo_id}", response_model=RejeicaoResponse)
@@ -79,6 +62,12 @@ def rejeitar_processo(
         if not row:
             conn.rollback()
             raise HTTPException(status_code=404, detail="Processo não encontrado")
+        if row["status"] != "aguardando_aprovacao":
+            conn.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Processo não está aguardando aprovação",
+            )
 
         conn.execute(
             "UPDATE processos SET status = 'rejeitado', atualizado_em = CURRENT_TIMESTAMP WHERE id = ?",

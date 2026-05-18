@@ -5,9 +5,10 @@ Extrai a lógica comum de inicialização, teardown, verificação de sessão
 e reconexão, evitando duplicação entre PjeClient e SistjClient.
 """
 from typing import Optional
-from playwright.sync_api import sync_playwright, Page, Browser, TimeoutError as PlaywrightTimeout
 
-from config import HEADLESS, TIMEOUT_PADRAO
+from playwright.sync_api import Page, Browser, TimeoutError as PlaywrightTimeout
+
+from modulos.auth_manager import AuthManager
 from utils.logger import info, erro
 
 
@@ -15,27 +16,20 @@ class PlaywrightClient:
     """Cliente base para automação com Playwright."""
 
     def __init__(self):
-        self.browser: Optional[Browser] = None
-        self.page: Optional[Page] = None
-        self._playwright = None
+        self._auth: Optional[AuthManager] = None
 
-    def iniciar(self, accept_downloads: bool = False):
-        """Inicializa navegador, contexto e página com viewport padrão."""
-        self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=HEADLESS)
-        context = self.browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            accept_downloads=accept_downloads,
-        )
-        self.page = context.new_page()
-        self.page.set_default_timeout(TIMEOUT_PADRAO)
+    @property
+    def page(self) -> Optional[Page]:
+        return self._auth.page if self._auth else None
+
+    @property
+    def browser(self) -> Optional[Browser]:
+        return self._auth.browser if self._auth else None
 
     def fechar(self):
         """Fecha o navegador e libera recursos do Playwright."""
-        if self.browser:
-            self.browser.close()
-        if self._playwright:
-            self._playwright.stop()
+        if self._auth:
+            self._auth.fechar()
 
     def verificar_sessao(self) -> bool:
         """Retorna True se a sessão estiver expirada ou inválida."""

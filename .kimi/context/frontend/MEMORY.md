@@ -38,6 +38,7 @@
 | ThemeToggle | `src/components/ThemeToggle.tsx` | Extraído de App.tsx (Wave 5) |
 | ErrorBoundary | `src/components/ErrorBoundary.tsx` | Classe React com fallback UI (Wave 5) |
 | ToastProvider | `src/components/ToastProvider.tsx` | Context global para toasts (Wave 5) |
+| AgenteStatusBar | `src/components/agente/AgenteStatusBar.tsx` | Barra de status do agente com bolinha, mensagem, botões Iniciar/Parar e polling a cada 5s (Fase 1.2) |
 
 ---
 
@@ -174,3 +175,11 @@
 - **Indicadores de prioridade:** `PrioridadeBadge.tsx` renderiza badges com variantes: `urgente` (erro — destructive), `alto_valor` (> R$ 50k — warning), `antigo` (> 7 dias — muted). Consumido nos cards de `Fila.tsx`.
 - **Exportação CSV:** `BotaoExportar.tsx` dispara `api.get` com `responseType: 'blob'` e cria objeto URL para download. Inclui nome do arquivo com timestamp. Rate limit do endpoint: `10/minute`.
 - **Testes:** 124/124 testes passando. Novos arquivos de teste: `DemonstrativoLink.test.tsx`, `Paginacao.test.tsx`, `FiltrosHistorico.test.tsx`, `PrioridadeBadge.test.tsx`, `BotaoExportar.test.tsx`.
+
+### Fase 1.2 — Agente como Serviço Longo: Barra de Status (2026-05-17)
+- **AgenteStatusBar:** Criado `src/components/agente/AgenteStatusBar.tsx` com bolinha colorida (verde=executando/dormindo, amarelo=aguardando_login, cinza=parado/desconhecido, vermelho=erro, azul=autenticando/iniciando), label, mensagem informativa, botões Iniciar/Parar com estados de loading, polling automático a cada 5s via `setInterval` com cleanup no unmount.
+- **Endpoints:** Adicionados `AGENTE_INICIAR`, `AGENTE_PARAR`, `AGENTE_STATUS` em `src/lib/endpoints.ts`.
+- **Integração:** `<AgenteStatusBar />` incluído no topo da página `Fila.tsx`, antes do `BuscaProcesso`.
+- **Acessibilidade:** `role="region"`, `aria-label` nos botões, `aria-hidden` na bolinha decorativa.
+- **Estados de UI:** loading nos botões, tratamento gracioso de erro da API (status vira 'desconhecido', online=false), toast em erro de comando.
+- **Build e testes:** Build passa sem erros (`npm run build`). 124/124 testes existentes continuam passando.

@@ -17,18 +17,22 @@ from typing import Dict, Any, Optional, List
 
 from playwright.sync_api import Page, Browser, TimeoutError as PlaywrightTimeout
 
-from config import SISTJ_URL, SISTJ_USUARIO, SISTJ_SENHA, SCREENSHOTS_DIR, DEMONSTRATIVOS_DIR
+from config import (
+    SISTJ_URL,
+    SCREENSHOTS_DIR,
+    DEMONSTRATIVOS_DIR,
+    STORAGE_STATE_SISTJ,
+    HEADLESS,
+)
 from utils.logger import info, erro, aviso
 from regras import detectar_area, obter_regras_outros_itens
 from modulos.retry import retry_on_exception
-from modulos.pje import escape_for_css
+from modulos.css_escape import escape_for_css
 from modulos.playwright_client import PlaywrightClient
+from modulos.auth_manager import AuthManager
 
 # Importa constantes de seletores organizadas por seção do sistema
 from modulos.selectors import (
-    LOGIN_USER,
-    LOGIN_PASS,
-    LOGIN_SUBMIT,
     NAV_MENU_CUSTAS,
     NAV_SUBMENU_ATUALIZAR,
     NAV_BOTAO_PREENCHER,
@@ -51,7 +55,7 @@ from modulos.selectors import (
     CHECK_ISENCAO_CUSTAS,
     MAPEAMENTO_PECAS,
     SELECT_ITEM_GUIA,
-    RADIO_ITEM_CALCULO,
+
     INPUT_NUMERO_FOLHAS_OUTROS,
     INPUT_VALOR_ITEM,
     INPUT_QUANTIDADE,
@@ -184,35 +188,64 @@ def safe_get_input_value(page: Page, selectors: List[str], timeout: int = 3000) 
 class SistjClient(PlaywrightClient):
     """Cliente de automação para o SISTJWEB (planilha de custas TJDFT)."""
 
-    @retry_on_exception(
-        exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
-        max_retries=3,
-        backoff=2,
-    )
+    def __init__(self):
+        super().__init__()
+        self._auth = AuthManager(STORAGE_STATE_SISTJ, headless_default=HEADLESS)
+
+    def garantir_autenticado(self) -> bool:
+        """Verifica autenticação; se necessário, dispara fallback interativo."""
+        return self._auth.verificar_e_autenticar(
+            url=SISTJ_URL,
+            verificar_sucesso_fn=self._esta_logado,
+        )
+
     def login(self) -> bool:
-        """
-        Realiza login no SISTJWEB.
+        """Alias para garantir_autenticado() — mantido para compatibilidade."""
+        return self.garantir_autenticado()
 
-        Seletores:
-          - Usuário: input[name='j_username'] ou #username
-          - Senha:   input[name='j_password'] ou #password
-          - Submit:  input[type='submit'] ou #btnLogin
-        """
-        if not self.page:
-            self.iniciar()
+    def _esta_logado(self, page: Page) -> bool:
+        """Retorna True se a página indicar que o usuário está logado no SISTJWEB."""
         try:
-            self.page.goto(SISTJ_URL, wait_until="networkidle")
+            # Indicador 1: ausência de campos de login
+            try:
+                user_inputs = page.locator(
+                    "input[name='j_username'], input[name='username'], #username"
+                ).count()
+                pass_inputs = page.locator(
+                    "input[type='password'], input[name='j_password'], #password"
+                ).count()
+                if user_inputs == 0 and pass_inputs == 0:
+                    # Sem campos de login — possivelmente logado; cruzar com outros indicadores
+                    pass
+                else:
+                    # Campos de login presentes — provavelmente não logado
+                    return False
+            except Exception:
+                pass
 
-            safe_fill(self.page, LOGIN_USER, SISTJ_USUARIO, timeout=10000)
-            safe_fill(self.page, LOGIN_PASS, SISTJ_SENHA, timeout=10000)
-            safe_click(self.page, LOGIN_SUBMIT, timeout=10000)
+            # Indicador 2: presença de elementos da área logada
+            seletores_logado = [
+                "a:has-text('Custas')",
+                "span:has-text('Custas')",
+                "[class*='menu']",
+                "#menu",
+                ".menu",
+            ]
+            try:
+                for sel in seletores_logado:
+                    if page.locator(sel).count() > 0:
+                        return True
+            except Exception:
+                pass
 
-            self.page.wait_for_load_state("networkidle")
-            self.page.wait_for_timeout(3000)
-            info("Login SISTJWEB realizado com sucesso.")
-            return True
-        except Exception as e:
-            erro(f"Falha no login SISTJWEB: {e}")
+            # Indicador 3: URL não é página de login
+            url = page.url.lower()
+            if "login" not in url and "autentica" not in url:
+                return True
+
+            return False
+        except Exception as exc:
+            aviso(f"Erro ao verificar estado de login no SISTJWEB: {exc}")
             return False
 
     @retry_on_exception(
@@ -335,7 +368,12 @@ class SistjClient(PlaywrightClient):
 
                 # Aguarda e seleciona o radio de cálculo correspondente
                 valor_radio = item["item_calculo"]
-                seletores_radio = [s.format(valor=valor_radio) for s in RADIO_ITEM_CALCULO]
+                valor_escapado = escape_for_css(valor_radio)
+                seletores_radio = [
+                    f"input[value='{valor_escapado}'][name*='itemCalculo']",
+                    f"input[value='{valor_escapado}'][name*='item']",
+                    f"input[type='radio'][value='{valor_escapado}']",
+                ]
                 safe_click(self.page, seletores_radio, timeout=5000)
 
                 # Campos condicionais

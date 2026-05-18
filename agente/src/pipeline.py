@@ -1,7 +1,7 @@
 """
-Orquestrador principal do pipeline de custas processuais TJDFT.
+Orquestrador do pipeline de custas processuais TJDFT.
 
-Fluxo:
+Fluxo de uma iteração (rodar_pipeline):
 1. Coleta lista de processos no PJE por etiqueta
 2. Para cada novo processo:
    a. Consulta Datajud
@@ -9,16 +9,22 @@ Fluxo:
    c. Parse dos documentos
    d. Preenche SISTJWEB
    e. Notifica operador
-3. Logs em JSON estruturado
+3. Emite processos aprovados (chamado pelo servico.py)
+4. Logs em JSON estruturado
+
+Este módulo é importável sem side-effects (sem execução no import).
 """
+import os
 import re
+import tempfile
 from typing import Dict, Any, List, Tuple, Optional
 
-from config import MAX_TENTATIVAS, init_config
+from config import MAX_TENTATIVAS
 from banco import db
 from modulos.pje import PjeClient
 from modulos.datajud import consultar as datajud_consultar
 from modulos.parser import processar_documentos
+from modulos.extrator_pdf import extrair_texto_pdf
 from modulos.sistjweb import SistjClient
 from regras import detectar_area, obter_regras_outros_itens
 from utils.logger import info, erro, aviso
@@ -50,8 +56,8 @@ def _coletar_datajud(numero: str, numero_sem_mascara: str, processo_id: int) -> 
     return dados
 
 
-def _coletar_documentos(numero: str, processo_id: int, pje: PjeClient) -> Tuple[List[Dict[str, Any]], Dict[str, str], Dict[str, Any]]:
-    """Coleta documentos no PJE, extrai textos e faz parsing."""
+def _coletar_documentos(numero: str, processo_id: int, pje: PjeClient) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+    """Coleta documentos no PJE e extrai textos. Retorna (docs, textos)."""
     info(f"[{numero}] Coletando documentos no PJE...", processo_id=processo_id, etapa="pje")
     docs, textos = pje.coletar_documentos(numero)
     for doc in docs:
@@ -59,16 +65,19 @@ def _coletar_documentos(numero: str, processo_id: int, pje: PjeClient) -> Tuple[
             processo_id, doc["doc_id"], doc["tipo"], doc["data_assinatura"], doc["nome"]
         )
     db.registrar_log(processo_id, "pje_documentos", "ok", f"{len(docs)} documentos")
-
-    info(f"[{numero}] Analisando documentos...", processo_id=processo_id, etapa="parser")
-    dados_parser = processar_documentos(docs, textos)
-    info(f"[{numero}] Parser retornou {len(dados_parser)} campo(s).", processo_id=processo_id, etapa="parser", status="ok")
-    db.registrar_log(processo_id, "parser", "ok", f"campos={len(dados_parser)}")
-    return docs, textos, dados_parser
+    return docs, textos
 
 
-def _construir_payload(numero: str, numero_sem_mascara: str, dados_datajud: Dict[str, Any], dados_parser: Dict[str, Any], area: str) -> Dict[str, Any]:
+def _construir_payload(
+    numero: str,
+    numero_sem_mascara: str,
+    dados_datajud: Dict[str, Any],
+    dados_parser: Dict[str, Any],
+    area: str,
+) -> Dict[str, Any]:
     """Monta o payload para preenchimento do SISTJWEB."""
+    custas_pagas: List[Dict[str, Any]] = list(dados_parser.get("custas_pagas", []))
+
     return {
         "numero_sem_mascara": numero_sem_mascara,
         "numero": numero,
@@ -94,6 +103,7 @@ def _construir_payload(numero: str, numero_sem_mascara: str, dados_datajud: Dict
             }
         ],
         **dados_parser,
+        "custas_pagas": custas_pagas,
         "area_direito": area,
     }
 
@@ -134,7 +144,54 @@ def processar_processo(numero: str, numero_sem_mascara: str, pje: PjeClient, sis
         db.registrar_log(processo_id, "inicio", "ok", "Iniciando pipeline")
 
         dados_datajud = _coletar_datajud(numero, numero_sem_mascara, processo_id)
-        _, _, dados_parser = _coletar_documentos(numero, processo_id, pje)
+        docs, textos = _coletar_documentos(numero, processo_id, pje)
+
+        # ── Extração de custas iniciais a partir de PDFs ──
+        custas_extraidas: List[Dict[str, Any]] = []
+        tipos_custas = {"Comprovante de Pagamento de Custas", "Guia"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for doc in docs:
+                if doc.get("tipo", "") not in tipos_custas:
+                    continue
+                pdf_path = os.path.join(tmpdir, f"{doc['doc_id']}.pdf")
+                if not pje.baixar_documento_pdf(doc["doc_id"], pdf_path):
+                    continue
+
+                resultado_pdf = extrair_texto_pdf(pdf_path)
+                custas = resultado_pdf.get("custas_iniciais", {})
+
+                if custas.get("scanned"):
+                    aviso(
+                        f"PDF de custas do doc {doc['doc_id']} é scanned. Ignorando.",
+                        processo_id=processo_id,
+                    )
+                    db.registrar_log(
+                        processo_id, "custas_pdf", "aviso",
+                        f"doc_id={doc['doc_id']} scanned"
+                    )
+                    continue
+
+                if custas.get("encontrado"):
+                    entrada = {
+                        "data": custas.get("vencimento", ""),
+                        "valor": custas.get("valor_total", ""),
+                        "numero_guia": custas.get("numero_guia", ""),
+                    }
+                    custas_extraidas.append(entrada)
+                    info(
+                        f"Custas iniciais extraídas do doc {doc['doc_id']}: "
+                        f"valor={entrada['valor']} guia={entrada['numero_guia']}",
+                        processo_id=processo_id,
+                    )
+                    db.registrar_log(
+                        processo_id, "custas_pdf", "ok",
+                        f"doc_id={doc['doc_id']} valor={entrada['valor']} guia={entrada['numero_guia']}"
+                    )
+
+        info(f"[{numero}] Analisando documentos...", processo_id=processo_id, etapa="parser")
+        dados_parser = processar_documentos(docs, textos, custas_iniciais=custas_extraidas)
+        info(f"[{numero}] Parser retornou {len(dados_parser)} campo(s).", processo_id=processo_id, etapa="parser", status="ok")
+        db.registrar_log(processo_id, "parser", "ok", f"campos={len(dados_parser)}")
 
         area = detectar_area(dados_datajud.get("classe", ""), "")
         regras = obter_regras_outros_itens(area)
@@ -145,54 +202,45 @@ def processar_processo(numero: str, numero_sem_mascara: str, pje: PjeClient, sis
             db.registrar_log(processo_id, "regras", "aviso", "Área não mapeada")
             return
 
-        payload = _construir_payload(numero, numero_sem_mascara, dados_datajud, dados_parser, area)
+        payload = _construir_payload(
+            numero, numero_sem_mascara, dados_datajud, dados_parser, area,
+        )
         _preencher_sistj(numero, processo_id, payload, sistj)
 
     except Exception as exc:
         _notificar_erro(numero, processo_id, str(exc))
 
 
-def rodar():
-    """Execução principal do orquestrador."""
-    init_config()
-    db.init_db()
+def rodar_pipeline(pje: PjeClient, sistj: SistjClient) -> None:
+    """
+    Executa UMA iteração completa do pipeline:
+    1. Coleta lista de processos no PJE por etiqueta
+    2. Processa cada processo novo
+    3. Notifica operador sobre pendentes de aprovação
 
-    info("Iniciando pipeline de custas TJDFT...")
+    Args:
+        pje: Instância de PjeClient já autenticada (ou a ser autenticada).
+        sistj: Instância de SistjClient já autenticada (ou a ser autenticada).
+    """
+    info("Iniciando iteração do pipeline de custas TJDFT...")
 
-    pje = PjeClient()
-    sistj = SistjClient()
+    numeros = pje.coletar_lista_processos()
+    info(f"Total de processos na etiqueta: {len(numeros)}")
 
-    try:
-        if not pje.login():
-            erro("Falha no login PJE. Abortando.")
-            return
+    if not numeros:
+        info("Nenhum processo novo encontrado.")
+        return
 
-        numeros = pje.coletar_lista_processos()
-        info(f"Total de processos na etiqueta: {len(numeros)}")
+    for numero in numeros:
+        numero_sem_mascara = re.sub(r"\D", "", numero)
+        try:
+            processar_processo(numero, numero_sem_mascara, pje, sistj)
+        except Exception as e:
+            erro(f"Erro inesperado processando {numero}: {e}")
+            continue
 
-        if not numeros:
-            info("Nenhum processo novo encontrado.")
-            return
+    pendentes = db.listar_aguardando_aprovacao()
+    if pendentes:
+        enviar_alerta(pendentes)
 
-        sistj.login()
-
-        for numero in numeros:
-            numero_sem_mascara = re.sub(r"\D", "", numero)
-            try:
-                processar_processo(numero, numero_sem_mascara, pje, sistj)
-            except Exception as e:
-                erro(f"Erro inesperado processando {numero}: {e}")
-                continue
-
-        pendentes = db.listar_aguardando_aprovacao()
-        if pendentes:
-            enviar_alerta(pendentes)
-
-    finally:
-        pje.fechar()
-        sistj.fechar()
-        info("Pipeline finalizado.")
-
-
-if __name__ == "__main__":
-    rodar()
+    info("Iteração do pipeline finalizada.")

@@ -1,21 +1,23 @@
 """
 Módulo emissor: após aprovação humana, aprova no SISTJWEB e anexa no PJE.
+
+Versão adaptada para serviço longo: recebe clients já instanciados
+em vez de criar novos a cada emissão.
 """
 from typing import Optional
+from sog_shared import db
+from utils.logger import info, erro
 from modulos.sistjweb import SistjClient
 from modulos.pje import PjeClient
-from banco import db
-from utils.logger import info, erro
 
 
-def emitir_e_anexar(processo_id: int) -> bool:
+def emitir_e_anexar(processo_id: int, sistj: SistjClient, pje: PjeClient) -> bool:
     """
-    1. Reconecta ao SISTJWEB
-    2. Navega até o processo salvo
-    3. Clica 'Gravar e Aprovar'
-    4. Baixa PDF do Demonstrativo
-    5. Anexa no PJE
-    6. Atualiza status para 'emitido'
+    1. Navega até o processo salvo no SISTJWEB
+    2. Clica 'Gravar e Aprovar'
+    3. Baixa PDF do Demonstrativo
+    4. Anexa no PJe
+    5. Atualiza status para 'emitido'
     """
     processo = db.obter_dados_processo(processo_id)
     if not processo:
@@ -25,22 +27,19 @@ def emitir_e_anexar(processo_id: int) -> bool:
     numero = processo.get("numero", "")
     numero_sem_mascara = processo.get("numero_sem_mascara", "")
 
-    sistj = SistjClient()
-    pje = PjeClient()
-
     try:
-        # SISTJWEB
-        if not sistj.login():
-            raise RuntimeError("Falha no login SISTJWEB")
+        # SISTJWEB — já autenticado (garantir_autenticado é no-op se sessão viva)
+        if not sistj.garantir_autenticado():
+            raise RuntimeError("Falha na autenticação SISTJWEB")
         caminho_pdf = sistj.gravar_e_aprovar(numero_sem_mascara)
 
-        # PJE
-        if not pje.login():
-            raise RuntimeError("Falha no login PJE")
+        # PJe
+        if not pje.garantir_autenticado():
+            raise RuntimeError("Falha na autenticação PJE")
         pje.anexar_demonstrativo(numero, caminho_pdf)
 
         db.atualizar_status(processo_id, "emitido")
-        db.registrar_log(processo_id, "emissao", "ok", f"Demonstrativo anexado: {caminho_pdf}")
+        db.registrar_log(processo_id, "emissao", "ok", f"Demonstrativo: {caminho_pdf}")
         info(f"Processo {numero} emitido e anexado com sucesso.")
         return True
     except Exception as e:
@@ -48,6 +47,14 @@ def emitir_e_anexar(processo_id: int) -> bool:
         db.registrar_log(processo_id, "emissao", "erro", str(e))
         erro(f"Erro na emissão do processo {numero}: {e}")
         return False
-    finally:
-        sistj.fechar()
-        pje.fechar()
+
+
+def emitir_pendentes(sistj: SistjClient, pje: PjeClient) -> None:
+    """Processa todos os processos com status='aprovado'."""
+    pendentes = db.listar_aprovados()
+    if not pendentes:
+        return
+
+    info(f"Processando {len(pendentes)} emissões pendentes...")
+    for proc in pendentes:
+        emitir_e_anexar(proc["id"], sistj, pje)
