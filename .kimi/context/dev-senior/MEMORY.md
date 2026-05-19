@@ -36,6 +36,21 @@
 
 ---
 
+### 2026-05-18 — Script gerador de PDF de regras de custas
+- **Arquivo criado:** `docs/gerar_pdf_regras.py` — script Python usando `fpdf2` para gerar PDF formatado.
+- **Arquivo gerado:** `docs/regras_custas_tjdft.pdf`
+- **Conteúdo do PDF:**
+  - Página 1: Título e instruções.
+  - Páginas 2–4: Áreas Criminal, Família e Fazenda Pública (cada uma em página separada), com tabela de 8 linhas vazias, checkbox de isenção e linha para observações.
+  - Página 5: Exemplo preenchido (Área Cível Comum) com 5 linhas de dados + seção "Como devolver".
+- **Decisões:**
+  - Fonte core `Helvetica` (via alias `Arial` no fpdf2) para simplicidade; em dash substituído por hífen para evitar `UnicodeEncodeError` em Latin-1.
+  - Altura de célula das tabelas: 8 mm.
+  - Larguras das colunas: 45/45/25/55 mm (total 170 mm, margens 20 mm).
+- **Dependências:** `fpdf2==2.8.7` instalado no ambiente local.
+
+---
+
 ## Histórico de implementações (continuação)
 
 ### 2026-05-18 — Bugfix: Duplicação de `custas_pagas` no pipeline

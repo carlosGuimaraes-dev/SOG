@@ -21,7 +21,8 @@
 - `docs/code-review-enterprise-report.md` — relatório original do code review (555 linhas, confidencial)
 - `.kimi/context/cto/code-review-fixes.md` — plano técnico das 8 waves (752 linhas)
 - `docs/correcoes-code-review.md` — correções técnicas das 95 issues
-- `docs/testar-pdf.md` — **documentação produzida nesta sessão** (guia do script CLI `testar_pdf.py`)
+- `docs/testar-pdf.md` — guia do script CLI `testar_pdf.py`
+- `docs/regras_custas_tjdft.md` — modelo preenchível para mapeamento de itens de guia de custas do SISTJWEB/TJDFT por área do direito
 
 ---
 
@@ -45,3 +46,4 @@
 - 2026-05-17: `README.md` — Atualizado: fluxo de trabalho menciona extração de custas iniciais; estrutura do projeto inclui `extrator_pdf.py` e `extrator_sentenca.py`; testes incluem `test_extrator_pdf.py`.
 - 2026-05-17: `docs/correcoes-code-review.md` — Subseção 9.2 adicionada: registra 2 correções P2 (double-close PyMuPDF, falso positivo scanned) e 3 ajustes P3 (contrato uniforme, threshold >= 0.8, comentário explicativo) no extrator de PDF.
 - 2026-05-17: `docs/testar-pdf.md` — Seção "Limitações" atualizada para documentar a heurística agregada de scanned detection (≥80% páginas image-only + média < 100 chars).
+- 2026-05-17: `docs/regras_custas_tjdft.md` — Modelo de mapeamento de custas do SISTJWEB/TJDFT para a contadora/operadora preencher (áreas Criminal, Família, Fazenda Pública + exemplo Cível Comum).
