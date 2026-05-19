@@ -20,6 +20,12 @@
 
 <!-- Nunca delete — apenas adicione. -->
 
+- **2026-05-18 | Comunicação Backend ↔ Agente: fila de tarefas via SQLite (`agente_tarefas`)**
+  Decidido: (1) Criar tabela `agente_tarefas` com `tipo`, `payload` JSON, `status`, `resultado` JSON, `sistema_alvo`; (2) Backend insere tarefa e retorna `task_id` (async job); frontend acompanha via polling em `GET /tarefas/{id}`; (3) Agente consome tarefas pendentes entre iterações do pipeline automático (máximo 3/iteração), usando lock em memória por sistema (`pje`/`sistj`/`ambos`); (4) Pipeline automático continua inalterado no loop principal; tarefas têm prioridade mas não causam starvation (limite por iteração).
+  Alternativas: WebSocket (rejeitado — requer servidor WS no agente, complica firewall); HTTP polling agente→API (rejeitado — inverte dependência, requer retry/circuit breaker); RabbitMQ/Redis (rejeitado — nova infra, overkill para <10 req/min).
+  Motivo: SQLite como canal de comunicação é o menor salto evolutivo da arquitetura atual (já compartilhado, WAL mode suporta concorrência, BEGIN IMMEDIATE garante atomicidade). Não introduz dependências externas. Fila persistente permite rastreabilidade e audit trail.
+  Reversibilidade: **média** — tabela `agente_tarefas` é aditiva (não altera existentes), mas uma vez populada requer migração/truncamento para remoção. Lock em memória é fácil de migrar para lock no banco se agente for distribuído no futuro.
+
 - **2026-05-17 | Agente: script de execução única → serviço longo (daemon)**
   Decidido: (1) Agente passa a rodar como processo longo com loop infinito (coleta → preenche → emite → dorme 30s → repete); (2) Comunicação bidirecional entre dashboard e agente via tabela `agente_controle` no SQLite (API escreve `comando`, agente escreve `status`); (3) Graceful shutdown via signal handlers (SIGINT/SIGTERM) com `threading.Event`; (4) Emissão pós-aprovação integrada no loop síncrono (não mais BackgroundTasks nem script separado).
   Alternativas: Agente como script executado pelo dashboard via subprocess (impossível — API está em container, agente no host); WebSocket entre agente e API (overkill — requer servidor HTTP no agente); file watcher (frágil — sem garantia de entrega).
@@ -129,3 +135,4 @@
 - `.kimi/plans/correcoes-p2-extrator-pdf.md` — Plano técnico para correções P2 no extrator de PDF (double-close + scanned detection) (2026-05-17)
 - `.kimi/plans/adaptacao-sso-2fa.md` — Plano técnico para adaptação a SSO Microsoft + 2FA (arquitetura de script única — **SUPERSEDED** por `agente-servico-longo.md`) (2026-05-17)
 - `.kimi/plans/agente-servico-longo.md` — Plano técnico para agente como serviço longo (daemon), comunicação via SQLite, autenticação storage state, emissão em tempo real, e dashboard de controle (2026-05-17)
+- `.kimi/plans/integracao-pje-sistjweb.md` — Plano técnico para integração completa backend↔agente: fila de tarefas SQLite, comandos parametrizados, ações sob demanda em PJe/SISTJWEB, dashboard de sessões (2026-05-18)

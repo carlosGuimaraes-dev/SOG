@@ -8,7 +8,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 # DB_PATH pode vir de variável de ambiente ou do pacote shared config
 from sog_shared.config import DB_PATH
@@ -299,3 +299,151 @@ def listar_aprovados(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
             (limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# Tarefas -------------------------------------------------------------------
+
+def criar_tarefa(tipo: str, payload: Dict[str, Any], sistema_alvo: str, criado_por: str) -> int:
+    """Insere nova tarefa e retorna o id."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO agente_tarefas (tipo, payload, sistema_alvo, criado_por) VALUES (?, ?, ?, ?)",
+            (tipo, json.dumps(payload), sistema_alvo, criado_por),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def obter_tarefa(task_id: int) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM agente_tarefas WHERE id = ?", (task_id,)
+        ).fetchone()
+        if not row:
+            return None
+        tarefa = dict(row)
+        for campo in ("payload", "resultado"):
+            if tarefa.get(campo):
+                try:
+                    tarefa[campo] = json.loads(tarefa[campo])
+                except json.JSONDecodeError:
+                    pass
+        return tarefa
+
+
+def listar_tarefas(
+    status: Optional[str] = None,
+    tipo: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Tuple[int, List[Dict[str, Any]]]:
+    with get_conn() as conn:
+        where = ["1=1"]
+        params: List[Any] = []
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if tipo:
+            where.append("tipo = ?")
+            params.append(tipo)
+
+        where_sql = " AND ".join(where)
+
+        total_row = conn.execute(
+            f"SELECT COUNT(*) FROM agente_tarefas WHERE {where_sql}", params
+        ).fetchone()
+        total = total_row[0] if total_row else 0
+
+        rows = conn.execute(
+            f"SELECT * FROM agente_tarefas WHERE {where_sql} ORDER BY criado_em DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+
+        items = []
+        for row in rows:
+            item = dict(row)
+            for campo in ("payload", "resultado"):
+                if item.get(campo):
+                    try:
+                        item[campo] = json.loads(item[campo])
+                    except json.JSONDecodeError:
+                        pass
+            items.append(item)
+        return total, items
+
+
+def proxima_tarefa_pendente() -> Optional[Dict[str, Any]]:
+    """
+    Pega a próxima tarefa pendente (atomicamente) e marca como executando.
+    Retorna None se não houver.
+    """
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT * FROM agente_tarefas WHERE status = 'pendente' ORDER BY criado_em LIMIT 1"
+            ).fetchone()
+            if not row:
+                conn.rollback()
+                return None
+
+            task_id = row["id"]
+            conn.execute(
+                "UPDATE agente_tarefas SET status = 'executando', iniciado_em = CURRENT_TIMESTAMP WHERE id = ?",
+                (task_id,),
+            )
+            conn.commit()
+
+            tarefa = dict(row)
+            tarefa["status"] = "executando"
+            if tarefa.get("payload"):
+                try:
+                    tarefa["payload"] = json.loads(tarefa["payload"])
+                except json.JSONDecodeError:
+                    pass
+            return tarefa
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def concluir_tarefa(
+    task_id: int,
+    status: str,
+    resultado: Optional[Dict[str, Any]] = None,
+    mensagem_erro: Optional[str] = None,
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE agente_tarefas
+               SET status = ?, resultado = ?, mensagem_erro = ?, concluido_em = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (status, json.dumps(resultado) if resultado else "{}", mensagem_erro or "", task_id),
+        )
+        conn.commit()
+
+
+def cancelar_tarefa(task_id: int) -> bool:
+    """Cancela uma tarefa se ainda estiver pendente. Retorna True se cancelou."""
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT status FROM agente_tarefas WHERE id = ?", (task_id,)
+        ).fetchone()
+        if not row or row["status"] != "pendente":
+            conn.rollback()
+            return False
+        conn.execute(
+            "UPDATE agente_tarefas SET status = 'cancelado', atualizado_em = CURRENT_TIMESTAMP WHERE id = ?",
+            (task_id,),
+        )
+        conn.commit()
+        return True
+
+
+def contar_tarefas_por_status() -> Dict[str, int]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) as c FROM agente_tarefas GROUP BY status"
+        ).fetchall()
+        return {r["status"]: r["c"] for r in rows}

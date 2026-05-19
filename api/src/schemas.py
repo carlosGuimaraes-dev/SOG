@@ -2,7 +2,7 @@
 Schemas Pydantic para response models da API.
 """
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProcessoResponse(BaseModel):
@@ -143,3 +143,44 @@ class AgenteStatusResponse(BaseModel):
 
 class AgenteComandoResponse(BaseModel):
     message: str
+
+
+class CriarTarefaRequest(BaseModel):
+    tipo: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TarefaResponse(BaseModel):
+    id: int
+    tipo: str
+    status: str
+    payload: Dict[str, Any]
+    resultado: Optional[Dict[str, Any]] = None
+    mensagem_erro: Optional[str] = None
+    sistema_alvo: Optional[str] = None
+    criado_por: Optional[str] = None
+    criado_em: Optional[str] = None
+    iniciado_em: Optional[str] = None
+    concluido_em: Optional[str] = None
+    atualizado_em: Optional[str] = None
+
+
+class TarefaListResponse(BaseModel):
+    total: int
+    items: List[TarefaResponse]
+
+
+class SessaoStatusResponse(BaseModel):
+    sistema: str
+    logado: bool
+    mensagem: str
+    ultima_verificacao: Optional[str] = None
+
+
+class DashboardSessoesResponse(BaseModel):
+    pje: SessaoStatusResponse
+    sistj: SessaoStatusResponse
+    agente_online: bool
+    agente_status: str
+    tarefas_pendentes: int
+    tarefas_executando: int

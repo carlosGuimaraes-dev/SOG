@@ -29,12 +29,15 @@ from config import init_config
 from modulos.pje import PjeClient
 from modulos.sistjweb import SistjClient
 from modulos.emissor import emitir_pendentes
+from modulos.executor_tarefas import executar_tarefa, tipos_suportados
 from modulos.auth_manager import ReautenticacaoNecessariaError
 from pipeline import rodar_pipeline
 from sog_shared.db import (
     init_db,
     obter_controle_agente,
     criar_ou_atualizar_controle_agente,
+    proxima_tarefa_pendente,
+    concluir_tarefa,
 )
 from utils.logger import info, erro, aviso
 
@@ -67,6 +70,8 @@ class AgenteServico:
         self.sistj = SistjClient()
         self._status_atual = "parado"
         self._mensagem_atual = ""
+        self._locks = {"pje": False, "sistj": False}
+        self._tarefas_por_iteracao = 3
 
     # ------------------------------------------------------------------
     # Ciclo de vida público
@@ -157,9 +162,15 @@ class AgenteServico:
                 self._set_status("erro", f"Falha na reautenticação: {e}")
             return
 
-        # Estado executando → processa pipeline + emissões
+        # Estado executando → processa tarefas pendentes primeiro, depois pipeline
         if status_db == "executando":
             try:
+                tarefas_processadas = self._processar_tarefas_pendentes(
+                    max_tarefas=self._tarefas_por_iteracao
+                )
+                if tarefas_processadas > 0 and self._ha_mais_tarefas_pendentes():
+                    return  # volta ao loop sem dormir para processar mais tarefas
+
                 self._processar_iteracao()
                 self._set_status("dormindo", "Iteração concluída. Aguardando próximo ciclo.")
             except ReautenticacaoNecessariaError as e:
@@ -219,6 +230,58 @@ class AgenteServico:
 
         info("Reautenticação interativa concluída.")
         return True
+
+    def _processar_tarefas_pendentes(self, max_tarefas: int = 3) -> int:
+        """Processa até N tarefas pendentes. Retorna quantas processou."""
+        processadas = 0
+        for _ in range(max_tarefas):
+            tarefa = proxima_tarefa_pendente()
+            if not tarefa:
+                break
+
+            sistema = tarefa.get("sistema_alvo", "ambos")
+            sistemas = [sistema] if sistema != "ambos" else ["pje", "sistj"]
+
+            # Verifica lock
+            if any(self._locks[s] for s in sistemas):
+                # Devolve à fila como pendente
+                concluir_tarefa(tarefa["id"], "pendente")
+                aviso(f"Tarefa {tarefa['id']} adiada — sistema {sistema} ocupado.")
+                continue
+
+            # Adquire lock
+            for s in sistemas:
+                self._locks[s] = True
+
+            try:
+                info(f"Executando tarefa {tarefa['id']}: {tarefa['tipo']}")
+                resultado = executar_tarefa(tarefa, self.pje, self.sistj)
+                concluir_tarefa(tarefa["id"], "concluido", resultado=resultado)
+                info(f"Tarefa {tarefa['id']} concluída.")
+            except ReautenticacaoNecessariaError as e:
+                concluir_tarefa(
+                    tarefa["id"], "erro", mensagem_erro=f"Reautenticação necessária: {e.sistema}"
+                )
+                self._set_status("aguardando_login", f"Sessão {e.sistema} expirada durante tarefa.")
+            except Exception as e:
+                erro(f"Erro na tarefa {tarefa['id']}: {e}")
+                concluir_tarefa(tarefa["id"], "erro", mensagem_erro=str(e))
+            finally:
+                for s in sistemas:
+                    self._locks[s] = False
+
+            processadas += 1
+
+        return processadas
+
+    def _ha_mais_tarefas_pendentes(self) -> bool:
+        from sog_shared.db import get_conn
+
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM agente_tarefas WHERE status = 'pendente'"
+            ).fetchone()
+            return (row[0] if row else 0) > 0
 
     def _processar_iteracao(self) -> None:
         """Coleta, preenche e emite em um ciclo."""

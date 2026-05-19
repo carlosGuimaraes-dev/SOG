@@ -84,3 +84,23 @@ CREATE TABLE IF NOT EXISTS agente_controle (
     atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     pid INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS agente_tarefas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL,
+    payload TEXT DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pendente',
+    -- status: pendente | executando | concluido | erro | cancelado
+    resultado TEXT DEFAULT '{}',
+    mensagem_erro TEXT,
+    sistema_alvo TEXT,
+    -- sistema_alvo: pje | sistj | ambos
+    criado_por TEXT,
+    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    iniciado_em DATETIME,
+    concluido_em DATETIME,
+    atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tarefas_status ON agente_tarefas(status, criado_em);
+CREATE INDEX IF NOT EXISTS idx_tarefas_sistema ON agente_tarefas(sistema_alvo, status);
