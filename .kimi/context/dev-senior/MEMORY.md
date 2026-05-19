@@ -19,6 +19,7 @@
 11. **Rate limiting com slowapi:** Usar `limiter = Limiter(key_func=get_remote_address)` compartilhado via `api/src/limiter.py`. Decorar endpoints com `@limiter.limit("N/minute")`. Adicionar `request: Request` aos parâmetros da função.
 12. **Pacote shared/:** `sog_shared.db`, `sog_shared.schemas` e `sog_shared.config` são a fonte única de verdade para código compartilhado entre API e Agente. Nunca usar `sys.path.insert` para importar código de outro serviço.
 13. **PlaywrightClient base:** `PjeClient` e `SistjClient` herdam de `modulos.playwright_client.PlaywrightClient`. Atributos comuns (browser, page, viewport, headless, timeout) ficam na classe base.
+14. **Fila de tarefas do agente:** quando uma tarefa precisa voltar para `pendente` por lock de sistema, usar `devolver_tarefa_pendente()` em vez de marcar `concluido_em`; isso preserva os timestamps da fila.
 
 ---
 

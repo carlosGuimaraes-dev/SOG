@@ -10,9 +10,9 @@
 ### SOG — Sistema de Ordem de Guias (Custas Processuais TJDFT)
 - **Iniciado em**: 2026-05-15
 - **Stack**: Python 3.12 + Playwright (Agente), FastAPI + SQLite (API), React 18 + Vite (Frontend), Docker Compose + Nginx (Infra)
-- **Status**: 95/98 issues corrigidas e aprovadas. Documentação entregue. Extrator de PDF com extração de custas iniciais implementado. Ressalvas P2/P3 do extrator corrigidas.
-- **Última ação**: Correções P2/P3 do extrator de PDF (double-close PyMuPDF, falso positivo scanned) implementadas e aprovadas.
-- **Próximo passo**: Avançar para Opção B (integração completa PJE + SISTJWEB) ou outra prioridade definida pelo usuário.
+- **Status**: 95/98 issues corrigidas e aprovadas. Documentação entregue. Extrator de PDF com extração de custas iniciais implementado. Integração PJe/SISTJWEB expandida com fila de tarefas, rotas novas e executor do agente.
+- **Última ação**: Integração PJe/SISTJWEB iniciada com rotas `/pje`, `/sistj`, `/processos` e `/dashboard`, além de handlers do agente para consulta, download, preenchimento, aprovação, reprocessamento e reautenticação.
+- **Próximo passo**: Validar o fluxo end-to-end na UI ou avançar para a próxima onda do plano conforme prioridade do usuário.
 
 ---
 
@@ -65,3 +65,4 @@
 - **2026-05-16**: Extrator de PDF — Módulo `extrator_pdf.py` + script CLI `testar_pdf.py` + testes + docs. Aprovado por QA (6/6 testes passaram) e Reviewer (APROVADO COM RESSALVAS P2/P3).
 - **2026-05-17**: Extração de custas iniciais do PDF — Feature aditiva ao `extrator_pdf.py` que localiza a guia de pagamento pelo `doc_id` da capa e extrai valor total + detalhamento por item. Aprovado por QA (13/13 testes, 63/63 suite completa) e Reviewer (APROVADO após correções P2: parsing inteiro de monetário, priorização de regex "Valor total", fallback estendido para comprovantes). Documentação atualizada.
 - **2026-05-17**: Correções P2/P3 do extrator de PDF — (1) Double-close PyMuPDF eliminado (`doc.close()` apenas no `finally`); (2) Falso positivo scanned corrigido (heurística agregada: ≥80% páginas image-only E média <100 chars/página); (3) Contrato uniforme em erro (`resultado_base` inclui `"custas_iniciais"`); (4) Threshold inclusivo (`>= 0.8`); (5) Comentários explicativos. Aprovado por QA (15/15 testes, 65/65 suite completa) e Reviewer (APROVADO COM RESSALVAS P3). Documentação atualizada em `docs/correcoes-code-review.md` §9.2 e `docs/testar-pdf.md`.
+- **2026-05-19**: Integração PJe/SISTJWEB — fila de tarefas e rotas de entrada publicadas na API; executor do agente expandido com handlers read-only, write e reprocessamento; status de sessão consolidado via cache da última tarefa verificada. Aprovado por QA (138/138 testes).

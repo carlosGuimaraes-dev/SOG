@@ -29,7 +29,7 @@ from config import init_config
 from modulos.pje import PjeClient
 from modulos.sistjweb import SistjClient
 from modulos.emissor import emitir_pendentes
-from modulos.executor_tarefas import executar_tarefa, tipos_suportados
+from modulos.executor_tarefas import executar_tarefa
 from modulos.auth_manager import ReautenticacaoNecessariaError
 from pipeline import rodar_pipeline
 from sog_shared.db import (
@@ -38,6 +38,7 @@ from sog_shared.db import (
     criar_ou_atualizar_controle_agente,
     proxima_tarefa_pendente,
     concluir_tarefa,
+    devolver_tarefa_pendente,
 )
 from utils.logger import info, erro, aviso
 
@@ -244,8 +245,8 @@ class AgenteServico:
 
             # Verifica lock
             if any(self._locks[s] for s in sistemas):
-                # Devolve à fila como pendente
-                concluir_tarefa(tarefa["id"], "pendente")
+                # Devolve à fila como pendente sem marcar conclusão
+                devolver_tarefa_pendente(tarefa["id"])
                 aviso(f"Tarefa {tarefa['id']} adiada — sistema {sistema} ocupado.")
                 continue
 

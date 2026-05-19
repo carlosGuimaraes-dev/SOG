@@ -139,6 +139,13 @@ class CriarTarefaRequest(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
 
 
+class BaixarPdfRequest(BaseModel):
+    numero_processo: str = Field(
+        ...,
+        pattern=r"^\d{7}-?\d{2}\.?\d{4}\.?\d\.?\d{2}\.?\d{4}$",
+    )
+
+
 class TarefaResponse(BaseModel):
     id: int
     tipo: str

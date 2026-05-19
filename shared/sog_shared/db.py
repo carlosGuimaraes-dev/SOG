@@ -147,6 +147,14 @@ def listar_aguardando_aprovacao(limit: int = 1000, offset: int = 0) -> List[Dict
         return [dict(r) for r in rows]
 
 
+def obter_processo(processo_id: int) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM processos WHERE id = ?", (processo_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
 # Dados processo -------------------------------------------------------------
 
 def salvar_dados_processo(processo_id: int, dados: Dict[str, Any]) -> int:
@@ -421,6 +429,30 @@ def concluir_tarefa(
             (status, json.dumps(resultado) if resultado else "{}", mensagem_erro or "", task_id),
         )
         conn.commit()
+
+
+def devolver_tarefa_pendente(task_id: int) -> bool:
+    """Reverte uma tarefa em execução para pendente."""
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT id FROM agente_tarefas WHERE id = ?", (task_id,)
+        ).fetchone()
+        if not row:
+            conn.rollback()
+            return False
+        conn.execute(
+            """UPDATE agente_tarefas
+               SET status = 'pendente',
+                   iniciado_em = NULL,
+                   concluido_em = NULL,
+                   mensagem_erro = NULL,
+                   atualizado_em = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (task_id,),
+        )
+        conn.commit()
+        return True
 
 
 def cancelar_tarefa(task_id: int) -> bool:

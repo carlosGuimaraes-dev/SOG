@@ -1,5 +1,22 @@
 # Pipeline de Custas Processuais TJDFT
 
+## Codex / `.kimi`
+
+Este repositório também contém uma estrutura de agentes em `.kimi/`.
+
+Quando a tarefa envolver os papéis, planos ou skills da `.kimi`, siga esta ordem:
+
+1. Assuma o papel de **CEO da `.kimi`** como orquestrador da sessão.
+2. Leia `.kimi/AGENTS.md` como ponto de entrada.
+3. Depois leia o `AGENTS.md` mais próximo do subdiretório relevante, se existir.
+4. Em seguida, siga os arquivos do papel correspondente em `.kimi/context/<papel>/`.
+5. Use `.kimi/plans/<tarefa>.md` quando a tarefa vier acompanhada de um plano técnico.
+
+Regra prática:
+
+- Se o pedido for sobre o sistema `.kimi`, trate a pasta como documentação operacional do projeto e orquestre a sessão como CEO até encerrar a tarefa.
+- Se o pedido for sobre implementação normal do repo, siga o `AGENTS.md` da raiz e só entre em `.kimi` quando a tarefa pedir isso ou quando houver plano/contexto referenciado lá.
+
 ## Karpathy Skills — Behavioral Guardrails
 
 Source: <https://github.com/forrestchang/andrej-karpathy-skills>

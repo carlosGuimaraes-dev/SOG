@@ -20,9 +20,11 @@ class TestRegistry:
 
         assert "teste_dummy" in tipos_suportados()
 
-    def test_tipos_suportados_inclui_verificar_sessao_pje(self):
-        # O handler verificar_sessao_pje é registrado no import do módulo
+    def test_tipos_suportados_inclui_handlers_principais(self):
         assert "verificar_sessao_pje" in tipos_suportados()
+        assert "consultar_etiqueta_pje" in tipos_suportados()
+        assert "preencher_sistj" in tipos_suportados()
+        assert "anexar_demonstrativo_pje" in tipos_suportados()
 
 
 class TestExecutarTarefa:
@@ -85,3 +87,28 @@ class TestExecutarTarefa:
 
         assert resultado["logado"] is False
         assert resultado["url_atual"] is None
+
+    def test_executar_consultar_etiqueta_pje(self):
+        pje_mock = MagicMock()
+        pje_mock.coletar_lista_processos.return_value = ["0000001-01.2024.8.07.0001"]
+        sistj_mock = MagicMock()
+
+        tarefa = {"tipo": "consultar_etiqueta_pje", "payload": {}}
+        resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
+
+        assert resultado["total"] == 1
+        assert resultado["processos"] == ["0000001-01.2024.8.07.0001"]
+        pje_mock.garantir_autenticado.assert_called_once()
+
+    def test_executar_verificar_sessao_sistj(self):
+        pje_mock = MagicMock()
+        sistj_mock = MagicMock()
+        sistj_mock._esta_logado.return_value = True
+        sistj_mock.page.url = "https://sistj.tjdft.jus.br/"
+
+        tarefa = {"tipo": "verificar_sessao_sistj", "payload": {}}
+        resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
+
+        assert resultado["logado"] is True
+        assert resultado["url_atual"] == "https://sistj.tjdft.jus.br/"
+        sistj_mock._esta_logado.assert_called_once_with(sistj_mock.page)
