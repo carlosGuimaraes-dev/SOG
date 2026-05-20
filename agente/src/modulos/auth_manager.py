@@ -81,6 +81,24 @@ class AuthManager:
         self._fallback_interativo(url, verificar_sucesso_fn, interativo_timeout_ms)
         return True
 
+    def forcar_reautenticacao_interativa(
+        self,
+        url: str,
+        verificar_sucesso_fn: Callable[[Page], bool],
+        accept_downloads: bool = False,
+        interativo_timeout_ms: int = 600_000,
+    ) -> bool:
+        """
+        Sempre abre o fluxo interativo visível, mesmo que a sessão atual ainda pareça válida.
+        """
+        self.fechar()
+        self._fallback_interativo(url, verificar_sucesso_fn, interativo_timeout_ms)
+        self.fechar()
+        self.iniciar(accept_downloads=accept_downloads)
+        self.page.goto(url, wait_until="networkidle")
+        self.page.wait_for_timeout(2000)
+        return verificar_sucesso_fn(self.page)
+
     def _fallback_interativo(
         self,
         url: str,

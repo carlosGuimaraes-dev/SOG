@@ -420,15 +420,16 @@ def concluir_tarefa(
     status: str,
     resultado: Optional[Dict[str, Any]] = None,
     mensagem_erro: Optional[str] = None,
-) -> None:
+) -> bool:
     with get_conn() as conn:
-        conn.execute(
+        cur = conn.execute(
             """UPDATE agente_tarefas
                SET status = ?, resultado = ?, mensagem_erro = ?, concluido_em = CURRENT_TIMESTAMP
-               WHERE id = ?""",
+               WHERE id = ? AND status != 'cancelado'""",
             (status, json.dumps(resultado) if resultado else "{}", mensagem_erro or "", task_id),
         )
         conn.commit()
+        return cur.rowcount > 0
 
 
 def devolver_tarefa_pendente(task_id: int) -> bool:
@@ -456,21 +457,65 @@ def devolver_tarefa_pendente(task_id: int) -> bool:
 
 
 def cancelar_tarefa(task_id: int) -> bool:
-    """Cancela uma tarefa se ainda estiver pendente. Retorna True se cancelou."""
+    """Cancela uma tarefa pendente ou em execução. Retorna True se cancelou."""
     with get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             "SELECT status FROM agente_tarefas WHERE id = ?", (task_id,)
         ).fetchone()
-        if not row or row["status"] != "pendente":
+        if not row or row["status"] not in {"pendente", "executando"}:
             conn.rollback()
             return False
         conn.execute(
-            "UPDATE agente_tarefas SET status = 'cancelado', atualizado_em = CURRENT_TIMESTAMP WHERE id = ?",
-            (task_id,),
+            """UPDATE agente_tarefas
+               SET status = 'cancelado',
+                   mensagem_erro = 'Cancelada pelo usuário',
+                   concluido_em = CURRENT_TIMESTAMP,
+                   atualizado_em = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (task_id,)
         )
         conn.commit()
         return True
+
+
+def reenfileirar_tarefas_stale(max_age_minutes: int = 5) -> List[int]:
+    """
+    Reenfileira tarefas em execução há mais tempo que o limite.
+    Retorna os IDs afetados.
+    """
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            """
+            SELECT id
+            FROM agente_tarefas
+            WHERE status = 'executando'
+              AND iniciado_em IS NOT NULL
+              AND iniciado_em <= datetime('now', ?)
+            """,
+            (f"-{max_age_minutes} minutes",),
+        ).fetchall()
+        ids = [row["id"] for row in rows]
+        if not ids:
+            conn.rollback()
+            return []
+
+        placeholders = ", ".join("?" for _ in ids)
+        conn.execute(
+            f"""
+            UPDATE agente_tarefas
+               SET status = 'pendente',
+                   iniciado_em = NULL,
+                   concluido_em = NULL,
+                   atualizado_em = CURRENT_TIMESTAMP,
+                   mensagem_erro = 'Tarefa re-enfileirada automaticamente após timeout de execução'
+             WHERE id IN ({placeholders})
+            """,
+            ids,
+        )
+        conn.commit()
+        return ids
 
 
 def contar_tarefas_por_status() -> Dict[str, int]:

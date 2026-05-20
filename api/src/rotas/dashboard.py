@@ -13,6 +13,10 @@ from sog_shared import db
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+def _sincronizar_tarefas_stale() -> None:
+    db.reenfileirar_tarefas_stale(max_age_minutes=5)
+
+
 def _agente_online(controle: dict | None) -> bool:
     if not controle or not controle.get("atualizado_em"):
         return False
@@ -72,6 +76,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
 @router.get("/sessoes", response_model=DashboardSessoesResponse)
 @limiter.limit("30/minute")
 def dashboard_sessoes(request: Request, user: str = Depends(get_current_user)):
+    _sincronizar_tarefas_stale()
     controle = db.obter_controle_agente() or {}
     status_counts = db.contar_tarefas_por_status()
     return {

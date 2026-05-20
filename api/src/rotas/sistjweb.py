@@ -11,6 +11,10 @@ from sog_shared import db
 router = APIRouter(prefix="/sistj", tags=["sistj"])
 
 
+def _sincronizar_tarefas_stale() -> None:
+    db.reenfileirar_tarefas_stale(max_age_minutes=5)
+
+
 def _criar_tarefa(tipo: str, payload: dict, user: str) -> dict:
     task_id = db.criar_tarefa(
         tipo=tipo,
@@ -22,6 +26,7 @@ def _criar_tarefa(tipo: str, payload: dict, user: str) -> dict:
 
 
 def _status_sessao(tipo: str, sistema: str) -> dict:
+    _sincronizar_tarefas_stale()
     _, items = db.listar_tarefas(tipo=tipo, limit=1, offset=0)
     if not items:
         return {

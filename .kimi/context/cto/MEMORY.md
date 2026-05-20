@@ -20,6 +20,11 @@
 
 <!-- Nunca delete — apenas adicione. -->
 
+- **2026-05-19 | Wave 4 da integração PJe/SISTJWEB: stale detection + cancelamento cooperativo + reautenticação explícita**
+  Decidido: (1) tarefas `executando` há mais de 5 minutos são reenfileiradas automaticamente nos endpoints de leitura; (2) cancelamento agora aceita tarefas `pendente` e `executando`, marcando-as como `cancelado`; (3) `concluir_tarefa()` não sobrescreve tarefas canceladas; (4) tarefas `reautenticar_*` forçam navegador visível por intenção explícita do operador.
+  Motivo: fecha os requisitos operacionais da Wave 4 sem adicionar broker, interrupção forçada de Playwright ou processo auxiliar de watchdog.
+  Reversibilidade: média — o comportamento está concentrado em `sog_shared.db`, rotas de leitura e executor do agente.
+
 - **2026-05-18 | Comunicação Backend ↔ Agente: fila de tarefas via SQLite (`agente_tarefas`)**
   Decidido: (1) Criar tabela `agente_tarefas` com `tipo`, `payload` JSON, `status`, `resultado` JSON, `sistema_alvo`; (2) Backend insere tarefa e retorna `task_id` (async job); frontend acompanha via polling em `GET /tarefas/{id}`; (3) Agente consome tarefas pendentes entre iterações do pipeline automático (máximo 3/iteração), usando lock em memória por sistema (`pje`/`sistj`/`ambos`); (4) Pipeline automático continua inalterado no loop principal; tarefas têm prioridade mas não causam starvation (limite por iteração).
   Alternativas: WebSocket (rejeitado — requer servidor WS no agente, complica firewall); HTTP polling agente→API (rejeitado — inverte dependência, requer retry/circuit breaker); RabbitMQ/Redis (rejeitado — nova infra, overkill para <10 req/min).

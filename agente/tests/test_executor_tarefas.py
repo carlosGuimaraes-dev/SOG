@@ -112,3 +112,23 @@ class TestExecutarTarefa:
         assert resultado["logado"] is True
         assert resultado["url_atual"] == "https://sistj.tjdft.jus.br/"
         sistj_mock._esta_logado.assert_called_once_with(sistj_mock.page)
+
+    def test_executar_reautenticar_pje_forca_fluxo_interativo(self):
+        pje_mock = MagicMock()
+        sistj_mock = MagicMock()
+
+        tarefa = {"tipo": "reautenticar_pje", "payload": {}}
+        resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
+
+        assert resultado["logado"] is True
+        pje_mock.reautenticar_interativo.assert_called_once()
+
+    def test_executar_reautenticar_sistj_forca_fluxo_interativo(self):
+        pje_mock = MagicMock()
+        sistj_mock = MagicMock()
+
+        tarefa = {"tipo": "reautenticar_sistj", "payload": {}}
+        resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
+
+        assert resultado["logado"] is True
+        sistj_mock.reautenticar_interativo.assert_called_once()

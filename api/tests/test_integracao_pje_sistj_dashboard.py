@@ -64,3 +64,28 @@ def test_dashboard_sessoes_consolida_estado(client, auth_headers, mock_db):
     assert data["sistj"]["logado"] is False
     assert data["tarefas_pendentes"] == 0
     assert data["tarefas_executando"] == 0
+
+
+def test_dashboard_reenfileira_tarefa_stale(client, auth_headers, mock_db):
+    task_id = db.criar_tarefa(
+        tipo="verificar_sessao_pje",
+        payload={},
+        sistema_alvo="pje",
+        criado_por="admin",
+    )
+    mock_db.execute(
+        """
+        UPDATE agente_tarefas
+           SET status = 'executando',
+               iniciado_em = datetime('now', '-10 minutes')
+         WHERE id = ?
+        """,
+        (task_id,),
+    )
+    mock_db.commit()
+
+    resp = client.get("/api/v1/dashboard/sessoes", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["tarefas_pendentes"] == 1
+    assert data["tarefas_executando"] == 0

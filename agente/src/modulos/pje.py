@@ -252,6 +252,14 @@ class PjeClient(PlaywrightClient):
         """Alias para garantir_autenticado() — mantido para compatibilidade."""
         return self.garantir_autenticado()
 
+    def reautenticar_interativo(self) -> bool:
+        """Força reautenticação com navegador visível."""
+        return self._auth.forcar_reautenticacao_interativa(
+            url=PJE_URL,
+            verificar_sucesso_fn=self._esta_logado,
+            accept_downloads=True,
+        )
+
     def _esta_logado(self, page: Page) -> bool:
         """Retorna True se a página indicar que o usuário está logado no PJe."""
         try:

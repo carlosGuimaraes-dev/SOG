@@ -142,6 +142,28 @@ class TestListarTarefas:
         assert data["total"] == 5
         assert len(data["items"]) == 2
 
+    def test_listar_reenfileira_tarefa_stale(self, client, auth_headers, mock_db):
+        create_resp = client.post("/api/v1/tarefas", json={"tipo": "verificar_sessao_pje"}, headers=auth_headers)
+        task_id = create_resp.json()["id"]
+
+        mock_db.execute(
+            """
+            UPDATE agente_tarefas
+               SET status = 'executando',
+                   iniciado_em = datetime('now', '-10 minutes')
+             WHERE id = ?
+            """,
+            (task_id,),
+        )
+        mock_db.commit()
+
+        resp = client.get("/api/v1/tarefas?status=pendente", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == task_id
+        assert data["items"][0]["status"] == "pendente"
+
 
 class TestObterTarefa:
     def test_obter_tarefa_existente(self, client, auth_headers):
@@ -195,8 +217,10 @@ class TestCancelarTarefa:
         mock_db.commit()
 
         resp = client.post(f"/api/v1/tarefas/{task_id}/cancelar", headers=auth_headers)
-        assert resp.status_code == 400
-        assert "não pode ser cancelada" in resp.json()["detail"]
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "cancelado"
+        assert "Cancelada pelo usuário" in (data["mensagem_erro"] or "")
 
     def test_cancelar_tarefa_inexistente(self, client, auth_headers):
         resp = client.post("/api/v1/tarefas/9999/cancelar", headers=auth_headers)

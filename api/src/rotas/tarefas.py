@@ -27,6 +27,10 @@ SISTEMA_POR_TIPO = {
 TIPOS_VALIDOS = set(SISTEMA_POR_TIPO.keys())
 
 
+def _sincronizar_tarefas_stale() -> None:
+    db.reenfileirar_tarefas_stale(max_age_minutes=5)
+
+
 @router.post("", response_model=TarefaResponse)
 @limiter.limit("20/minute")
 def criar_tarefa(
@@ -60,6 +64,7 @@ def listar_tarefas(
     offset: int = Query(0, ge=0),
     user: str = Depends(get_current_user),
 ):
+    _sincronizar_tarefas_stale()
     total, items = db.listar_tarefas(status=status, tipo=tipo, limit=limit, offset=offset)
     return {"total": total, "items": items}
 
@@ -71,6 +76,7 @@ def obter_tarefa(
     request: Request,
     user: str = Depends(get_current_user),
 ):
+    _sincronizar_tarefas_stale()
     tarefa = db.obter_tarefa(task_id)
     if not tarefa:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
@@ -84,6 +90,7 @@ def cancelar_tarefa(
     request: Request,
     user: str = Depends(get_current_user),
 ):
+    _sincronizar_tarefas_stale()
     tarefa = db.obter_tarefa(task_id)
     if not tarefa:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")
@@ -94,7 +101,7 @@ def cancelar_tarefa(
     if not cancelado:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tarefa não pode ser cancelada (já em execução ou concluída)",
+            detail="Tarefa não pode ser cancelada (já concluída, com erro ou inexistente)",
         )
 
     return db.obter_tarefa(task_id)

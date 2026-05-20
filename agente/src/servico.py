@@ -257,8 +257,11 @@ class AgenteServico:
             try:
                 info(f"Executando tarefa {tarefa['id']}: {tarefa['tipo']}")
                 resultado = executar_tarefa(tarefa, self.pje, self.sistj)
-                concluir_tarefa(tarefa["id"], "concluido", resultado=resultado)
-                info(f"Tarefa {tarefa['id']} concluída.")
+                concluida = concluir_tarefa(tarefa["id"], "concluido", resultado=resultado)
+                if concluida:
+                    info(f"Tarefa {tarefa['id']} concluída.")
+                else:
+                    aviso(f"Tarefa {tarefa['id']} foi cancelada durante a execução.")
             except ReautenticacaoNecessariaError as e:
                 concluir_tarefa(
                     tarefa["id"], "erro", mensagem_erro=f"Reautenticação necessária: {e.sistema}"

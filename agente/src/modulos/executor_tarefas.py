@@ -114,7 +114,7 @@ def _baixar_pdf_pje(payload, pje, sistj):
 
 @registrar("reautenticar_pje")
 def _reautenticar_pje(payload, pje, sistj):
-    pje.garantir_autenticado()
+    pje.reautenticar_interativo()
     return {"logado": True}
 
 
@@ -132,7 +132,7 @@ def _verificar_sessao_sistj(payload, pje, sistj):
 
 @registrar("reautenticar_sistj")
 def _reautenticar_sistj(payload, pje, sistj):
-    sistj.garantir_autenticado()
+    sistj.reautenticar_interativo()
     return {"logado": True}
 
 
