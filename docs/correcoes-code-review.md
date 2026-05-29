@@ -75,15 +75,11 @@ ENV=production                          # development | production
 Variáveis lidas pelo container `custas-agente`:
 
 ```bash
-# Obrigatórias para automação
+# Obrigatórias para automação via SSO/2FA interativo
 PJE_URL=https://pje.tjdft.jus.br/pje/login.seam
-PJE_USUARIO=seu_usuario
-PJE_SENHA=sua_senha
 PJE_ETIQUETA=SUA ETIQUETA AQUI
 
 SISTJ_URL=https://sistj.tjdft.jus.br/sistj/sistj
-SISTJ_USUARIO=seu_usuario
-SISTJ_SENHA=sua_senha
 
 DATAJUD_API_KEY=sua_chave
 DATAJUD_URL=https://api-publica.datajud.cnj.jus.br/api_publica_tjdft/_search

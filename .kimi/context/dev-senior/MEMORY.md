@@ -298,7 +298,7 @@
   - `agente/src/modulos/emissor.py` — `sistj.login()`/`pje.login()` trocados por `garantir_autenticado()`.
   - `agente/src/servico.py` — `_autenticar_todos()` chama `garantir_autenticado()`; adicionado `_autenticar_interativo()`; estados `autenticando` e `executando` capturam `ReautenticacaoNecessariaError` e transicionam para `aguardando_login`; estado `aguardando_login` chama `_autenticar_interativo()` e trata `TimeoutError`.
 - **Decisões:**
-  - Login programático (usuário/senha hardcoded no `.env`) foi completamente removido do fluxo ativo. As variáveis `PJE_USUARIO`/`PJE_SENHA`/`SISTJ_USUARIO`/`SISTJ_SENHA` ainda existem no `config.py` para compatibilidade, mas não são mais usadas.
+  - Login programático (usuário/senha hardcoded no `.env`) foi completamente removido do fluxo ativo. As variáveis legadas `PJE_USUARIO`/`PJE_SENHA`/`SISTJ_USUARIO`/`SISTJ_SENHA` também foram removidas do `config.py`.
   - O `_esta_logado` do SISTJWEB usa heurística combinada: ausência de campos de login + presença de menu/elementos logados + URL sem "login".
   - O `_esta_logado` do PJe reutiliza a mesma lógica de verificação que existia no `login()` original (indicadores via env + seletores genéricos + verificação de URL).
 - **Testes:** 37/37 API, 124/124 frontend, 65/65 agente. Todos passaram.

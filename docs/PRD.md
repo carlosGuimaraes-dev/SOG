@@ -116,14 +116,10 @@ custas-pipeline/
 ```env
 # PJE
 PJE_URL=https://pje.tjdft.jus.br/...
-PJE_USUARIO=
-PJE_SENHA=
 PJE_ETIQUETA=SHEILA DE DEUS (TREINAMENTO)
 
 # SISTJWEB
 SISTJ_URL=https://sistj.tjdft.jus.br/sistj/sistj
-SISTJ_USUARIO=
-SISTJ_SENHA=
 
 # Datajud API
 DATAJUD_API_KEY=
@@ -246,10 +242,11 @@ CREATE TABLE IF NOT EXISTS log_execucao (
 
 ```
 1. Navegar até PJE_URL
-2. Preencher usuário e senha
-3. Clicar Entrar
-4. Confirmar: nome do usuário visível no topo
-5. Em timeout: reconectar automaticamente
+2. Se não houver sessão válida, abrir navegador visível
+3. Usuário realiza SSO/2FA manualmente
+4. Salvar storage_state após login bem-sucedido
+5. Confirmar: nome do usuário visível no topo
+6. Em timeout: solicitar nova autenticação interativa
 ```
 
 #### Coleta da lista de processos

@@ -10,14 +10,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # PJE
 PJE_URL = os.getenv("PJE_URL", "https://pje.tjdft.jus.br")
-PJE_USUARIO = os.getenv("PJE_USUARIO", "")
-PJE_SENHA = os.getenv("PJE_SENHA", "")
 PJE_ETIQUETA = os.getenv("PJE_ETIQUETA", "SHEILA DE DEUS (TREINAMENTO)")
 
 # SISTJWEB
 SISTJ_URL = os.getenv("SISTJ_URL", "https://sistj.tjdft.jus.br/sistj/sistj")
-SISTJ_USUARIO = os.getenv("SISTJ_USUARIO", "")
-SISTJ_SENHA = os.getenv("SISTJ_SENHA", "")
 
 # Datajud API
 DATAJUD_API_KEY = os.getenv("DATAJUD_API_KEY", "")

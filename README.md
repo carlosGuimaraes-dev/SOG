@@ -36,7 +36,7 @@ Sistema automatizado para extração, preenchimento e emissão de guias de custa
 git clone git@github.com:carlosGuimaraes-dev/SOG.git
 cd SOG
 cp .env.example .env
-# Edite .env com suas credenciais
+# Edite .env com as chaves de serviço necessárias
 ```
 
 ### 2. Variáveis de ambiente (.env)
@@ -44,14 +44,10 @@ cp .env.example .env
 ```env
 # PJE
 PJE_URL=https://pje.tjdft.jus.br/...
-PJE_USUARIO=seu_usuario
-PJE_SENHA=sua_senha
 PJE_ETIQUETA=SHEILA DE DEUS (TREINAMENTO)
 
 # SISTJWEB
 SISTJ_URL=https://sistj.tjdft.jus.br/sistj/sistj
-SISTJ_USUARIO=seu_usuario
-SISTJ_SENHA=sua_senha
 
 # Datajud API
 DATAJUD_API_KEY=sua_chave
@@ -68,6 +64,11 @@ SMTP_USUARIO=...
 SMTP_SENHA=...
 EMAIL_DESTINO=...
 ```
+
+PJE e SISTJWEB usam SSO com 2FA. O agente abre um navegador visível quando a
+sessão expira; o usuário faz o login manualmente e o sistema salva o
+`storage_state` para reutilizar a sessão. Não configure usuário ou senha desses
+sistemas em arquivos `.env`.
 
 > Para gerar o hash bcrypt: `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`
 
