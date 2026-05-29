@@ -20,13 +20,13 @@ Sistema automatizado para extração, preenchimento e emissão de guias de custa
 - **Agente**: Python 3.12 + Playwright (automação PJE/SISTJWEB)
 - **API**: FastAPI + JWT Auth + SQLite
 - **Frontend**: React 18 + Tailwind CSS + Vite
-- **Infra**: Docker Compose + Nginx + Ubuntu VPS
+- **Infra**: Docker Compose local + Nginx
 
 ## Requisitos
 
 - Docker + Docker Compose
-- Node.js 20+ (para dev local do frontend)
-- Python 3.12+ (para dev local do agente/API)
+- Node.js 20+ (apenas para desenvolvimento fora do Docker)
+- Python 3.12+ (apenas para desenvolvimento/testes fora do Docker)
 
 ## Setup
 
@@ -72,9 +72,27 @@ sistemas em arquivos `.env`.
 
 > Para gerar o hash bcrypt: `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`
 
-### 3. Dev Local (sem Docker)
+### 3. Operação local em Docker
+
+O modo operacional alvo é local e totalmente containerizado. O agente roda como
+serviço longo dentro do Docker Compose, sem cron e sem VPS.
+
+Fluxo esperado:
+
+1. Subir o Compose.
+2. Acessar o dashboard.
+3. Clicar em **Iniciar Agente**.
+4. O agente abre um navegador interativo containerizado para SSO/2FA do PJe e
+   SISTJWEB.
+5. Após o login manual, o agente salva `storage_state` em volume persistente e
+   inicia o trabalho.
+
+Detalhes: [docs/operacao-local-docker.md](docs/operacao-local-docker.md).
+
+### 4. Dev Local (sem Docker)
 
 **API + Agente:**
+
 ```bash
 cd agente
 pip install -r requirements.txt
@@ -86,6 +104,7 @@ uvicorn src.app:app --reload --port 8000
 ```
 
 **Frontend:**
+
 ```bash
 cd frontend
 npm install
@@ -94,7 +113,7 @@ npm run dev
 
 ## Subir o Projeto
 
-### Docker (Produção)
+### Docker (Produção local)
 
 ```bash
 docker-compose up -d --build
@@ -108,9 +127,9 @@ docker-compose -f docker-compose.dev.yml up -d --build
 
 | Serviço | URL |
 |---------|-----|
-| Dashboard | http://localhost |
-| API direta | http://localhost:8000 |
-| Swagger | http://localhost:8000/docs |
+| Dashboard | <http://localhost> |
+| API direta | <http://localhost:8000> |
+| Swagger | <http://localhost:8000/docs> |
 
 ### Login
 
@@ -154,7 +173,7 @@ pytest api/tests/ -v
 
 ## Estrutura
 
-```
+```text
 SOG/
 ├── agente/              # Automação Playwright
 │   ├── src/
@@ -235,7 +254,7 @@ SOG/
 
 ## Fluxo de Trabalho
 
-1. **Agente** (cron horário) coleta processos do PJE
+1. **Agente** (serviço longo iniciado pelo dashboard) coleta processos do PJE
 2. Para cada processo: consulta Datajud + extrai documentos + extrai custas iniciais do PDF + preenche SISTJWEB
 3. Status → `aguardando_aprovacao`
 4. **Operador** revisa no dashboard e clica **Aprovar** ou **Rejeitar**

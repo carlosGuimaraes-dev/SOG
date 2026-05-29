@@ -3,7 +3,7 @@
 > **Escopo:** Transformar o agente de script de execução única em serviço longo/daemon com loop infinito, comunicação bidirecional com o dashboard via SQLite, autenticação por storage state com fallback interativo, e emissão síncrona no loop.  
 > **Data:** 2026-05-17  
 > **Autor:** CTO (SOUL)  
-> **Status:** Aprovado pelo usuário  
+> **Status:** Histórico. A parte "serviço longo sem cron" continua válida; a decisão "agente fora do Docker" foi substituída pela operação local totalmente containerizada.  
 > **Plano substituído:** `.kimi/plans/adaptacao-sso-2fa.md` (arquitetura de script única descartada)
 
 ---
@@ -14,8 +14,8 @@ O agente passa de **script que roda e termina** (executado via cron ou manualmen
 
 ### Fluxo operacional aprovado
 
-1. Operador clica **"Iniciar Agente"** no dashboard (ou executa atalho no desktop).
-2. Agente abre Chrome **visível**, operador faz login no PJe e SISTJWEB (SSO + 2FA).
+1. Operador clica **"Iniciar Agente"** no dashboard.
+2. Agente, rodando em container, expõe navegador interativo containerizado; operador faz login no PJe e SISTJWEB (SSO + 2FA).
 3. Agente salva **storage state** e entra em **loop infinito**:
    - Coleta novos processos do PJe
    - Preenche SISTJWEB
@@ -70,10 +70,10 @@ Operador     Dashboard    API        SQLite        Agente        PJe/SISTJWEB
 
 | Componente | Onde roda | Responsabilidade |
 |---|---|---|
-| **Agente (serviço longo)** | Host nativo (fora do Docker) | Loop infinito, automação Playwright, leitura/escrita no SQLite, gerenciamento de sessão |
+| **Agente (serviço longo)** | Container Docker local | Loop infinito, automação Playwright, leitura/escrita no SQLite, gerenciamento de sessão, navegador interativo containerizado para SSO/2FA |
 | **API (FastAPI)** | Container Docker | Receber comandos do frontend, escrever `comando` na tabela `agente_controle`, ler `status` para responder ao frontend |
 | **Frontend (React)** | Container Docker (servido pelo nginx) | Exibir status do agente, botões Iniciar/Parar, fila de processos |
-| **SQLite** | Arquivo `./dados/custas.db` (bind mount) | Única fonte de verdade para dados de processos e controle do agente. Compartilhado entre host (agente) e containers (API) |
+| **SQLite** | Arquivo `./dados/custas.db` (bind mount) | Única fonte de verdade para dados de processos e controle do agente. Compartilhado entre containers pelo Compose |
 
 ---
 
@@ -1201,13 +1201,13 @@ class PjeClient(PlaywrightClient):
 >
 > **Rollback:** Reintroduzir `BackgroundTasks` na API (mas isso requer Playwright no container API, que foi descartado) ou reintroduzir `emitir_pendentes.py` como script separado.
 
-### D4. Agente fora do Docker (operação no host)
+### D4. Agente em Docker local
 
 > **⚠️ BAIXA REVERSIBILIDADE** (já documentada no MEMORY.md)
 >
-> Mantida deste plano. O agente roda no host nativo para acesso ao display e Chrome visível.
+> Atualizado após revisão: o agente deve rodar dentro do Docker Compose. O acesso interativo ao login SSO/2FA deve acontecer por navegador containerizado exposto ao operador (por exemplo, noVNC ou equivalente), preservando isolamento do host.
 >
-> **Rollback:** Restaurar serviço `agente` no `docker-compose.yml` e resolver autenticação via outro mecanismo (ex: conexão a Chrome remoto).
+> **Rollback:** voltar ao agente no host nativo exigiria reintroduzir dependência de Python/Playwright no host e quebraria a meta atual de isolamento por Docker.
 
 ---
 

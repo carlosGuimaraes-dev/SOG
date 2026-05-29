@@ -12,7 +12,7 @@
 - **Banco:** SQLite (migração para PostgreSQL 15 planejada — Wave 8)
 - **Autenticação:** JWT via `python-jose` + `passlib` (migração para httpOnly cookies — Wave 3)
 - **Testes:** pytest (agente), TestClient (API), Vitest + RTL + MSW (frontend — Wave 5)
-- **Infra:** Docker Compose + Nginx (multi-stage build frontend). **Agente roda no host nativo** desde 2026-05-17 (operação local com navegador visível para SSO/2FA).
+- **Infra:** Docker Compose + Nginx (multi-stage build frontend). **Decisão atual:** todos os componentes, incluindo o agente, devem rodar em Docker local. O agente deve ser serviço longo, sem cron, acionado pelo dashboard, com navegador interativo exposto pelo container para SSO/2FA.
 
 ---
 
@@ -24,6 +24,11 @@
   Decidido: (1) tarefas `executando` há mais de 5 minutos são reenfileiradas automaticamente nos endpoints de leitura; (2) cancelamento agora aceita tarefas `pendente` e `executando`, marcando-as como `cancelado`; (3) `concluir_tarefa()` não sobrescreve tarefas canceladas; (4) tarefas `reautenticar_*` forçam navegador visível por intenção explícita do operador.
   Motivo: fecha os requisitos operacionais da Wave 4 sem adicionar broker, interrupção forçada de Playwright ou processo auxiliar de watchdog.
   Reversibilidade: média — o comportamento está concentrado em `sog_shared.db`, rotas de leitura e executor do agente.
+
+- **2026-05-29 | Operação local totalmente containerizada**
+  Decidido: (1) O agente deve permanecer no Docker Compose; (2) cron/VPS continuam fora do modelo operacional; (3) o agente roda como serviço longo dentro do container; (4) o botão `Iniciar Agente` no dashboard apenas envia o comando, enquanto o processo do agente já deve estar ativo no container; (5) SSO/2FA deve ocorrer em navegador interativo containerizado, exposto ao operador por noVNC ou mecanismo equivalente; (6) `storage_state` deve ficar em volume persistente controlado pelo Compose.
+  Motivo: reduzir variação do ambiente local, evitar contaminação do host e manter todo o runtime reproduzível em Docker.
+  Reversibilidade: média — substitui a decisão anterior de agente no host, mas preserva o modelo de serviço longo, SQLite como canal de comando/status e autenticação por `storage_state`.
 
 - **2026-05-18 | Comunicação Backend ↔ Agente: fila de tarefas via SQLite (`agente_tarefas`)**
   Decidido: (1) Criar tabela `agente_tarefas` com `tipo`, `payload` JSON, `status`, `resultado` JSON, `sistema_alvo`; (2) Backend insere tarefa e retorna `task_id` (async job); frontend acompanha via polling em `GET /tarefas/{id}`; (3) Agente consome tarefas pendentes entre iterações do pipeline automático (máximo 3/iteração), usando lock em memória por sistema (`pje`/`sistj`/`ambos`); (4) Pipeline automático continua inalterado no loop principal; tarefas têm prioridade mas não causam starvation (limite por iteração).
@@ -42,6 +47,7 @@
   Alternativas: `connect_over_cdp` com Chrome já aberto (rejeitado — UX ruim, conflito de perfis); login programático (impossível — Microsoft Authenticator não expõe secret TOTP); espera interativa a cada execução (rejeitado — bloqueia cron e UX péssima).
   Motivo: SSO Microsoft com 2FA via app móvel impossibilita qualquer login automatizado. A operação local com operador humano presente exige que o login seja feito por ele, mas pode ser reutilizado por horas via cookies de sessão. Rodar o agente no host elimina complexidade de X11/VNC no Docker.
   Reversibilidade: **baixa** — altera arquitetura de deploy (agente fora do container), remove BackgroundTasks da API, e remove cron como mecanismo primário. Rollback requer restaurar serviço `agente` no docker-compose, mover credenciais de volta para `.env.agente`, e reintroduzir emissão na API.
+  **Status:** parcialmente superseded pela decisão de 2026-05-29. Mantêm-se SSO/2FA interativo e `storage_state`; substitui-se "agente no host" por "agente em Docker com navegador interativo containerizado".
 
 - **2026-05-17 | Extrator PDF: correções P2 (double-close + scanned detection)**
   Decidido: (1) Remover `doc.close()` do `except`, mantendo apenas no `finally` de `extrair_texto_pdf()`; (2) Substituir heurística de scanned de "qualquer página" para heurística agregada: `proporcao_scanned > 0.8 and media_texto < 100`.
