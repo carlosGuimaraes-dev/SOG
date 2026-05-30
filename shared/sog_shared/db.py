@@ -6,7 +6,9 @@ Sem side-effects no import. init_db() deve ser chamada explicitamente.
 import json
 import os
 import sqlite3
+import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -14,6 +16,27 @@ from typing import Optional, List, Dict, Any, Tuple
 from sog_shared.config import DB_PATH
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+
+ESTADOS_CICLO_ATIVO = frozenset({
+    "iniciando",
+    "autenticando",
+    "executando",
+    "dormindo",
+    "parando",
+})
+ESTADOS_CICLO_RETOMAVEL = frozenset({
+    "pausado",
+    "interrompido",
+    "aguardando_login",
+    "erro_pausado",
+    "erro",
+})
+COLUNAS_AGENTE_CONTROLE = {
+    "ciclo_uuid": "TEXT",
+    "ciclo_snapshot": "TEXT DEFAULT '{}'",
+    "pausado_em": "DATETIME",
+    "retomado_em": "DATETIME",
+}
 
 COLUNAS_PERMITIDAS_DADOS_PROCESSO = frozenset({
     "instancia",
@@ -72,6 +95,7 @@ def init_db():
     try:
         _setup_conn(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _garantir_colunas_agente_controle(conn)
         conn.commit()
     finally:
         conn.close()
@@ -245,11 +269,44 @@ def listar_logs(processo_id: int) -> List[Dict[str, Any]]:
 
 # Agente controle ------------------------------------------------------------
 
+def _garantir_colunas_agente_controle(conn: sqlite3.Connection) -> None:
+    existentes = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(agente_controle)").fetchall()
+    }
+    for coluna, definicao in COLUNAS_AGENTE_CONTROLE.items():
+        if coluna not in existentes:
+            conn.execute(f"ALTER TABLE agente_controle ADD COLUMN {coluna} {definicao}")
+
+
+def _agora_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _snapshot_novo_ciclo() -> str:
+    return json.dumps({"criado_em": _agora_iso()}, ensure_ascii=False)
+
+
+def _obter_controle_agente_conn(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+    _garantir_colunas_agente_controle(conn)
+    row = conn.execute("SELECT * FROM agente_controle WHERE id = 1").fetchone()
+    return dict(row) if row else None
+
+
+def _inserir_controle_padrao(conn: sqlite3.Connection) -> Dict[str, Any]:
+    conn.execute(
+        """
+        INSERT INTO agente_controle (
+            id, comando, status, mensagem, pid, ciclo_snapshot
+        ) VALUES (1, 'parar', 'parado', '', NULL, '{}')
+        """
+    )
+    return _obter_controle_agente_conn(conn) or {}
+
 def obter_controle_agente() -> Optional[Dict[str, Any]]:
     """Retorna o registro de controle do agente (id=1) ou None."""
     with get_conn() as conn:
-        row = conn.execute("SELECT * FROM agente_controle WHERE id = 1").fetchone()
-        return dict(row) if row else None
+        return _obter_controle_agente_conn(conn)
 
 
 def criar_ou_atualizar_controle_agente(
@@ -257,6 +314,10 @@ def criar_ou_atualizar_controle_agente(
     status: Optional[str] = None,
     mensagem: Optional[str] = None,
     pid: Optional[int] = None,
+    ciclo_uuid: Optional[str] = None,
+    ciclo_snapshot: Optional[str] = None,
+    pausado_em: Optional[str] = None,
+    retomado_em: Optional[str] = None,
 ) -> None:
     """
     Upsert na tabela agente_controle (id=1).
@@ -266,22 +327,24 @@ def criar_ou_atualizar_controle_agente(
     with get_conn() as conn:
         try:
             conn.execute("BEGIN IMMEDIATE")
+            _garantir_colunas_agente_controle(conn)
             row = conn.execute("SELECT id FROM agente_controle WHERE id = 1").fetchone()
             if row:
                 campos = []
                 vals = []
-                if comando is not None:
-                    campos.append("comando = ?")
-                    vals.append(comando)
-                if status is not None:
-                    campos.append("status = ?")
-                    vals.append(status)
-                if mensagem is not None:
-                    campos.append("mensagem = ?")
-                    vals.append(mensagem)
-                if pid is not None:
-                    campos.append("pid = ?")
-                    vals.append(pid)
+                for campo, valor in (
+                    ("comando", comando),
+                    ("status", status),
+                    ("mensagem", mensagem),
+                    ("pid", pid),
+                    ("ciclo_uuid", ciclo_uuid),
+                    ("ciclo_snapshot", ciclo_snapshot),
+                    ("pausado_em", pausado_em),
+                    ("retomado_em", retomado_em),
+                ):
+                    if valor is not None:
+                        campos.append(f"{campo} = ?")
+                        vals.append(valor)
                 if campos:
                     campos.append("atualizado_em = CURRENT_TIMESTAMP")
                     conn.execute(
@@ -291,13 +354,138 @@ def criar_ou_atualizar_controle_agente(
                     conn.commit()
             else:
                 conn.execute(
-                    "INSERT INTO agente_controle (id, comando, status, mensagem, pid) VALUES (1, ?, ?, ?, ?)",
-                    (comando or 'parar', status or 'parado', mensagem or '', pid),
+                    """
+                    INSERT INTO agente_controle (
+                        id, comando, status, mensagem, pid, ciclo_uuid,
+                        ciclo_snapshot, pausado_em, retomado_em
+                    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        comando or "parar",
+                        status or "parado",
+                        mensagem or "",
+                        pid,
+                        ciclo_uuid,
+                        ciclo_snapshot or "{}",
+                        pausado_em,
+                        retomado_em,
+                    ),
                 )
                 conn.commit()
         except Exception:
             conn.rollback()
             raise
+
+
+def solicitar_inicio_agente() -> Dict[str, Any]:
+    """Registra um pedido de início ou retomada de ciclo de forma atômica."""
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            controle = _obter_controle_agente_conn(conn) or _inserir_controle_padrao(conn)
+            status = controle.get("status", "parado")
+            if status in ESTADOS_CICLO_ATIVO:
+                conn.rollback()
+                return {"accepted": False, "status": status, "ciclo_uuid": controle.get("ciclo_uuid")}
+
+            retomando = bool(controle.get("ciclo_uuid")) and status in ESTADOS_CICLO_RETOMAVEL
+            ciclo_uuid = controle.get("ciclo_uuid") if retomando else str(uuid.uuid4())
+            ciclo_snapshot = (controle.get("ciclo_snapshot") or "{}") if retomando else _snapshot_novo_ciclo()
+            proximo_status = "aguardando_login" if status == "aguardando_login" else "iniciando"
+
+            conn.execute(
+                """
+                UPDATE agente_controle
+                   SET comando = 'iniciar',
+                       status = ?,
+                       mensagem = ?,
+                       ciclo_uuid = ?,
+                       ciclo_snapshot = ?,
+                       pausado_em = CASE WHEN ? THEN pausado_em ELSE NULL END,
+                       retomado_em = CURRENT_TIMESTAMP,
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id = 1
+                """,
+                (
+                    proximo_status,
+                    "Retomando ciclo pausado." if retomando else "Iniciando novo ciclo.",
+                    ciclo_uuid,
+                    ciclo_snapshot,
+                    retomando,
+                ),
+            )
+            conn.commit()
+            return {
+                "accepted": True,
+                "resumed": retomando,
+                "status": proximo_status,
+                "ciclo_uuid": ciclo_uuid,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def solicitar_parada_agente() -> Dict[str, Any]:
+    """Solicita parada cooperativa preservando UUID e snapshot do ciclo."""
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            controle = _obter_controle_agente_conn(conn) or _inserir_controle_padrao(conn)
+            status = controle.get("status", "parado")
+            if status in {"parado", "pausado", "interrompido", "erro_pausado"}:
+                conn.execute(
+                    """
+                    UPDATE agente_controle
+                       SET comando = 'parar',
+                           atualizado_em = CURRENT_TIMESTAMP
+                     WHERE id = 1
+                    """
+                )
+                conn.commit()
+                return {
+                    "accepted": True,
+                    "already_paused": True,
+                    "status": status,
+                    "ciclo_uuid": controle.get("ciclo_uuid"),
+                }
+
+            ciclo_uuid = controle.get("ciclo_uuid") or str(uuid.uuid4())
+            ciclo_snapshot = controle.get("ciclo_snapshot") or _snapshot_novo_ciclo()
+            conn.execute(
+                """
+                UPDATE agente_controle
+                   SET comando = 'parar',
+                       status = 'parando',
+                       mensagem = 'Parada solicitada. Pausando no próximo ponto seguro.',
+                       ciclo_uuid = ?,
+                       ciclo_snapshot = ?,
+                       pausado_em = COALESCE(pausado_em, CURRENT_TIMESTAMP),
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id = 1
+                """,
+                (ciclo_uuid, ciclo_snapshot),
+            )
+            conn.commit()
+            return {
+                "accepted": True,
+                "already_paused": False,
+                "status": "parando",
+                "ciclo_uuid": ciclo_uuid,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def pausar_ciclo_agente(status: str, mensagem: str) -> None:
+    """Marca o ciclo atual como pausado sem apagar UUID/snapshot."""
+    criar_ou_atualizar_controle_agente(
+        comando="parar",
+        status=status,
+        mensagem=mensagem,
+        pausado_em=_agora_iso(),
+    )
 
 
 def listar_aprovados(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:

@@ -82,7 +82,11 @@ CREATE TABLE IF NOT EXISTS agente_controle (
     status TEXT NOT NULL DEFAULT 'parado',
     mensagem TEXT DEFAULT '',
     atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-    pid INTEGER
+    pid INTEGER,
+    ciclo_uuid TEXT,
+    ciclo_snapshot TEXT DEFAULT '{}',
+    pausado_em DATETIME,
+    retomado_em DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS agente_tarefas (
