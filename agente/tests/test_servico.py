@@ -2,10 +2,35 @@
 Testes do loop de processamento de tarefas do serviço longo.
 """
 import threading
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from modulos.auth_manager import ReautenticacaoNecessariaError
 from servico import AgenteServico
+from sog_shared import db
+
+
+SCHEMA_SQL = Path(__file__).parent.parent / "src" / "banco" / "schema.sql"
+
+
+@pytest.fixture
+def mock_db(monkeypatch):
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_SQL.read_text(encoding="utf-8"))
+    conn.commit()
+
+    @contextmanager
+    def _get_conn():
+        yield conn
+
+    monkeypatch.setattr("sog_shared.db.get_conn", _get_conn)
+    yield conn
+    conn.close()
 
 
 def _servico_fake() -> AgenteServico:
@@ -92,3 +117,44 @@ def test_expiracao_sessao_devolve_tarefa_e_pausa_para_relogin():
         "Sessão pje expirada durante tarefa.",
     )
     assert servico._locks == {"pje": False, "sistj": False}
+
+
+def test_inicio_servico_preserva_ciclo_interrompido_retomavel(mock_db):
+    db.criar_ou_atualizar_controle_agente(
+        comando="parar",
+        status="interrompido",
+        mensagem="Ciclo pausado.",
+        ciclo_uuid="ciclo-retomavel",
+        ciclo_snapshot='{"offset": 2}',
+    )
+    servico = _servico_fake()
+    servico._pausar_ciclo = AgenteServico._pausar_ciclo.__get__(servico, AgenteServico)
+
+    servico._registrar_inicio_servico()
+
+    controle = db.obter_controle_agente()
+    assert controle["status"] == "interrompido"
+    assert controle["comando"] == "parar"
+    assert controle["ciclo_uuid"] == "ciclo-retomavel"
+    assert controle["ciclo_snapshot"] == '{"offset": 2}'
+    assert servico._status_atual == "interrompido"
+
+
+def test_inicio_servico_pausa_ciclo_ativo_orfao_sem_trocar_uuid(mock_db):
+    db.criar_ou_atualizar_controle_agente(
+        comando="iniciar",
+        status="executando",
+        ciclo_uuid="ciclo-ativo",
+        ciclo_snapshot='{"offset": 1}',
+    )
+    servico = _servico_fake()
+    servico._pausar_ciclo = AgenteServico._pausar_ciclo.__get__(servico, AgenteServico)
+
+    servico._registrar_inicio_servico()
+
+    controle = db.obter_controle_agente()
+    assert controle["status"] == "erro_pausado"
+    assert controle["comando"] == "parar"
+    assert controle["ciclo_uuid"] == "ciclo-ativo"
+    assert controle["ciclo_snapshot"] == '{"offset": 1}'
+    assert controle["pausado_em"] is not None

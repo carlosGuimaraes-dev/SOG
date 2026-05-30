@@ -34,6 +34,8 @@ from modulos.executor_tarefas import executar_tarefa
 from modulos.auth_manager import ReautenticacaoNecessariaError
 from pipeline import rodar_pipeline
 from sog_shared.db import (
+    ESTADOS_CICLO_ATIVO,
+    ESTADOS_CICLO_RETOMAVEL,
     init_db,
     obter_controle_agente,
     criar_ou_atualizar_controle_agente,
@@ -91,9 +93,8 @@ class AgenteServico:
         init_config()
         init_db()
 
-        # Garante registro de controle e registra PID
-        self._set_status("parado", "Serviço iniciado. Aguardando comando.")
-        self._atualizar_pid()
+        # Garante registro de controle sem apagar ciclo pausado/retomável.
+        self._registrar_inicio_servico()
 
         info(f"AgenteServico iniciado. PID={os.getpid()}. Aguardando comando...")
 
@@ -356,6 +357,28 @@ class AgenteServico:
             criar_ou_atualizar_controle_agente(status=status, mensagem=mensagem)
         except Exception as e:
             erro(f"Falha ao persistir status no banco: {e}")
+
+    def _registrar_inicio_servico(self) -> None:
+        """Registra PID/heartbeat preservando ciclos que ainda podem ser retomados."""
+        controle = obter_controle_agente()
+        status = (controle or {}).get("status", "parado")
+
+        if status in ESTADOS_CICLO_RETOMAVEL:
+            self._status_atual = status
+            self._mensagem_atual = (controle or {}).get("mensagem", "")
+            self._atualizar_pid()
+            return
+
+        if status in ESTADOS_CICLO_ATIVO:
+            self._pausar_ciclo(
+                "erro_pausado",
+                "Serviço reiniciado com ciclo ativo anterior. Revise e retome o mesmo ciclo.",
+            )
+            self._atualizar_pid()
+            return
+
+        self._set_status("parado", "Serviço iniciado. Aguardando comando.")
+        self._atualizar_pid()
 
     def _pausar_ciclo(self, status: str, mensagem: str) -> None:
         """Pausa o ciclo preservando UUID/snapshot para retomada."""
