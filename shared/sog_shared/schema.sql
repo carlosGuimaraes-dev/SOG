@@ -7,7 +7,10 @@ CREATE TABLE IF NOT EXISTS processos (
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     tentativas INTEGER DEFAULT 0,
-    erro_msg TEXT
+    erro_msg TEXT,
+    reprocessar_solicitado_em DATETIME,
+    reprocessar_solicitado_por TEXT,
+    reprocessar_motivo TEXT
 );
 
 CREATE TABLE IF NOT EXISTS dados_processo (

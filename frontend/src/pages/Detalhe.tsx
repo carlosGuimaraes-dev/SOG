@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useProcesso } from '../hooks/useProcesso'
 import { useAprovar } from '../hooks/useAprovar'
 import { useRejeitar } from '../hooks/useRejeitar'
+import { useReprocessar } from '../hooks/useReprocessar'
 import Button from '../components/ui/Button'
 import Skeleton from '../components/ui/Skeleton'
 import LinkPje from '../components/detalhe/LinkPje'
@@ -26,9 +27,10 @@ import ValorTotal from '../components/detalhe/ValorTotal'
 export default function Detalhe() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { data, loading } = useProcesso(id)
+  const { data, loading, refetch } = useProcesso(id)
   const { aprovar, actionLoading: aprovando } = useAprovar(id)
   const { rejeitar, actionLoading: rejeitando } = useRejeitar(id)
+  const { reprocessar, actionLoading: reprocessando } = useReprocessar(id, refetch)
   const [obs, setObs] = useState(data?.dados?.obs_operador || '')
 
   useEffect(() => {
@@ -115,7 +117,11 @@ export default function Detalhe() {
             onObservacaoChange={setObs}
             onAprovar={aprovar}
             onRejeitar={() => rejeitar(obs)}
+            onReprocessar={() => reprocessar(obs)}
             actionLoading={actionLoading}
+            reprocessarLoading={reprocessando}
+            statusProcesso={p.status}
+            reprocessarSolicitadoEm={p.reprocessar_solicitado_em}
           />
 
           <DocumentosPje documentos={data.documentos} />
