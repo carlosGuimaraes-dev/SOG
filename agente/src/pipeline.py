@@ -31,16 +31,40 @@ from utils.logger import info, erro, aviso
 from utils.notificador import enviar_alerta
 
 
-def _obter_ou_criar_processo(numero: str, numero_sem_mascara: str) -> int:
+def _obter_ou_criar_processo(
+    numero: str,
+    numero_sem_mascara: str,
+    rearmado: bool = False,
+) -> int:
     """Retorna o ID do processo existente ou cria um novo."""
     existente = db.processo_existe(numero)
     if existente:
+        processo_id = existente["id"]
+        if rearmado:
+            db.atualizar_status(processo_id, "pendente", erro_msg="", incrementar_tentativa=False)
+            db.registrar_log(processo_id, "reprocessamento", "ok", "Reprocessamento rearmado consumido no ciclo")
+            return processo_id
         if existente["status"] not in {"erro", "pendente"}:
             info(f"Processo {numero} já existe com status '{existente['status']}'. Pulando.")
+            db.registrar_log(
+                processo_id,
+                "pipeline",
+                "aviso",
+                f"Skip idempotente: status {existente['status']} já tratado",
+            )
             return 0
         if existente["status"] == "pendente":
-            return existente["id"]
-        processo_id = existente["id"]
+            dados_existentes = db.obter_dados_processo(processo_id)
+            if dados_existentes:
+                info(f"Processo {numero} já possui dados salvos. Pulando rerun normal.")
+                db.registrar_log(
+                    processo_id,
+                    "pipeline",
+                    "aviso",
+                    "Skip idempotente: dados do processo já salvos",
+                )
+                return 0
+            return processo_id
         db.atualizar_status(processo_id, "pendente", erro_msg="", incrementar_tentativa=True)
         return processo_id
     processo_id = db.inserir_processo(numero, numero_sem_mascara)
@@ -53,7 +77,7 @@ def _coletar_datajud(numero: str, numero_sem_mascara: str, processo_id: int) -> 
     info(f"[{numero}] Consultando Datajud...", processo_id=processo_id, etapa="datajud")
     dados = datajud_consultar(numero_sem_mascara)
     status = "ok" if dados else "aviso"
-    info(f"[{numero}] Datajud retornou {len(dados)} campo(s).", processo_id=processo_id, etapa="datajud", status=status)
+    info(f"[{numero}] Datajud retornou {len(dados)} campo(s).", processo_id=processo_id, etapa="datajud")
     db.registrar_log(processo_id, "datajud", status, f"campos={len(dados)}")
     return dados
 
@@ -118,7 +142,12 @@ def _preencher_sistj(numero: str, processo_id: int, payload: Dict[str, Any], sis
 
     resultado_sistj = sistj.preencher(payload, numero)
 
-    db.salvar_dados_processo(processo_id, {**payload, **resultado_sistj})
+    dados_salvar = {
+        chave: valor
+        for chave, valor in {**payload, **resultado_sistj}.items()
+        if chave in db.COLUNAS_PERMITIDAS_DADOS_PROCESSO
+    }
+    db.salvar_dados_processo(processo_id, dados_salvar)
     db.atualizar_status(processo_id, "aguardando_aprovacao")
     db.registrar_log(processo_id, "sistjweb", "ok", f"Screenshot: {resultado_sistj.get('screenshot_path', '')}")
     info(f"[{numero}] Pipeline concluído. Aguardando aprovação.", processo_id=processo_id)
@@ -135,11 +164,17 @@ def _notificar_erro(numero: str, processo_id: Optional[int], erro_msg: str):
             enviar_alerta([{"numero": numero, "status": "erro"}])
 
 
-def processar_processo(numero: str, numero_sem_mascara: str, pje: PjeClient, sistj: SistjClient):
+def processar_processo(
+    numero: str,
+    numero_sem_mascara: str,
+    pje: PjeClient,
+    sistj: SistjClient,
+    rearmado: bool = False,
+):
     """Executa o pipeline completo para um único processo."""
     processo_id = None
     try:
-        processo_id = _obter_ou_criar_processo(numero, numero_sem_mascara)
+        processo_id = _obter_ou_criar_processo(numero, numero_sem_mascara, rearmado=rearmado)
         if processo_id == 0:
             return
 
@@ -192,7 +227,7 @@ def processar_processo(numero: str, numero_sem_mascara: str, pje: PjeClient, sis
 
         info(f"[{numero}] Analisando documentos...", processo_id=processo_id, etapa="parser")
         dados_parser = processar_documentos(docs, textos, custas_iniciais=custas_extraidas)
-        info(f"[{numero}] Parser retornou {len(dados_parser)} campo(s).", processo_id=processo_id, etapa="parser", status="ok")
+        info(f"[{numero}] Parser retornou {len(dados_parser)} campo(s).", processo_id=processo_id, etapa="parser")
         db.registrar_log(processo_id, "parser", "ok", f"campos={len(dados_parser)}")
 
         area = detectar_area(dados_datajud.get("classe", ""), "")
@@ -228,9 +263,11 @@ def rodar_pipeline(pje: PjeClient, sistj: SistjClient, ciclo_uuid: Optional[str]
 
     if ciclo_uuid:
         membros = db.listar_membros_ciclo(ciclo_uuid)
+        membros_por_numero = {m["numero"]: m for m in membros}
         numeros = [m["numero"] for m in membros]
         info(f"Total de processos no ciclo {ciclo_uuid}: {len(numeros)}")
     else:
+        membros_por_numero = {}
         numeros = pje.coletar_lista_processos()
         info(f"Total de processos na etiqueta: {len(numeros)}")
 
@@ -240,10 +277,25 @@ def rodar_pipeline(pje: PjeClient, sistj: SistjClient, ciclo_uuid: Optional[str]
 
     for numero in numeros:
         numero_sem_mascara = re.sub(r"\D", "", numero)
+        membro = membros_por_numero.get(numero)
+        if membro and membro.get("processado_em"):
+            info(f"Processo {numero} já foi processado no ciclo {ciclo_uuid}. Pulando.")
+            db.registrar_log(
+                membro["processo_id"],
+                "pipeline",
+                "aviso",
+                "Skip idempotente: membro do ciclo já processado",
+            )
+            continue
+        rearmado = bool(membro and membro.get("origem") == "rearmado")
         try:
-            processar_processo(numero, numero_sem_mascara, pje, sistj)
+            processar_processo(numero, numero_sem_mascara, pje, sistj, rearmado=rearmado)
+            if ciclo_uuid and membro:
+                db.marcar_membro_ciclo_processado(ciclo_uuid, membro["processo_id"])
         except Exception as e:
             erro(f"Erro inesperado processando {numero}: {e}")
+            if ciclo_uuid and membro:
+                db.marcar_membro_ciclo_processado(ciclo_uuid, membro["processo_id"])
             continue
 
     pendentes = db.listar_aguardando_aprovacao()

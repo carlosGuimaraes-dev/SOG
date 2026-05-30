@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS processos (
 
 CREATE TABLE IF NOT EXISTS dados_processo (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    processo_id INTEGER REFERENCES processos(id),
+    processo_id INTEGER NOT NULL REFERENCES processos(id),
     instancia TEXT,
     processo_eletronico INTEGER DEFAULT 1,
     circunscricao TEXT,
@@ -50,16 +50,18 @@ CREATE TABLE IF NOT EXISTS dados_processo (
     valor_total_recolher TEXT,
     area_direito TEXT,
     obs_operador TEXT,
-    screenshot_path TEXT
+    screenshot_path TEXT,
+    UNIQUE(processo_id)
 );
 
 CREATE TABLE IF NOT EXISTS documentos_pje (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    processo_id INTEGER REFERENCES processos(id),
+    processo_id INTEGER NOT NULL REFERENCES processos(id),
     doc_id TEXT NOT NULL,
     tipo TEXT NOT NULL,
     data_assinatura TEXT,
-    nome TEXT
+    nome TEXT,
+    UNIQUE(processo_id, doc_id)
 );
 
 CREATE TABLE IF NOT EXISTS log_execucao (
@@ -68,7 +70,8 @@ CREATE TABLE IF NOT EXISTS log_execucao (
     etapa TEXT NOT NULL,
     status TEXT NOT NULL,     -- ok | erro | aviso
     mensagem TEXT,
-    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(processo_id, etapa, status, mensagem)
 );
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
@@ -119,6 +122,7 @@ CREATE TABLE IF NOT EXISTS agente_ciclo_membros (
     origem TEXT NOT NULL,
     -- origem: novo_pje | rearmado
     status_snapshot TEXT NOT NULL,
+    processado_em DATETIME,
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(ciclo_uuid, processo_id),
     UNIQUE(ciclo_uuid, numero)

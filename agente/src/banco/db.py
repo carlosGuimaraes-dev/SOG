@@ -15,6 +15,7 @@ from sog_shared.db import (  # noqa: F401
     listar_documentos,
     registrar_log,
     listar_logs,
+    marcar_membro_ciclo_processado,
     obter_controle_agente,
     criar_ou_atualizar_controle_agente,
     listar_aprovados,

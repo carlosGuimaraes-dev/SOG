@@ -43,6 +43,9 @@ COLUNAS_PROCESSOS = {
     "reprocessar_solicitado_por": "TEXT",
     "reprocessar_motivo": "TEXT",
 }
+COLUNAS_AGENTE_CICLO_MEMBROS = {
+    "processado_em": "DATETIME",
+}
 STATUS_REPROCESSAMENTO_EXPLICITO = frozenset({
     "erro",
     "pendente_manual",
@@ -108,6 +111,7 @@ def init_db():
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         _garantir_colunas_processos(conn)
         _garantir_colunas_agente_controle(conn)
+        _garantir_colunas_agente_ciclo_membros(conn)
         conn.commit()
     finally:
         conn.close()
@@ -128,11 +132,11 @@ def get_conn():
 def processo_existe(numero: str) -> Optional[Dict[str, Any]]:
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT id, status FROM processos WHERE numero = ?", (numero,)
+            "SELECT id, status, tentativas FROM processos WHERE numero = ?", (numero,)
         ).fetchone()
         if row is None:
             return None
-        return {"id": row["id"], "status": row["status"]}
+        return {"id": row["id"], "status": row["status"], "tentativas": row["tentativas"]}
 
 
 def inserir_processo(numero: str, numero_sem_mascara: str) -> int:
@@ -262,14 +266,33 @@ def salvar_dados_processo(processo_id: int, dados: Dict[str, Any]) -> int:
         if isinstance(v, (list, dict)):
             valores[i] = json.dumps(v, ensure_ascii=False)
 
-    placeholders = ", ".join(["?"] * len(campos))
-    colunas = ", ".join(campos)
-
     with get_conn() as conn:
-        cur = conn.execute(
-            f"INSERT INTO dados_processo (processo_id, {colunas}) VALUES (?, {placeholders})",
-            (processo_id, *valores),
-        )
+        existente = conn.execute(
+            "SELECT id FROM dados_processo WHERE processo_id = ? ORDER BY id DESC LIMIT 1",
+            (processo_id,),
+        ).fetchone()
+        if existente:
+            if campos:
+                set_sql = ", ".join(f"{campo} = ?" for campo in campos)
+                conn.execute(
+                    f"UPDATE dados_processo SET {set_sql} WHERE id = ?",
+                    (*valores, existente["id"]),
+                )
+            conn.commit()
+            return existente["id"]
+
+        placeholders = ", ".join(["?"] * len(campos))
+        colunas = ", ".join(campos)
+        if campos:
+            cur = conn.execute(
+                f"INSERT INTO dados_processo (processo_id, {colunas}) VALUES (?, {placeholders})",
+                (processo_id, *valores),
+            )
+        else:
+            cur = conn.execute(
+                "INSERT INTO dados_processo (processo_id) VALUES (?)",
+                (processo_id,),
+            )
         conn.commit()
         return cur.lastrowid
 
@@ -299,11 +322,30 @@ def salvar_documento(
     processo_id: int, doc_id: str, tipo: str, data_assinatura: str, nome: str
 ):
     with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO documentos_pje (processo_id, doc_id, tipo, data_assinatura, nome) VALUES (?, ?, ?, ?, ?)",
+        existente = conn.execute(
+            "SELECT id FROM documentos_pje WHERE processo_id = ? AND doc_id = ?",
+            (processo_id, doc_id),
+        ).fetchone()
+        if existente:
+            conn.execute(
+                """
+                UPDATE documentos_pje
+                   SET tipo = ?, data_assinatura = ?, nome = ?
+                 WHERE id = ?
+                """,
+                (tipo, data_assinatura, nome, existente["id"]),
+            )
+            conn.commit()
+            return existente["id"]
+        cur = conn.execute(
+            """
+            INSERT INTO documentos_pje (processo_id, doc_id, tipo, data_assinatura, nome)
+            VALUES (?, ?, ?, ?, ?)
+            """,
             (processo_id, doc_id, tipo, data_assinatura, nome),
         )
         conn.commit()
+        return cur.lastrowid
 
 
 def listar_documentos(processo_id: int) -> List[Dict[str, Any]]:
@@ -318,11 +360,26 @@ def listar_documentos(processo_id: int) -> List[Dict[str, Any]]:
 
 def registrar_log(processo_id: Optional[int], etapa: str, status: str, mensagem: str = ""):
     with get_conn() as conn:
-        conn.execute(
+        existente = conn.execute(
+            """
+            SELECT id
+            FROM log_execucao
+            WHERE processo_id IS ?
+              AND etapa = ?
+              AND status = ?
+              AND COALESCE(mensagem, '') = COALESCE(?, '')
+            LIMIT 1
+            """,
+            (processo_id, etapa, status, mensagem),
+        ).fetchone()
+        if existente:
+            return existente["id"]
+        cur = conn.execute(
             "INSERT INTO log_execucao (processo_id, etapa, status, mensagem) VALUES (?, ?, ?, ?)",
             (processo_id, etapa, status, mensagem),
         )
         conn.commit()
+        return cur.lastrowid
 
 
 def listar_logs(processo_id: int) -> List[Dict[str, Any]]:
@@ -354,6 +411,16 @@ def _garantir_colunas_processos(conn: sqlite3.Connection) -> None:
     for coluna, definicao in COLUNAS_PROCESSOS.items():
         if coluna not in existentes:
             conn.execute(f"ALTER TABLE processos ADD COLUMN {coluna} {definicao}")
+
+
+def _garantir_colunas_agente_ciclo_membros(conn: sqlite3.Connection) -> None:
+    existentes = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(agente_ciclo_membros)").fetchall()
+    }
+    for coluna, definicao in COLUNAS_AGENTE_CICLO_MEMBROS.items():
+        if coluna not in existentes:
+            conn.execute(f"ALTER TABLE agente_ciclo_membros ADD COLUMN {coluna} {definicao}")
 
 
 def _agora_iso() -> str:
@@ -730,6 +797,7 @@ def obter_ciclo(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
 
 def listar_membros_ciclo(ciclo_uuid: str) -> List[Dict[str, Any]]:
     with get_conn() as conn:
+        _garantir_colunas_agente_ciclo_membros(conn)
         rows = conn.execute(
             """
             SELECT
@@ -740,6 +808,7 @@ def listar_membros_ciclo(ciclo_uuid: str) -> List[Dict[str, Any]]:
                 m.numero_sem_mascara,
                 m.origem,
                 m.status_snapshot,
+                m.processado_em,
                 m.criado_em,
                 p.status AS status_atual
             FROM agente_ciclo_membros m
@@ -750,6 +819,21 @@ def listar_membros_ciclo(ciclo_uuid: str) -> List[Dict[str, Any]]:
             (ciclo_uuid,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def marcar_membro_ciclo_processado(ciclo_uuid: str, processo_id: int) -> bool:
+    with get_conn() as conn:
+        _garantir_colunas_agente_ciclo_membros(conn)
+        cur = conn.execute(
+            """
+            UPDATE agente_ciclo_membros
+               SET processado_em = COALESCE(processado_em, CURRENT_TIMESTAMP)
+             WHERE ciclo_uuid = ? AND processo_id = ?
+            """,
+            (ciclo_uuid, processo_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def obter_ciclo_com_membros(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
@@ -772,6 +856,7 @@ def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje: List[str]) -> Dict[str, 
 
     with get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        _garantir_colunas_agente_ciclo_membros(conn)
         ciclo = conn.execute(
             "SELECT * FROM agente_ciclos WHERE uuid = ?", (ciclo_uuid,)
         ).fetchone()
@@ -789,6 +874,7 @@ def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje: List[str]) -> Dict[str, 
                     m.numero_sem_mascara,
                     m.origem,
                     m.status_snapshot,
+                    m.processado_em,
                     m.criado_em,
                     p.status AS status_atual
                 FROM agente_ciclo_membros m
