@@ -158,3 +158,32 @@ def test_inicio_servico_pausa_ciclo_ativo_orfao_sem_trocar_uuid(mock_db):
     assert controle["ciclo_uuid"] == "ciclo-ativo"
     assert controle["ciclo_snapshot"] == '{"offset": 1}'
     assert controle["pausado_em"] is not None
+
+def test_relogin_retoma_mesmo_ciclo_aguardando_login(mock_db):
+    mock_db.execute(
+        """
+        INSERT INTO agente_ciclos (uuid, rotulo, status, fechado_em)
+        VALUES ('ciclo-login', 'Ciclo login', 'aguardando_login', CURRENT_TIMESTAMP)
+        """
+    )
+    mock_db.commit()
+    db.criar_ou_atualizar_controle_agente(
+        comando="iniciar",
+        status="aguardando_login",
+        mensagem="Sessão expirada.",
+        ciclo_uuid="ciclo-login",
+        ciclo_snapshot='{"offset": 3}',
+    )
+    servico = _servico_fake()
+    servico._ler_comando = MagicMock(return_value=("iniciar", "aguardando_login"))
+    servico._set_status = AgenteServico._set_status.__get__(servico, AgenteServico)
+    servico._pausar_ciclo = AgenteServico._pausar_ciclo.__get__(servico, AgenteServico)
+    servico._autenticar_interativo = MagicMock(return_value=True)
+
+    servico._loop_iteration()
+
+    controle = db.obter_controle_agente()
+    assert controle["status"] == "executando"
+    assert controle["ciclo_uuid"] == "ciclo-login"
+    assert controle["ciclo_snapshot"] == '{"offset": 3}'
+    assert servico._ciclo_uuid == "ciclo-login"

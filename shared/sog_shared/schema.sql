@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS agente_ciclos (
     uuid TEXT PRIMARY KEY,
     rotulo TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'iniciando',
-    -- status: iniciando | executando | concluido | cancelado | erro
+    -- status: iniciando | executando | aguardando_login | concluido | cancelado | erro
     iniciado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     fechado_em DATETIME,
     finalizado_em DATETIME,
