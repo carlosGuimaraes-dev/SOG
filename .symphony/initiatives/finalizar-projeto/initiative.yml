@@ -1,7 +1,19 @@
 slug: "finalizar-projeto"
 title: "Finalizar projeto SOG para homologacao operacional"
 repository: {}
-linear: {}
+linear:
+  project_slug: "sog-19e506c6c308"
+  team_key: "MY"
+  parent_issue: "MY-24"
+  child_issues:
+    - "MY-25"
+    - "MY-26"
+    - "MY-27"
+    - "MY-28"
+    - "MY-29"
+    - "MY-30"
+    - "MY-31"
+    - "MY-32"
 phases:
   diagnose:
     status: "complete"
@@ -13,6 +25,9 @@ phases:
   issues:
     status: "complete"
     updated_at: "2026-05-30"
+  export:
+    status: "complete"
+    updated_at: "2026-05-30"
   prd: "complete"
 readiness: {}
 approval:
@@ -22,6 +37,7 @@ approval:
     approver: "user"
 artifacts:
   diagnosis: "diagnosis.md"
+  export: "export.json"
   initiative: "initiative.md"
   issues_approved: "issues.approved.md"
   issues_draft: "issues.draft.md"

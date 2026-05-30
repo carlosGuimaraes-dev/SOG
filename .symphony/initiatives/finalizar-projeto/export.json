@@ -1,0 +1,74 @@
+{
+  "exported_at": "2026-05-30T03:02:07Z",
+  "tracker": "linear",
+  "project_slug": "sog-19e506c6c308",
+  "team": {
+    "id": "70bfab7f-826f-482d-a3d5-1963a9b549f6",
+    "key": "MY",
+    "name": "My Software House"
+  },
+  "parent_issue": {
+    "identifier": "MY-24",
+    "title": "Finalizar SOG para homologacao operacional controlada",
+    "url": "https://linear.app/mysoftwarehouse/issue/MY-24/finalizar-sog-para-homologacao-operacional-controlada",
+    "state": "Backlog"
+  },
+  "child_issues": [
+    {
+      "identifier": "MY-25",
+      "title": "Persistir ciclo do agente e formar lote fechado no Iniciar Agente",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-25/persistir-ciclo-do-agente-e-formar-lote-fechado-no-iniciar-agente",
+      "state": "Todo",
+      "blocked_by": []
+    },
+    {
+      "identifier": "MY-26",
+      "title": "Controlar execucao, pausa, retomada e relogin preservando o ciclo",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-26/controlar-execucao-pausa-retomada-e-relogin-preservando-o-ciclo",
+      "state": "Todo",
+      "blocked_by": ["MY-25"]
+    },
+    {
+      "identifier": "MY-27",
+      "title": "Reprocessar processos explicitamente com auditoria e consumo no proximo ciclo",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-27/reprocessar-processos-explicitamente-com-auditoria-e-consumo-no",
+      "state": "Todo",
+      "blocked_by": ["MY-25"]
+    },
+    {
+      "identifier": "MY-28",
+      "title": "Proteger idempotencia de processos, guias, logs criticos e anexos PJE",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-28/proteger-idempotencia-de-processos-guias-logs-criticos-e-anexos-pje",
+      "state": "Todo",
+      "blocked_by": ["MY-25", "MY-26", "MY-27"]
+    },
+    {
+      "identifier": "MY-29",
+      "title": "Notificar eventos operacionais por Telegram sem dados sensiveis",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-29/notificar-eventos-operacionais-por-telegram-sem-dados-sensiveis",
+      "state": "Todo",
+      "blocked_by": ["MY-25", "MY-26"]
+    },
+    {
+      "identifier": "MY-30",
+      "title": "Aprovar processo individualmente, emitir demonstrativo e anexar ao PJE",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-30/aprovar-processo-individualmente-emitir-demonstrativo-e-anexar-ao-pje",
+      "state": "Todo",
+      "blocked_by": ["MY-25", "MY-28"]
+    },
+    {
+      "identifier": "MY-31",
+      "title": "Recriar dashboard operacional com shadcn/UI, tabs e tema light/dark",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-31/recriar-dashboard-operacional-com-shadcnui-tabs-e-tema-lightdark",
+      "state": "Todo",
+      "blocked_by": ["MY-25", "MY-26", "MY-27", "MY-30", "MY-29"]
+    },
+    {
+      "identifier": "MY-32",
+      "title": "Validar Docker local e preparar evidencia da homologacao com 10 processos",
+      "url": "https://linear.app/mysoftwarehouse/issue/MY-32/validar-docker-local-e-preparar-evidencia-da-homologacao-com-10",
+      "state": "Backlog",
+      "blocked_by": ["MY-25", "MY-26", "MY-27", "MY-28", "MY-30", "MY-29", "MY-31"]
+    }
+  ]
+}
