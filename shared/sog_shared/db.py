@@ -615,11 +615,20 @@ def criar_ciclo_agente() -> Dict[str, Any]:
 
 def obter_ciclo_atual() -> Optional[Dict[str, Any]]:
     with get_conn() as conn:
+        controle = _obter_controle_agente_conn(conn)
+        if controle and controle.get("ciclo_uuid"):
+            ciclo = conn.execute(
+                "SELECT * FROM agente_ciclos WHERE uuid = ?",
+                (controle["ciclo_uuid"],),
+            ).fetchone()
+            if ciclo:
+                return dict(ciclo)
+
         row = conn.execute(
             """
             SELECT *
             FROM agente_ciclos
-            WHERE status IN ('iniciando', 'executando')
+            WHERE status IN ('iniciando', 'executando', 'aguardando_login')
             ORDER BY criado_em DESC
             LIMIT 1
             """
