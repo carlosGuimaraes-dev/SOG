@@ -1,218 +1,169 @@
-slug: finalizar-projeto
+slug: "finalizar-projeto"
 title: "Finalizar projeto SOG para homologacao operacional"
-summary: "Consolidar o SOG em um estado verificavel para homologacao operacional, separando pendencias reais de itens historicos ja concluidos."
-target_outcome: homologacao_operacional_controlada
+repository: {}
+linear: {}
 phases:
   elicit:
-    status: complete
-    updated_at: "2026-05-29"
     needs_human_input: false
+    status: "complete"
+    updated_at: "2026-05-29"
+readiness: {}
+approval: {}
 artifacts:
-  initiative: initiative.md
-tracker:
-  kind: linear
-  project_slug: sog-19e506c6c308
+  initiative: "initiative.md"
 scope:
-  repository: carlosGuimaraes-dev/SOG
-  project_surface: fullstack
-  target: "Homologacao operacional controlada"
-  required_environment: "local Docker only"
-  design_bias: "keep the system simple; avoid enterprise-grade complexity unless required for homologation"
-  database_for_homologation: sqlite
-  backup_for_homologation: "sqlite only; no backup sidecar requirement"
-  required_local_configuration:
-    - DASHBOARD_SENHA_HASH
-    - JWT_SECRET_KEY
-    - DATAJUD_API_KEY
-    - PJE_URL
-    - PJE_ETIQUETA
-    - SISTJ_URL
-    - TELEGRAM_BOT_TOKEN
-    - TELEGRAM_CHAT_ID
-  deferred_configuration:
-    - SMTP
-  notification_requirements:
-    telegram_events:
-      - session_expired_relogin_required
-      - batch_completed_summary
-      - fatal_error_agent_paused
-    telegram_batch_summary:
-      include:
-        - total
-        - aguardando_aprovacao_count
-        - pendente_manual_count
-        - erro_count
-        - emitido_count
-        - total_cycle_time
-        - dashboard_hint
-      exclude:
-        - process_numbers
-        - party_names
-        - document_details
-    session_expired:
-      channels:
-        - dashboard
-        - telegram
-      purpose: "tell the user to log in again to PJE/SISTJWEB and then continue the same batch"
-      telegram_mode: notify_only
-      telegram_config:
-        - TELEGRAM_BOT_TOKEN
-        - TELEGRAM_CHAT_ID
-      email_only_is_sufficient: false
-      current_code_support: "email only; Telegram is not implemented yet"
-  external_systems:
-    pje: "real, with user-provided interactive credentials"
-    sistjweb: "real, with user-provided interactive credentials"
-  browser_mode:
-    login: "interactive headed browser after user clicks Iniciar Agente"
-    post_auth_until_review: "headless until every agent-selected process has its guide ready for user analysis and approval"
+  repository: "carlosGuimaraes-dev/SOG"
+  approval_policy:
+    after_approval:
+      - "emit_demonstrativo"
+      - "attach_demonstrativo_to_pje_process"
+    batch_approval: false
+    failure_final_status: "erro"
+    mode: "per_process"
+    success_final_status: "emitido"
   automation_boundary:
-    review_status: aguardando_aprovacao
     condition: "all processes in the agent run reach an actionable automation outcome"
-    successful_outcome: "guide ready for analysis and approval"
     exception_outcomes:
-      - pendente_manual
-      - erro
+      - "pendente_manual"
+      - "erro"
+    review_status: "aguardando_aprovacao"
+    successful_outcome: "guide ready for analysis and approval"
+  backup_for_homologation: "sqlite only; no backup sidecar requirement"
   batch_definition:
-    trigger: "user clicks Iniciar Agente"
-    source: "configured PJE folder/label"
-    identity:
-      uuid: required
-      display_label: "cycle start date/time"
-      uuid_visibility: "copyable in cycle detail; hidden from main table"
-      preserve_uuid_on_pause_resume: true
-    membership: "new processes captured at trigger time plus previously known processes explicitly selected/rearmed by the user"
-    minimum_homologation_size: 10
     homologation_focus:
-      - idempotency
-      - basic_bot_stress
-      - assisted_real_execution
+      - "idempotency"
+      - "basic_bot_stress"
+      - "assisted_real_execution"
     idempotency_expectation: "rerunning with already processed processes must not duplicate records, guides, critical logs, or PJE attachments; only explicitly rearmed processes can be processed again"
+    identity:
+      display_label: "cycle start date/time"
+      preserve_uuid_on_pause_resume: true
+      uuid: "required"
+      uuid_visibility: "copyable in cycle detail; hidden from main table"
+    membership: "new processes captured at trigger time plus previously known processes explicitly selected/rearmed by the user"
+    membership_snapshot: "persist at cycle start"
+    minimum_homologation_size: 10
     performance_expectation:
       hard_sla: false
       measurements:
-        - total_cycle_time
-        - per_process_time
-        - bottlenecks
-    session_expiration_policy: "pause the cycle, notify the user to log in again, resume the same batch without duplicating completed work"
-    reprocessing: "only when explicitly selected/rearmed by the user"
-    membership_snapshot: "persist at cycle start"
+        - "total_cycle_time"
+        - "per_process_time"
+        - "bottlenecks"
     rearm_mechanism:
-      surface: dashboard_process_detail
-      action: Reprocessar
+      action: "Reprocessar"
       allowed_from:
-        - erro
-        - pendente_manual
-        - rejeitado
+        - "erro"
+        - "pendente_manual"
+        - "rejeitado"
       requirements:
         - "audit/log entry"
         - "state/flag that includes the process in the next Iniciar Agente batch"
+      surface: "dashboard_process_detail"
+    reprocessing: "only when explicitly selected/rearmed by the user"
+    session_expiration_policy: "pause the cycle, notify the user to log in again, resume the same batch without duplicating completed work"
+    source: "configured PJE folder/label"
+    trigger: "user clicks Iniciar Agente"
+  browser_mode:
+    login: "interactive headed browser after user clicks Iniciar Agente"
+    post_auth_until_review: "headless until every agent-selected process has its guide ready for user analysis and approval"
   dashboard_requirements:
-    frontend_stack:
-      framework: react_vite
-      component_system: shadcn_ui
-      note: "keep current React + Vite frontend; use shadcn/UI with the Vite template/configuration"
-      replacement_scope: all_current_ui_components
-      preserve_existing_routes_and_flows_when_useful: true
-    post_login_home: agent_cycle_panel
-    theme:
-      modes:
-        - light
-        - dark
-      toggle: sun_moon_icon_only
-      tooltip: true
-      placement: global_header
-      initial_mode: prefers_color_scheme
-      persistence: local_storage
-    visual_direction:
-      tone: institutional_discreet
-      emphasis: clear_status_contrast
-    status_colors:
-      aguardando_aprovacao: blue
-      erro: red
-      pendente_manual: amber
-      emitido: green
-      rejeitado: muted_gray_or_discreet_red
-    status_badges:
-      size: small
-      legibility: high
-    navigation_pattern: separated_tabs
-    tabs:
-      - ciclo_atual
-      - processos
-      - historico
-    processos_tab:
-      scope: all_processes
-      default_focus: actionable_items
-      quick_filters: true
-    historico_tab:
-      includes:
-        - process_history
-        - agent_cycle_history
-      separation_pattern: simple_segmented_filter
-    batch_view: true
-    batch_view_purpose: "show current/last agent cycle, membership, aggregate progress, actionable outcomes, and exceptions"
     batch_history: "basic history of previous cycles"
     batch_history_membership: "use persisted cycle membership snapshot, not current process status inference"
-    may_show_process_details: true
-    requires_authentication: true
-    primary_home_elements:
-      - agent_status
-      - iniciar_agente_action
-      - current_or_last_cycle
-      - batch_progress
-      - status_counts
-      - session_relogin_alerts
-      - cycle_process_review_list
-    session_relogin_ui:
-      pattern: fixed_banner_top_of_cycle_tab
-      action: "Abrir login/continuar autenticacao if technically possible"
+    batch_view: true
+    batch_view_purpose: "show current/last agent cycle, membership, aggregate progress, actionable outcomes, and exceptions"
+    cycle_tab_layout: "compact summary plus process list; no charts required"
+    design_principle: "less is more"
+    expected_daily_volume: 50
+    frontend_stack:
+      component_system: "shadcn_ui"
+      framework: "react_vite"
+      note: "keep current React + Vite frontend; use shadcn/UI with the Vite template/configuration"
+      preserve_existing_routes_and_flows_when_useful: true
+      replacement_scope: "all_current_ui_components"
+    historico_tab:
+      includes:
+        - "process_history"
+        - "agent_cycle_history"
+      separation_pattern: "simple_segmented_filter"
     iniciar_agente_behavior:
       disabled_while_cycle_running: true
       reason: "avoid concurrent cycles against PJE/SISTJWEB, storage state, and SQLite"
-      when_paused_cycle_exists: resume_paused_cycle_by_default_only
+      when_paused_cycle_exists: "resume_paused_cycle_by_default_only"
+    may_show_process_details: true
+    navigation_pattern: "separated_tabs"
     parar_agente_behavior:
-      required: true
-      control_pattern: same_agent_control_button_changes_state
-      mode: cooperative_stop_after_current_step
-      cycle_state: paused_or_interrupted
+      control_pattern: "same_agent_control_button_changes_state"
+      cycle_state: "paused_or_interrupted"
+      manual_final_termination_in_scope: false
+      mode: "cooperative_stop_after_current_step"
+      no_complex_per_process_cancellation: true
       preserve_batch_snapshot: true
       preserve_cycle_uuid: true
-      no_complex_per_process_cancellation: true
-      manual_final_termination_in_scope: false
-    cycle_tab_layout: "compact summary plus process list; no charts required"
-    process_list_pattern: compact_table
+      required: true
+    post_login_home: "agent_cycle_panel"
+    primary_home_elements:
+      - "agent_status"
+      - "iniciar_agente_action"
+      - "current_or_last_cycle"
+      - "batch_progress"
+      - "status_counts"
+      - "session_relogin_alerts"
+      - "cycle_process_review_list"
+    process_list_pattern: "compact_table"
     process_table_columns:
-      - Processo
-      - Status
-      - Etapa atual
-      - Guia
-      - Tempo
-      - Acao
+      - "Processo"
+      - "Status"
+      - "Etapa atual"
+      - "Guia"
+      - "Tempo"
+      - "Acao"
+    processos_tab:
+      default_focus: "actionable_items"
+      quick_filters: true
+      scope: "all_processes"
+    requires_authentication: true
     row_actions:
-      aguardando_aprovacao: Revisar
+      aguardando_aprovacao: "Revisar"
+      emitido: "Ver comprovante/detalhe"
       erro: "Ver erro or Reprocessar"
       pendente_manual: "Ver erro or Reprocessar"
-      rejeitado: Reprocessar
-      emitido: "Ver comprovante/detalhe"
+      rejeitado: "Reprocessar"
       running: "status only; no primary action"
-    expected_daily_volume: 50
-    design_principle: "less is more"
-  validation_strategy:
-    automated_tests: targeted
-    real_flow_validation: "assisted local Docker execution with 10 real processes"
-    full_external_e2e_automation_required: false
+    session_relogin_ui:
+      action: "Abrir login/continuar autenticacao if technically possible"
+      pattern: "fixed_banner_top_of_cycle_tab"
+    status_badges:
+      legibility: "high"
+      size: "small"
+    status_colors:
+      aguardando_aprovacao: "blue"
+      emitido: "green"
+      erro: "red"
+      pendente_manual: "amber"
+      rejeitado: "muted_gray_or_discreet_red"
+    tabs:
+      - "ciclo_atual"
+      - "processos"
+      - "historico"
+    theme:
+      initial_mode: "prefers_color_scheme"
+      modes:
+        - "light"
+        - "dark"
+      persistence: "local_storage"
+      placement: "global_header"
+      toggle: "sun_moon_icon_only"
+      tooltip: true
+    visual_direction:
+      emphasis: "clear_status_contrast"
+      tone: "institutional_discreet"
+  database_for_homologation: "sqlite"
+  deferred_configuration:
+    - "SMTP"
+  design_bias: "keep the system simple; avoid enterprise-grade complexity unless required for homologation"
   exception_policy:
     block_entire_batch: false
     requirement: "failed processes must include clear erro_msg/logs and remain visible for human action"
-  approval_policy:
-    mode: per_process
-    batch_approval: false
-    after_approval:
-      - emit_demonstrativo
-      - attach_demonstrativo_to_pje_process
-    success_final_status: emitido
-    failure_final_status: erro
   excludes:
     - "Executar fluxos legados da pasta .kimi como orquestracao ativa"
     - "Rodar approve, handoff ou export nesta fase"
@@ -223,3 +174,56 @@ scope:
     - "Telegram command handling"
     - "Manual final termination/discard of paused cycles"
     - "Enterprise-grade architecture not required for controlled local homologation"
+  external_systems:
+    pje: "real, with user-provided interactive credentials"
+    sistjweb: "real, with user-provided interactive credentials"
+  notification_requirements:
+    session_expired:
+      channels:
+        - "dashboard"
+        - "telegram"
+      current_code_support: "email only; Telegram is not implemented yet"
+      email_only_is_sufficient: false
+      purpose: "tell the user to log in again to PJE/SISTJWEB and then continue the same batch"
+      telegram_config:
+        - "TELEGRAM_BOT_TOKEN"
+        - "TELEGRAM_CHAT_ID"
+      telegram_mode: "notify_only"
+    telegram_batch_summary:
+      exclude:
+        - "process_numbers"
+        - "party_names"
+        - "document_details"
+      include:
+        - "total"
+        - "aguardando_aprovacao_count"
+        - "pendente_manual_count"
+        - "erro_count"
+        - "emitido_count"
+        - "total_cycle_time"
+        - "dashboard_hint"
+    telegram_events:
+      - "session_expired_relogin_required"
+      - "batch_completed_summary"
+      - "fatal_error_agent_paused"
+  project_surface: "fullstack"
+  required_environment: "local Docker only"
+  required_local_configuration:
+    - "DASHBOARD_SENHA_HASH"
+    - "JWT_SECRET_KEY"
+    - "DATAJUD_API_KEY"
+    - "PJE_URL"
+    - "PJE_ETIQUETA"
+    - "SISTJ_URL"
+    - "TELEGRAM_BOT_TOKEN"
+    - "TELEGRAM_CHAT_ID"
+  target: "Homologacao operacional controlada"
+  validation_strategy:
+    automated_tests: "targeted"
+    full_external_e2e_automation_required: false
+    real_flow_validation: "assisted local Docker execution with 10 real processes"
+summary: "Consolidar o SOG em um estado verificavel para homologacao operacional, separando pendencias reais de itens historicos ja concluidos."
+target_outcome: "homologacao_operacional_controlada"
+tracker:
+  kind: "linear"
+  project_slug: "sog-19e506c6c308"
