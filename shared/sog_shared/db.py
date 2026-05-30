@@ -619,7 +619,7 @@ def obter_ciclo_atual() -> Optional[Dict[str, Any]]:
             """
             SELECT *
             FROM agente_ciclos
-            WHERE status IN ('iniciando', 'executando')
+            WHERE status IN ('iniciando', 'executando', 'aguardando_login')
             ORDER BY criado_em DESC
             LIMIT 1
             """
