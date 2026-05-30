@@ -3,14 +3,40 @@ title: "Finalizar projeto SOG para homologacao operacional"
 repository: {}
 linear: {}
 phases:
+  diagnose:
+    status: "complete"
+    updated_at: "2026-05-30"
   elicit:
     needs_human_input: false
     status: "complete"
     updated_at: "2026-05-29"
+  issues:
+    status: "complete"
+    updated_at: "2026-05-30"
+  prd: "complete"
 readiness: {}
-approval: {}
+approval:
+  issues:
+    status: "approved"
+    approved_at: "2026-05-30"
+    approver: "user"
 artifacts:
+  diagnosis: "diagnosis.md"
   initiative: "initiative.md"
+  issues_approved: "issues.approved.md"
+  issues_draft: "issues.draft.md"
+  prd: "prd.md"
+blockers: []
+phase_runs:
+  prd:
+    completed_at: "2026-05-30T02:34:39.589065Z"
+    input_artifacts:
+      - "initiative_metadata"
+      - "initiative"
+      - "diagnosis"
+    output_artifact: "prd"
+    output_path: "/Users/carlosguimaraes/code/symphony-workspaces/SOG-finalizar-projeto/.symphony/initiatives/finalizar-projeto/prd.md"
+    status: "complete"
 scope:
   repository: "carlosGuimaraes-dev/SOG"
   approval_policy:
