@@ -39,6 +39,10 @@ from sog_shared.db import (
     proxima_tarefa_pendente,
     concluir_tarefa,
     devolver_tarefa_pendente,
+    obter_ciclo_atual,
+    fechar_snapshot_ciclo,
+    listar_membros_ciclo,
+    finalizar_ciclo,
 )
 from utils.logger import info, erro, aviso
 
@@ -73,6 +77,7 @@ class AgenteServico:
         self._mensagem_atual = ""
         self._locks = {"pje": False, "sistj": False}
         self._tarefas_por_iteracao = 3
+        self._ciclo_uuid = None
 
     # ------------------------------------------------------------------
     # Ciclo de vida público
@@ -140,6 +145,7 @@ class AgenteServico:
         if status_db == "autenticando":
             try:
                 self._autenticar_todos()
+                self._fechar_ciclo_ativo()
                 self._set_status("executando", "Autenticação OK. Iniciando execução.")
             except ReautenticacaoNecessariaError as e:
                 self._set_status(
@@ -155,6 +161,7 @@ class AgenteServico:
         if status_db == "aguardando_login":
             try:
                 self._autenticar_interativo()
+                self._fechar_ciclo_ativo()
                 self._set_status("executando", "Reautenticação OK. Retomando execução.")
             except TimeoutError:
                 self._set_status("erro", "Timeout aguardando login manual.")
@@ -232,6 +239,23 @@ class AgenteServico:
         info("Reautenticação interativa concluída.")
         return True
 
+    def _fechar_ciclo_ativo(self) -> None:
+        """Captura a etiqueta do PJE uma vez e persiste o snapshot do ciclo."""
+        ciclo = obter_ciclo_atual()
+        if not ciclo:
+            self._ciclo_uuid = None
+            return
+        self._ciclo_uuid = ciclo["uuid"]
+        if ciclo.get("fechado_em"):
+            return
+
+        numeros = self.pje.coletar_lista_processos()
+        ciclo_fechado = fechar_snapshot_ciclo(self._ciclo_uuid, numeros)
+        info(
+            f"Ciclo {self._ciclo_uuid} fechado com "
+            f"{ciclo_fechado.get('total_membros', 0)} processo(s)."
+        )
+
     def _processar_tarefas_pendentes(self, max_tarefas: int = 3) -> int:
         """Processa até N tarefas pendentes. Retorna quantas processou."""
         processadas = 0
@@ -290,10 +314,18 @@ class AgenteServico:
     def _processar_iteracao(self) -> None:
         """Coleta, preenche e emite em um ciclo."""
         # Pipeline: coleta e preenche novos processos
-        rodar_pipeline(self.pje, self.sistj)
+        rodar_pipeline(self.pje, self.sistj, ciclo_uuid=self._ciclo_uuid)
 
         # Emissão: processa aprovados
         emitir_pendentes(self.sistj, self.pje)
+
+        if self._ciclo_uuid:
+            membros = listar_membros_ciclo(self._ciclo_uuid)
+            pendentes = [m for m in membros if m.get("status_atual") == "pendente"]
+            if membros and not pendentes:
+                finalizar_ciclo(self._ciclo_uuid)
+                info(f"Ciclo {self._ciclo_uuid} finalizado.")
+                self._ciclo_uuid = None
 
     # ------------------------------------------------------------------
     # Comunicação com SQLite (agente_controle)

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth import get_current_user
 from limiter import limiter
-from schemas import AgenteStatusResponse, AgenteComandoResponse
+from schemas import AgenteStatusResponse, AgenteComandoResponse, CicloAgenteResponse
 from sog_shared import db
 
 router = APIRouter(prefix="/agente", tags=["agente"])
@@ -21,8 +21,12 @@ def iniciar_agente(
     request: Request,
     user: str = Depends(get_current_user),
 ):
+    ciclo = db.criar_ciclo_agente()
     db.criar_ou_atualizar_controle_agente(comando='iniciar')
-    return {"message": "Comando 'iniciar' enviado ao agente."}
+    return {
+        "message": "Comando 'iniciar' enviado ao agente.",
+        "ciclo_uuid": ciclo["uuid"],
+    }
 
 
 @router.post("/parar", response_model=AgenteComandoResponse)
@@ -31,6 +35,9 @@ def parar_agente(
     request: Request,
     user: str = Depends(get_current_user),
 ):
+    ciclo = db.obter_ciclo_atual()
+    if ciclo:
+        db.finalizar_ciclo(ciclo["uuid"], status="cancelado")
     db.criar_ou_atualizar_controle_agente(comando='parar')
     return {"message": "Comando 'parar' enviado ao agente."}
 
@@ -80,3 +87,40 @@ def status_agente(
         "atualizado_em": controle.get("atualizado_em"),
         "online": online,
     }
+
+
+@router.get("/ciclos/atual", response_model=Optional[CicloAgenteResponse])
+@limiter.limit("10/minute")
+def ciclo_atual(
+    request: Request,
+    user: str = Depends(get_current_user),
+):
+    ciclo = db.obter_ciclo_atual()
+    if not ciclo:
+        return None
+    return db.obter_ciclo_com_membros(ciclo["uuid"])
+
+
+@router.get("/ciclos/ultimo", response_model=Optional[CicloAgenteResponse])
+@limiter.limit("10/minute")
+def ultimo_ciclo(
+    request: Request,
+    user: str = Depends(get_current_user),
+):
+    ciclo = db.obter_ultimo_ciclo()
+    if not ciclo:
+        return None
+    return db.obter_ciclo_com_membros(ciclo["uuid"])
+
+
+@router.get("/ciclos/{ciclo_uuid}", response_model=CicloAgenteResponse)
+@limiter.limit("10/minute")
+def detalhe_ciclo(
+    ciclo_uuid: str,
+    request: Request,
+    user: str = Depends(get_current_user),
+):
+    ciclo = db.obter_ciclo_com_membros(ciclo_uuid)
+    if not ciclo:
+        raise HTTPException(status_code=404, detail="Ciclo não encontrado")
+    return ciclo
