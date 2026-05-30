@@ -159,6 +159,32 @@ def test_inicio_servico_pausa_ciclo_ativo_orfao_sem_trocar_uuid(mock_db):
     assert controle["ciclo_snapshot"] == '{"offset": 1}'
     assert controle["pausado_em"] is not None
 
+def test_ciclo_atual_prioriza_uuid_do_controle_em_relogin(mock_db):
+    mock_db.execute(
+        """
+        INSERT INTO agente_ciclos (uuid, rotulo, status)
+        VALUES ('ciclo-antigo', 'Ciclo antigo', 'iniciando')
+        """
+    )
+    mock_db.execute(
+        """
+        INSERT INTO agente_ciclos (uuid, rotulo, status, fechado_em)
+        VALUES ('ciclo-login', 'Ciclo login', 'aguardando_login', CURRENT_TIMESTAMP)
+        """
+    )
+    mock_db.commit()
+    db.criar_ou_atualizar_controle_agente(
+        comando="parar",
+        status="aguardando_login",
+        ciclo_uuid="ciclo-login",
+        ciclo_snapshot='{"offset": 3}',
+    )
+
+    ciclo = db.obter_ciclo_atual()
+
+    assert ciclo["uuid"] == "ciclo-login"
+
+
 def test_relogin_retoma_mesmo_ciclo_aguardando_login(mock_db):
     mock_db.execute(
         """
