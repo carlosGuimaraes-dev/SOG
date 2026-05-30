@@ -18,7 +18,7 @@ def test_iniciar_agente_cria_ciclo_persistido(client, mock_db, auth_headers):
     assert ciclo["status"] == "iniciando"
 
 
-def test_snapshot_fechado_inclui_novos_e_rearmados_sem_reativar_conhecidos(
+def test_snapshot_fechado_inclui_novos_e_rearmados_explicitos_uma_vez(
     client,
     mock_db,
     auth_headers,
@@ -34,11 +34,14 @@ def test_snapshot_fechado_inclui_novos_e_rearmados_sem_reativar_conhecidos(
     conhecido_id = db.inserir_processo(
         "0000003-00.0000.0.00.0000", "000000300000000000000"
     )
-    erro_id = db.inserir_processo(
+    pendente_sem_marcacao_id = db.inserir_processo(
         "0000004-00.0000.0.00.0000", "000000400000000000000"
     )
+    db.atualizar_status(rearmado_id, "erro", "Falha anterior")
+    db.atualizar_status(rearmado_fora_pje_id, "rejeitado")
     db.atualizar_status(conhecido_id, "aguardando_aprovacao")
-    db.atualizar_status(erro_id, "erro", "Falha anterior")
+    db.solicitar_reprocessamento(rearmado_id, "operador", "nova tentativa")
+    db.solicitar_reprocessamento(rearmado_fora_pje_id, "operador", "")
 
     ciclo = db.criar_ciclo_agente()
     fechado = db.fechar_snapshot_ciclo(
@@ -64,9 +67,23 @@ def test_snapshot_fechado_inclui_novos_e_rearmados_sem_reativar_conhecidos(
     }
     assert {m["origem"] for m in membros} == {"novo_pje", "rearmado"}
     assert all(m["processo_id"] != conhecido_id for m in membros)
-    assert all(m["processo_id"] != erro_id for m in membros)
+    assert all(m["processo_id"] != pendente_sem_marcacao_id for m in membros)
     assert any(m["processo_id"] == rearmado_id for m in membros)
     assert any(m["processo_id"] == rearmado_fora_pje_id for m in membros)
+    assert all(
+        m["status_snapshot"] in {"erro", "rejeitado", "pendente"} for m in membros
+    )
+
+    with db.get_conn() as conn:
+        consumidos = conn.execute(
+            """
+            SELECT id, reprocessar_solicitado_em
+            FROM processos
+            WHERE id IN (?, ?)
+            """,
+            (rearmado_id, rearmado_fora_pje_id),
+        ).fetchall()
+    assert all(row["reprocessar_solicitado_em"] is None for row in consumidos)
 
     db.inserir_processo("0000005-00.0000.0.00.0000", "000000500000000000000")
     reaberto = db.fechar_snapshot_ciclo(
@@ -87,3 +104,8 @@ def test_snapshot_fechado_inclui_novos_e_rearmados_sem_reativar_conhecidos(
         "0000006-00.0000.0.00.0000",
         "0000001-00.0000.0.00.0000",
     ]
+
+    db.finalizar_ciclo(ciclo["uuid"])
+    novo_ciclo = db.criar_ciclo_agente()
+    segundo_fechado = db.fechar_snapshot_ciclo(novo_ciclo["uuid"], [])
+    assert segundo_fechado["total_rearmados"] == 0

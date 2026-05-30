@@ -5,6 +5,9 @@ export interface Processo {
   criado_em: string
   tentativas?: number
   erro_msg?: string
+  reprocessar_solicitado_em?: string
+  reprocessar_solicitado_por?: string
+  reprocessar_motivo?: string
   valor_total_recolher?: string
 }
 

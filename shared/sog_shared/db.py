@@ -38,6 +38,16 @@ COLUNAS_AGENTE_CONTROLE = {
     "pausado_em": "DATETIME",
     "retomado_em": "DATETIME",
 }
+COLUNAS_PROCESSOS = {
+    "reprocessar_solicitado_em": "DATETIME",
+    "reprocessar_solicitado_por": "TEXT",
+    "reprocessar_motivo": "TEXT",
+}
+STATUS_REPROCESSAMENTO_EXPLICITO = frozenset({
+    "erro",
+    "pendente_manual",
+    "rejeitado",
+})
 
 COLUNAS_PERMITIDAS_DADOS_PROCESSO = frozenset({
     "instancia",
@@ -96,6 +106,7 @@ def init_db():
     try:
         _setup_conn(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _garantir_colunas_processos(conn)
         _garantir_colunas_agente_controle(conn)
         conn.commit()
     finally:
@@ -152,6 +163,61 @@ def atualizar_status(
                 (status, erro_msg, processo_id),
             )
         conn.commit()
+
+
+def solicitar_reprocessamento(
+    processo_id: int,
+    usuario: str,
+    motivo: str = "",
+) -> Dict[str, Any]:
+    motivo_seguro = motivo.replace("\n", " ").replace("\r", "")[:500]
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            _garantir_colunas_processos(conn)
+            row = conn.execute(
+                "SELECT * FROM processos WHERE id = ?", (processo_id,)
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                return {"accepted": False, "reason": "not_found"}
+            if row["status"] not in STATUS_REPROCESSAMENTO_EXPLICITO:
+                conn.rollback()
+                return {
+                    "accepted": False,
+                    "reason": "status_not_allowed",
+                    "status": row["status"],
+                }
+
+            conn.execute(
+                """
+                UPDATE processos
+                   SET reprocessar_solicitado_em = CURRENT_TIMESTAMP,
+                       reprocessar_solicitado_por = ?,
+                       reprocessar_motivo = ?,
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id = ?
+                """,
+                (usuario, motivo_seguro, processo_id),
+            )
+            detalhes = f"Reprocessamento solicitado por {usuario}"
+            if motivo_seguro:
+                detalhes = f"{detalhes}. Motivo: {motivo_seguro}"
+            conn.execute(
+                """
+                INSERT INTO log_execucao (processo_id, etapa, status, mensagem)
+                VALUES (?, 'reprocessamento', 'ok', ?)
+                """,
+                (processo_id, detalhes),
+            )
+            atualizado = conn.execute(
+                "SELECT * FROM processos WHERE id = ?", (processo_id,)
+            ).fetchone()
+            conn.commit()
+            return {"accepted": True, "processo": dict(atualizado)}
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def listar_pendentes(limit: int = 1000, offset: int = 0) -> List[Dict[str, Any]]:
@@ -278,6 +344,16 @@ def _garantir_colunas_agente_controle(conn: sqlite3.Connection) -> None:
     for coluna, definicao in COLUNAS_AGENTE_CONTROLE.items():
         if coluna not in existentes:
             conn.execute(f"ALTER TABLE agente_controle ADD COLUMN {coluna} {definicao}")
+
+
+def _garantir_colunas_processos(conn: sqlite3.Connection) -> None:
+    existentes = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(processos)").fetchall()
+    }
+    for coluna, definicao in COLUNAS_PROCESSOS.items():
+        if coluna not in existentes:
+            conn.execute(f"ALTER TABLE processos ADD COLUMN {coluna} {definicao}")
 
 
 def _agora_iso() -> str:
@@ -685,7 +761,7 @@ def obter_ciclo_com_membros(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
 
 
 def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje: List[str]) -> Dict[str, Any]:
-    """Fecha o lote do ciclo com novos do PJE e rearmados já pendentes."""
+    """Fecha o lote do ciclo com novos do PJE e rearmados explicitamente."""
     vistos = set()
     numeros_normalizados = []
     for numero in numeros_pje:
@@ -727,15 +803,18 @@ def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje: List[str]) -> Dict[str, 
             conn.rollback()
             return ciclo_atual
 
+        _garantir_colunas_processos(conn)
         rearmados = conn.execute(
             """
             SELECT id, numero, numero_sem_mascara, status
             FROM processos
-            WHERE status = 'pendente'
-            ORDER BY criado_em
+            WHERE reprocessar_solicitado_em IS NOT NULL
+            ORDER BY reprocessar_solicitado_em, criado_em
             """
         ).fetchall()
+        rearmados_consumidos = []
         for rearmado in rearmados:
+            rearmados_consumidos.append(rearmado["id"])
             conn.execute(
                 """
                 INSERT OR IGNORE INTO agente_ciclo_membros (
@@ -754,6 +833,20 @@ def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje: List[str]) -> Dict[str, 
                     rearmado["numero_sem_mascara"],
                     rearmado["status"],
                 ),
+            )
+
+        if rearmados_consumidos:
+            placeholders = ",".join("?" for _ in rearmados_consumidos)
+            conn.execute(
+                f"""
+                UPDATE processos
+                   SET reprocessar_solicitado_em = NULL,
+                       reprocessar_solicitado_por = NULL,
+                       reprocessar_motivo = NULL,
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id IN ({placeholders})
+                """,
+                rearmados_consumidos,
             )
 
         for numero in numeros_normalizados:

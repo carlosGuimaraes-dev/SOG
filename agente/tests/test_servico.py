@@ -159,7 +159,6 @@ def test_inicio_servico_pausa_ciclo_ativo_orfao_sem_trocar_uuid(mock_db):
     assert controle["ciclo_snapshot"] == '{"offset": 1}'
     assert controle["pausado_em"] is not None
 
-
 def test_ciclo_atual_prioriza_uuid_do_controle_em_relogin(mock_db):
     mock_db.execute(
         """
