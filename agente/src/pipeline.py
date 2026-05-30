@@ -35,9 +35,11 @@ def _obter_ou_criar_processo(numero: str, numero_sem_mascara: str) -> int:
     """Retorna o ID do processo existente ou cria um novo."""
     existente = db.processo_existe(numero)
     if existente:
-        if existente["status"] != "erro":
+        if existente["status"] not in {"erro", "pendente"}:
             info(f"Processo {numero} já existe com status '{existente['status']}'. Pulando.")
             return 0
+        if existente["status"] == "pendente":
+            return existente["id"]
         processo_id = existente["id"]
         db.atualizar_status(processo_id, "pendente", erro_msg="", incrementar_tentativa=True)
         return processo_id
@@ -211,7 +213,7 @@ def processar_processo(numero: str, numero_sem_mascara: str, pje: PjeClient, sis
         _notificar_erro(numero, processo_id, str(exc))
 
 
-def rodar_pipeline(pje: PjeClient, sistj: SistjClient) -> None:
+def rodar_pipeline(pje: PjeClient, sistj: SistjClient, ciclo_uuid: Optional[str] = None) -> None:
     """
     Executa UMA iteração completa do pipeline:
     1. Coleta lista de processos no PJE por etiqueta
@@ -224,8 +226,13 @@ def rodar_pipeline(pje: PjeClient, sistj: SistjClient) -> None:
     """
     info("Iniciando iteração do pipeline de custas TJDFT...")
 
-    numeros = pje.coletar_lista_processos()
-    info(f"Total de processos na etiqueta: {len(numeros)}")
+    if ciclo_uuid:
+        membros = db.listar_membros_ciclo(ciclo_uuid)
+        numeros = [m["numero"] for m in membros]
+        info(f"Total de processos no ciclo {ciclo_uuid}: {len(numeros)}")
+    else:
+        numeros = pje.coletar_lista_processos()
+        info(f"Total de processos na etiqueta: {len(numeros)}")
 
     if not numeros:
         info("Nenhum processo novo encontrado.")
@@ -242,5 +249,8 @@ def rodar_pipeline(pje: PjeClient, sistj: SistjClient) -> None:
     pendentes = db.listar_aguardando_aprovacao()
     if pendentes:
         enviar_alerta(pendentes)
+
+    if ciclo_uuid:
+        db.atualizar_contadores_ciclo(ciclo_uuid)
 
     info("Iteração do pipeline finalizada.")

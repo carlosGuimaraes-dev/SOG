@@ -23,6 +23,17 @@ interface StatusConfig {
   label: string
 }
 
+interface CicloAgente {
+  uuid: string
+  rotulo: string
+  status: string
+  total_membros: number
+  total_novos: number
+  total_rearmados: number
+  total_concluidos: number
+  total_erros: number
+}
+
 const STATUS_CONFIG: Record<string, StatusConfig> = {
   executando: { cor: 'bg-green-500', label: 'Executando' },
   dormindo: { cor: 'bg-green-400', label: 'Executando (pausa)' },
@@ -62,8 +73,23 @@ export default function AgenteStatusBar() {
   const [podeIniciarApi, setPodeIniciarApi] = useState(true)
   const [podePararApi, setPodePararApi] = useState(false)
   const [reloginRequired, setReloginRequired] = useState(false)
+  const [ciclo, setCiclo] = useState<CicloAgente | null>(null)
   const [loading, setLoading] = useState(false)
   const { addToast } = useToast()
+
+  const fetchCiclo = useCallback(async () => {
+    try {
+      const atual = await api.get<CicloAgente | null>(ENDPOINTS.AGENTE_CICLO_ATUAL)
+      if (atual.data) {
+        setCiclo(atual.data)
+        return
+      }
+      const ultimo = await api.get<CicloAgente | null>(ENDPOINTS.AGENTE_ULTIMO_CICLO)
+      setCiclo(ultimo.data)
+    } catch {
+      setCiclo(null)
+    }
+  }, [])
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -88,7 +114,8 @@ export default function AgenteStatusBar() {
       setPodePararApi(false)
       setReloginRequired(false)
     }
-  }, [])
+    await fetchCiclo()
+  }, [fetchCiclo])
 
   useEffect(() => {
     fetchStatus()
@@ -146,6 +173,17 @@ export default function AgenteStatusBar() {
           </span>
         )}
       </div>
+      {ciclo && (
+        <div className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{ciclo.rotulo}</span>
+          <span>
+            {' '}
+            · {ciclo.total_membros} no lote · {ciclo.total_novos} novos ·{' '}
+            {ciclo.total_rearmados} rearmados · {ciclo.total_concluidos} concluídos
+            {ciclo.total_erros > 0 ? ` · ${ciclo.total_erros} erros` : ''}
+          </span>
+        </div>
+      )}
       <div className="ml-auto flex gap-2">
         <Button
           onClick={handleIniciar}

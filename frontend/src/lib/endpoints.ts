@@ -12,4 +12,6 @@ export const ENDPOINTS = {
   AGENTE_INICIAR: '/agente/iniciar',
   AGENTE_PARAR: '/agente/parar',
   AGENTE_STATUS: '/agente/status',
+  AGENTE_CICLO_ATUAL: '/agente/ciclos/atual',
+  AGENTE_ULTIMO_CICLO: '/agente/ciclos/ultimo',
 } as const

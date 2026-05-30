@@ -3,12 +3,13 @@ Rotas de controle do agente de automação.
 A API escreve comandos (iniciar/parar); o agente lê e executa.
 """
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from auth import get_current_user
 from limiter import limiter
-from schemas import AgenteStatusResponse, AgenteComandoResponse
+from schemas import AgenteStatusResponse, AgenteComandoResponse, CicloAgenteResponse
 from sog_shared import db
 
 router = APIRouter(prefix="/agente", tags=["agente"])
@@ -98,3 +99,40 @@ def status_agente(
         "pode_parar": controle["status"] in db.ESTADOS_CICLO_ATIVO,
         "relogin_required": controle["status"] == "aguardando_login",
     }
+
+
+@router.get("/ciclos/atual", response_model=Optional[CicloAgenteResponse])
+@limiter.limit("10/minute")
+def ciclo_atual(
+    request: Request,
+    user: str = Depends(get_current_user),
+):
+    ciclo = db.obter_ciclo_atual()
+    if not ciclo:
+        return None
+    return db.obter_ciclo_com_membros(ciclo["uuid"])
+
+
+@router.get("/ciclos/ultimo", response_model=Optional[CicloAgenteResponse])
+@limiter.limit("10/minute")
+def ultimo_ciclo(
+    request: Request,
+    user: str = Depends(get_current_user),
+):
+    ciclo = db.obter_ultimo_ciclo()
+    if not ciclo:
+        return None
+    return db.obter_ciclo_com_membros(ciclo["uuid"])
+
+
+@router.get("/ciclos/{ciclo_uuid}", response_model=CicloAgenteResponse)
+@limiter.limit("10/minute")
+def detalhe_ciclo(
+    ciclo_uuid: str,
+    request: Request,
+    user: str = Depends(get_current_user),
+):
+    ciclo = db.obter_ciclo_com_membros(ciclo_uuid)
+    if not ciclo:
+        raise HTTPException(status_code=404, detail="Ciclo não encontrado")
+    return ciclo

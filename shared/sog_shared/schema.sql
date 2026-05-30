@@ -89,6 +89,38 @@ CREATE TABLE IF NOT EXISTS agente_controle (
     retomado_em DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS agente_ciclos (
+    uuid TEXT PRIMARY KEY,
+    rotulo TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'iniciando',
+    -- status: iniciando | executando | concluido | cancelado | erro
+    iniciado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    fechado_em DATETIME,
+    finalizado_em DATETIME,
+    total_membros INTEGER NOT NULL DEFAULT 0,
+    total_novos INTEGER NOT NULL DEFAULT 0,
+    total_rearmados INTEGER NOT NULL DEFAULT 0,
+    total_concluidos INTEGER NOT NULL DEFAULT 0,
+    total_erros INTEGER NOT NULL DEFAULT 0,
+    erro_msg TEXT,
+    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS agente_ciclo_membros (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ciclo_uuid TEXT NOT NULL REFERENCES agente_ciclos(uuid),
+    processo_id INTEGER NOT NULL REFERENCES processos(id),
+    numero TEXT NOT NULL,
+    numero_sem_mascara TEXT NOT NULL,
+    origem TEXT NOT NULL,
+    -- origem: novo_pje | rearmado
+    status_snapshot TEXT NOT NULL,
+    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ciclo_uuid, processo_id),
+    UNIQUE(ciclo_uuid, numero)
+);
+
 CREATE TABLE IF NOT EXISTS agente_tarefas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tipo TEXT NOT NULL,
@@ -108,3 +140,5 @@ CREATE TABLE IF NOT EXISTS agente_tarefas (
 
 CREATE INDEX IF NOT EXISTS idx_tarefas_status ON agente_tarefas(status, criado_em);
 CREATE INDEX IF NOT EXISTS idx_tarefas_sistema ON agente_tarefas(sistema_alvo, status);
+CREATE INDEX IF NOT EXISTS idx_ciclos_status ON agente_ciclos(status, criado_em);
+CREATE INDEX IF NOT EXISTS idx_ciclo_membros_uuid ON agente_ciclo_membros(ciclo_uuid, id);
