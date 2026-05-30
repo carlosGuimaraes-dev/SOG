@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import api from '../lib/api'
 import { ENDPOINTS } from '../lib/endpoints'
 import type { ProcessoCompleto } from '../types/processo'
@@ -9,18 +9,23 @@ export function useProcesso(id: string | undefined) {
   const [loading, setLoading] = useState(true)
   const { addToast } = useToast()
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     if (!id) {
       setLoading(false)
       return
     }
+    setLoading(true)
     api.get(ENDPOINTS.PROCESSOS + '/' + id)
       .then((res) => {
         setData(res.data)
       })
       .catch(() => addToast('Erro ao carregar detalhes', 'error'))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, addToast])
 
-  return { data, loading }
+  useEffect(() => {
+    refetch()
+  }, [refetch])
+
+  return { data, loading, refetch }
 }

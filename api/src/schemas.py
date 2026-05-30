@@ -14,6 +14,9 @@ class ProcessoResponse(BaseModel):
     atualizado_em: Optional[str] = None
     tentativas: Optional[int] = None
     erro_msg: Optional[str] = None
+    reprocessar_solicitado_em: Optional[str] = None
+    reprocessar_solicitado_por: Optional[str] = None
+    reprocessar_motivo: Optional[str] = None
 
 
 class ProcessoListResponse(BaseModel):
@@ -96,6 +99,15 @@ class RejeicaoResponse(BaseModel):
 
 class RejeicaoRequest(BaseModel):
     observacao: str = ""
+
+
+class ReprocessamentoRequest(BaseModel):
+    motivo: str = ""
+
+
+class ReprocessamentoResponse(BaseModel):
+    message: str
+    processo: ProcessoResponse
 
 
 class HistoricoItemResponse(BaseModel):

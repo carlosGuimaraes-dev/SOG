@@ -8,6 +8,7 @@ export const ENDPOINTS = {
   HISTORICO_EXPORTAR: '/api/v1/historico/exportar',
   APROVAR: (id: number | string) => `/aprovar/${id}`,
   REJEITAR: (id: number | string) => `/rejeitar/${id}`,
+  REPROCESSAR: (id: number | string) => `/processos/${id}/reprocessar`,
   SCREENSHOT: (id: number | string) => `/processos/${id}/screenshot`,
   AGENTE_INICIAR: '/agente/iniciar',
   AGENTE_PARAR: '/agente/parar',
