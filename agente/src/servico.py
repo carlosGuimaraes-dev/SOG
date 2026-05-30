@@ -26,7 +26,7 @@ SHARED_DIR = Path(__file__).resolve().parent.parent.parent / "shared"
 if str(SHARED_DIR) not in sys.path:
     sys.path.insert(0, str(SHARED_DIR))
 
-from config import init_config
+from config import init_config, validar_requisitos_homologacao_local
 from modulos.pje import PjeClient
 from modulos.sistjweb import SistjClient
 from modulos.emissor import emitir_pendentes
@@ -46,9 +46,15 @@ from sog_shared.db import (
     obter_ciclo_atual,
     fechar_snapshot_ciclo,
     listar_membros_ciclo,
+    obter_ciclo,
     finalizar_ciclo,
 )
 from utils.logger import info, erro, aviso
+from utils.telegram import (
+    notificar_ciclo_concluido,
+    notificar_erro_fatal,
+    notificar_relogin_required,
+)
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -96,6 +102,7 @@ class AgenteServico:
         signal.signal(signal.SIGTERM, self._handle_signal)
 
         init_config()
+        validar_requisitos_homologacao_local()
         init_db()
 
         # Garante registro de controle sem apagar ciclo pausado/retomável.
@@ -108,7 +115,7 @@ class AgenteServico:
                 self._loop_iteration()
             except Exception as e:
                 erro(f"Erro não tratado no loop principal: {e}")
-                self._set_status("erro", str(e))
+                self._pausar_ciclo("erro_pausado", "Erro fatal no loop principal.")
                 self._stop_event.wait(timeout=TEMPO_ERRO_SEGUNDOS)
 
         self._cleanup()
@@ -361,6 +368,8 @@ class AgenteServico:
             pendentes = [m for m in membros if m.get("status_atual") == "pendente"]
             if membros and not pendentes:
                 finalizar_ciclo(self._ciclo_uuid)
+                ciclo_finalizado = obter_ciclo(self._ciclo_uuid) or {}
+                notificar_ciclo_concluido(ciclo_finalizado, membros)
                 info(f"Ciclo {self._ciclo_uuid} finalizado.")
                 self._ciclo_uuid = None
 
@@ -422,6 +431,10 @@ class AgenteServico:
             pausar_ciclo_agente(status=status, mensagem=mensagem)
         except Exception as e:
             erro(f"Falha ao persistir pausa no banco: {e}")
+        if status == "aguardando_login":
+            notificar_relogin_required()
+        elif status == "erro_pausado":
+            notificar_erro_fatal()
 
     def _deve_pausar_por_comando(self) -> bool:
         comando, _status_db = self._ler_comando()

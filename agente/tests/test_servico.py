@@ -42,6 +42,8 @@ def _servico_fake() -> AgenteServico:
     servico._pausar_ciclo = MagicMock()
     servico._stop_event = threading.Event()
     servico._ler_comando = MagicMock(return_value=("iniciar", "executando"))
+    servico._ciclo_uuid = None
+    servico._tarefas_por_iteracao = 3
     return servico
 
 
@@ -158,3 +160,54 @@ def test_inicio_servico_pausa_ciclo_ativo_orfao_sem_trocar_uuid(mock_db):
     assert controle["ciclo_uuid"] == "ciclo-ativo"
     assert controle["ciclo_snapshot"] == '{"offset": 1}'
     assert controle["pausado_em"] is not None
+
+
+def test_pausa_para_relogin_dispara_notificacao(mock_db):
+    servico = _servico_fake()
+    servico._pausar_ciclo = AgenteServico._pausar_ciclo.__get__(servico, AgenteServico)
+
+    with patch("servico.notificar_relogin_required") as notificar_mock, \
+         patch("servico.notificar_erro_fatal") as fatal_mock:
+        servico._pausar_ciclo("aguardando_login", "Sessão expirada.")
+
+    controle = db.obter_controle_agente()
+    assert controle["status"] == "aguardando_login"
+    notificar_mock.assert_called_once_with()
+    fatal_mock.assert_not_called()
+
+
+def test_pausa_por_erro_fatal_dispara_notificacao(mock_db):
+    servico = _servico_fake()
+    servico._pausar_ciclo = AgenteServico._pausar_ciclo.__get__(servico, AgenteServico)
+
+    with patch("servico.notificar_relogin_required") as relogin_mock, \
+         patch("servico.notificar_erro_fatal") as fatal_mock:
+        servico._pausar_ciclo("erro_pausado", "Erro interno com dado sensível 0701234.")
+
+    controle = db.obter_controle_agente()
+    assert controle["status"] == "erro_pausado"
+    relogin_mock.assert_not_called()
+    fatal_mock.assert_called_once_with()
+
+
+def test_finalizacao_de_ciclo_dispara_resumo_agregado():
+    servico = _servico_fake()
+    servico._ciclo_uuid = "ciclo-1"
+    membros = [
+        {"numero": "0701234-56.2024.8.07.0001", "status_atual": "emitido"},
+        {"numero": "0711111-22.2024.8.07.0001", "status_atual": "erro"},
+    ]
+
+    with patch("servico.rodar_pipeline") as pipeline_mock, \
+         patch("servico.emitir_pendentes") as emitir_mock, \
+         patch("servico.listar_membros_ciclo", return_value=membros), \
+         patch("servico.finalizar_ciclo") as finalizar_mock, \
+         patch("servico.obter_ciclo", return_value={"uuid": "ciclo-1"}), \
+         patch("servico.notificar_ciclo_concluido") as notificar_mock:
+        servico._processar_iteracao()
+
+    pipeline_mock.assert_called_once()
+    emitir_mock.assert_called_once()
+    finalizar_mock.assert_called_once_with("ciclo-1")
+    notificar_mock.assert_called_once_with({"uuid": "ciclo-1"}, membros)
+    assert servico._ciclo_uuid is None
