@@ -143,6 +143,37 @@ class AgenteStatusResponse(BaseModel):
 
 class AgenteComandoResponse(BaseModel):
     message: str
+    ciclo_uuid: Optional[str] = None
+
+
+class CicloMembroResponse(BaseModel):
+    id: int
+    ciclo_uuid: str
+    processo_id: int
+    numero: str
+    numero_sem_mascara: str
+    origem: str
+    status_snapshot: str
+    status_atual: Optional[str] = None
+    criado_em: Optional[str] = None
+
+
+class CicloAgenteResponse(BaseModel):
+    uuid: str
+    rotulo: str
+    status: str
+    iniciado_em: Optional[str] = None
+    fechado_em: Optional[str] = None
+    finalizado_em: Optional[str] = None
+    total_membros: int = 0
+    total_novos: int = 0
+    total_rearmados: int = 0
+    total_concluidos: int = 0
+    total_erros: int = 0
+    erro_msg: Optional[str] = None
+    criado_em: Optional[str] = None
+    atualizado_em: Optional[str] = None
+    membros: List[CicloMembroResponse] = Field(default_factory=list)
 
 
 class CriarTarefaRequest(BaseModel):
