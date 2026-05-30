@@ -79,10 +79,14 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE TABLE IF NOT EXISTS agente_controle (
     id INTEGER PRIMARY KEY CHECK (id = 1),  -- sempre exatamente 1 linha
     comando TEXT NOT NULL DEFAULT 'parar',    -- iniciar | parar
-    status TEXT NOT NULL DEFAULT 'parado',    -- parado | iniciando | autenticando | executando | dormindo | aguardando_login | erro | parando
+    status TEXT NOT NULL DEFAULT 'parado',    -- parado | iniciando | autenticando | executando | dormindo | aguardando_login | erro | parando | interrompido | pausado | erro_pausado
     mensagem TEXT DEFAULT '',
     atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-    pid INTEGER                               -- PID do processo agente no host
+    pid INTEGER,                              -- PID do processo agente no host
+    ciclo_uuid TEXT,
+    ciclo_snapshot TEXT DEFAULT '{}',
+    pausado_em DATETIME,
+    retomado_em DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS agente_ciclos (

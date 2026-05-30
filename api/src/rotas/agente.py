@@ -21,11 +21,17 @@ def iniciar_agente(
     request: Request,
     user: str = Depends(get_current_user),
 ):
-    ciclo = db.criar_ciclo_agente()
-    db.criar_ou_atualizar_controle_agente(comando='iniciar')
+    resultado = db.solicitar_inicio_agente()
+    if not resultado["accepted"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe um ciclo do agente em execução.",
+        )
+    acao = "retomado" if resultado.get("resumed") else "iniciado"
     return {
-        "message": "Comando 'iniciar' enviado ao agente.",
-        "ciclo_uuid": ciclo["uuid"],
+        "message": f"Ciclo {acao}.",
+        "ciclo_uuid": resultado.get("ciclo_uuid"),
+        "resumed": resultado.get("resumed", False),
     }
 
 
@@ -35,11 +41,10 @@ def parar_agente(
     request: Request,
     user: str = Depends(get_current_user),
 ):
-    ciclo = db.obter_ciclo_atual()
-    if ciclo:
-        db.finalizar_ciclo(ciclo["uuid"], status="cancelado")
-    db.criar_ou_atualizar_controle_agente(comando='parar')
-    return {"message": "Comando 'parar' enviado ao agente."}
+    resultado = db.solicitar_parada_agente()
+    if resultado.get("already_paused"):
+        return {"message": "Ciclo já está pausado.", "ciclo_uuid": resultado.get("ciclo_uuid")}
+    return {"message": "Parada cooperativa solicitada.", "ciclo_uuid": resultado.get("ciclo_uuid")}
 
 
 @router.get("/status", response_model=AgenteStatusResponse)
@@ -86,6 +91,13 @@ def status_agente(
         "mensagem": controle.get("mensagem", ""),
         "atualizado_em": controle.get("atualizado_em"),
         "online": online,
+        "ciclo_uuid": controle.get("ciclo_uuid"),
+        "ciclo_snapshot": controle.get("ciclo_snapshot"),
+        "pausado_em": controle.get("pausado_em"),
+        "retomado_em": controle.get("retomado_em"),
+        "pode_iniciar": controle["status"] not in db.ESTADOS_CICLO_ATIVO,
+        "pode_parar": controle["status"] in db.ESTADOS_CICLO_ATIVO,
+        "relogin_required": controle["status"] == "aguardando_login",
     }
 
 

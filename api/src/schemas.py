@@ -139,11 +139,19 @@ class AgenteStatusResponse(BaseModel):
     mensagem: str
     atualizado_em: Optional[str] = None
     online: bool
+    ciclo_uuid: Optional[str] = None
+    ciclo_snapshot: Optional[str] = None
+    pausado_em: Optional[str] = None
+    retomado_em: Optional[str] = None
+    pode_iniciar: bool = True
+    pode_parar: bool = False
+    relogin_required: bool = False
 
 
 class AgenteComandoResponse(BaseModel):
     message: str
     ciclo_uuid: Optional[str] = None
+    resumed: Optional[bool] = None
 
 
 class CicloMembroResponse(BaseModel):

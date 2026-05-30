@@ -466,11 +466,16 @@ class TestAgente:
         client.cookies.set("access_token", token, domain="testserver.local", path="/")
         resp = client.post("/api/v1/agente/iniciar")
         assert resp.status_code == 200
-        assert resp.json()["message"] == "Comando 'iniciar' enviado ao agente."
+        data = resp.json()
+        assert data["message"] == "Ciclo iniciado."
+        assert data["ciclo_uuid"]
+        assert data["resumed"] is False
 
         row = mock_db.execute("SELECT * FROM agente_controle WHERE id = 1").fetchone()
         assert row is not None
         assert row["comando"] == "iniciar"
+        assert row["status"] == "iniciando"
+        assert row["ciclo_uuid"] == data["ciclo_uuid"]
 
     def test_parar_agente(self, client, mock_db):
         from auth import create_access_token
@@ -486,10 +491,12 @@ class TestAgente:
         client.cookies.set("access_token", token, domain="testserver.local", path="/")
         resp = client.post("/api/v1/agente/parar")
         assert resp.status_code == 200
-        assert resp.json()["message"] == "Comando 'parar' enviado ao agente."
+        assert resp.json()["message"] == "Parada cooperativa solicitada."
 
-        row = mock_db.execute("SELECT comando FROM agente_controle WHERE id = 1").fetchone()
+        row = mock_db.execute("SELECT comando, status, pausado_em FROM agente_controle WHERE id = 1").fetchone()
         assert row["comando"] == "parar"
+        assert row["status"] == "parando"
+        assert row["pausado_em"] is not None
 
     def test_status_online(self, client, mock_db):
         from auth import create_access_token

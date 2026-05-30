@@ -1,9 +1,36 @@
 """
 Testes do loop de processamento de tarefas do serviço longo.
 """
+import threading
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from modulos.auth_manager import ReautenticacaoNecessariaError
 from servico import AgenteServico
+from sog_shared import db
+
+
+SCHEMA_SQL = Path(__file__).parent.parent / "src" / "banco" / "schema.sql"
+
+
+@pytest.fixture
+def mock_db(monkeypatch):
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_SQL.read_text(encoding="utf-8"))
+    conn.commit()
+
+    @contextmanager
+    def _get_conn():
+        yield conn
+
+    monkeypatch.setattr("sog_shared.db.get_conn", _get_conn)
+    yield conn
+    conn.close()
 
 
 def _servico_fake() -> AgenteServico:
@@ -12,6 +39,9 @@ def _servico_fake() -> AgenteServico:
     servico.pje = MagicMock()
     servico.sistj = MagicMock()
     servico._set_status = MagicMock()
+    servico._pausar_ciclo = MagicMock()
+    servico._stop_event = threading.Event()
+    servico._ler_comando = MagicMock(return_value=("iniciar", "executando"))
     return servico
 
 
@@ -47,3 +77,84 @@ def test_cancelamento_durante_execucao_nao_prende_lock():
     assert processadas == 1
     concluir_mock.assert_called_once_with(1, "concluido", resultado={"ok": True})
     assert servico._locks == {"pje": False, "sistj": False}
+
+
+def test_comando_parar_interrompe_antes_da_proxima_tarefa_segura():
+    servico = _servico_fake()
+    servico._ler_comando = MagicMock(
+        side_effect=[("iniciar", "executando"), ("parar", "executando")]
+    )
+    tarefas = [
+        {"id": 1, "tipo": "dummy", "sistema_alvo": "pje", "payload": {}},
+        {"id": 2, "tipo": "dummy", "sistema_alvo": "pje", "payload": {}},
+    ]
+
+    with patch("servico.proxima_tarefa_pendente", side_effect=tarefas), \
+         patch("servico.executar_tarefa", return_value={"ok": True}) as executar_mock, \
+         patch("servico.concluir_tarefa", return_value=True):
+        processadas = servico._processar_tarefas_pendentes(max_tarefas=2)
+
+    assert processadas == 1
+    assert executar_mock.call_count == 1
+    assert servico._locks == {"pje": False, "sistj": False}
+
+
+def test_expiracao_sessao_devolve_tarefa_e_pausa_para_relogin():
+    servico = _servico_fake()
+    tarefa = {"id": 1, "tipo": "dummy", "sistema_alvo": "pje", "payload": {}}
+
+    with patch("servico.proxima_tarefa_pendente", return_value=tarefa), \
+         patch("servico.executar_tarefa", side_effect=ReautenticacaoNecessariaError("pje")), \
+         patch("servico.concluir_tarefa") as concluir_mock, \
+         patch("servico.devolver_tarefa_pendente") as devolver_mock:
+        processadas = servico._processar_tarefas_pendentes(max_tarefas=1)
+
+    assert processadas == 1
+    devolver_mock.assert_called_once_with(1)
+    concluir_mock.assert_not_called()
+    servico._pausar_ciclo.assert_called_once_with(
+        "aguardando_login",
+        "Sessão pje expirada durante tarefa.",
+    )
+    assert servico._locks == {"pje": False, "sistj": False}
+
+
+def test_inicio_servico_preserva_ciclo_interrompido_retomavel(mock_db):
+    db.criar_ou_atualizar_controle_agente(
+        comando="parar",
+        status="interrompido",
+        mensagem="Ciclo pausado.",
+        ciclo_uuid="ciclo-retomavel",
+        ciclo_snapshot='{"offset": 2}',
+    )
+    servico = _servico_fake()
+    servico._pausar_ciclo = AgenteServico._pausar_ciclo.__get__(servico, AgenteServico)
+
+    servico._registrar_inicio_servico()
+
+    controle = db.obter_controle_agente()
+    assert controle["status"] == "interrompido"
+    assert controle["comando"] == "parar"
+    assert controle["ciclo_uuid"] == "ciclo-retomavel"
+    assert controle["ciclo_snapshot"] == '{"offset": 2}'
+    assert servico._status_atual == "interrompido"
+
+
+def test_inicio_servico_pausa_ciclo_ativo_orfao_sem_trocar_uuid(mock_db):
+    db.criar_ou_atualizar_controle_agente(
+        comando="iniciar",
+        status="executando",
+        ciclo_uuid="ciclo-ativo",
+        ciclo_snapshot='{"offset": 1}',
+    )
+    servico = _servico_fake()
+    servico._pausar_ciclo = AgenteServico._pausar_ciclo.__get__(servico, AgenteServico)
+
+    servico._registrar_inicio_servico()
+
+    controle = db.obter_controle_agente()
+    assert controle["status"] == "erro_pausado"
+    assert controle["comando"] == "parar"
+    assert controle["ciclo_uuid"] == "ciclo-ativo"
+    assert controle["ciclo_snapshot"] == '{"offset": 1}'
+    assert controle["pausado_em"] is not None
