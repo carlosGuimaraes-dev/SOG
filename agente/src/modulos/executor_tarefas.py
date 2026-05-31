@@ -154,7 +154,12 @@ def _preencher_sistj(payload, pje, sistj):
     sistj.garantir_autenticado()
     resultado = sistj.preencher(payload_sistj, payload_sistj["numero"])
 
-    db.salvar_dados_processo(processo_id, {**payload_sistj, **resultado})
+    dados_salvar = {
+        chave: valor
+        for chave, valor in {**payload_sistj, **resultado}.items()
+        if chave in db.COLUNAS_PERMITIDAS_DADOS_PROCESSO
+    }
+    db.salvar_dados_processo(processo_id, dados_salvar)
     db.atualizar_status(processo_id, "aguardando_aprovacao")
     db.registrar_log(
         processo_id,
@@ -187,6 +192,21 @@ def _anexar_demonstrativo_pje(payload, pje, sistj):
 
     numero = processo.get("numero", "")
     numero_sem_mascara = processo.get("numero_sem_mascara", "")
+    if processo.get("status") == "emitido" and not payload.get("confirmar_reemissao"):
+        db.registrar_log(
+            processo_id,
+            "emissao",
+            "aviso",
+            "Skip idempotente: demonstrativo já anexado no PJe",
+        )
+        return {
+            "sucesso": False,
+            "skipped": True,
+            "reason": "already_emitido",
+            "numero_processo": numero,
+            "processo_id": processo_id,
+        }
+
     candidatos = [
         Path(DEMONSTRATIVOS_DIR) / f"{numero_sem_mascara}.pdf",
         Path(DEMONSTRATIVOS_DIR) / f"{numero}.pdf",

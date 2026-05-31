@@ -26,6 +26,16 @@ def emitir_e_anexar(processo_id: int, sistj: SistjClient, pje: PjeClient) -> boo
 
     numero = processo.get("numero", "")
     numero_sem_mascara = processo.get("numero_sem_mascara", "")
+    processo_meta = db.obter_processo(processo_id)
+    if processo_meta and processo_meta.get("status") == "emitido":
+        db.registrar_log(
+            processo_id,
+            "emissao",
+            "aviso",
+            "Skip idempotente: demonstrativo já anexado no PJe",
+        )
+        info(f"Processo {numero} já emitido. Pulando anexo.")
+        return True
 
     try:
         # SISTJWEB — já autenticado (garantir_autenticado é no-op se sessão viva)
