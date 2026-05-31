@@ -32,6 +32,8 @@ SMTP_PORTA = int(os.getenv("SMTP_PORTA", "587"))
 SMTP_USUARIO = os.getenv("SMTP_USUARIO", "")
 SMTP_SENHA = os.getenv("SMTP_SENHA", "")
 EMAIL_DESTINO = os.getenv("EMAIL_DESTINO", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # Caminhos
 _db_path_env = os.getenv("DB_PATH", "")
@@ -93,3 +95,22 @@ def init_config():
         DEMONSTRATIVOS_DIR.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
+
+
+def validar_requisitos_homologacao_local() -> None:
+    """Valida requisitos bloqueantes para homologação local do agente."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN)
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID)
+    faltantes = [
+        nome
+        for nome, valor in (
+            ("TELEGRAM_BOT_TOKEN", token),
+            ("TELEGRAM_CHAT_ID", chat_id),
+        )
+        if not valor
+    ]
+    if faltantes:
+        raise RuntimeError(
+            "Telegram obrigatório para homologação local: "
+            + ", ".join(faltantes)
+        )

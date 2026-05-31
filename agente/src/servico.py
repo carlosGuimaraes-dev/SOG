@@ -6,9 +6,10 @@ via signals (SIGINT/SIGTERM) e comunicação bidirecional com o
 dashboard via tabela SQLite `agente_controle`.
 
 Estados:
-    parado → autenticando → executando → dormindo → executando → ...
-                                    ↓
-                              parando → parado
+    parado → iniciando → autenticando → executando → dormindo → executando → ...
+                                              ↓
+                                      parando → interrompido
+                                      aguardando_login → executando
 
 Uso:
     python agente/src/servico.py
@@ -25,7 +26,7 @@ SHARED_DIR = Path(__file__).resolve().parent.parent.parent / "shared"
 if str(SHARED_DIR) not in sys.path:
     sys.path.insert(0, str(SHARED_DIR))
 
-from config import init_config
+from config import init_config, validar_requisitos_homologacao_local
 from modulos.pje import PjeClient
 from modulos.sistjweb import SistjClient
 from modulos.emissor import emitir_pendentes
@@ -33,14 +34,27 @@ from modulos.executor_tarefas import executar_tarefa
 from modulos.auth_manager import ReautenticacaoNecessariaError
 from pipeline import rodar_pipeline
 from sog_shared.db import (
+    ESTADOS_CICLO_ATIVO,
+    ESTADOS_CICLO_RETOMAVEL,
     init_db,
     obter_controle_agente,
     criar_ou_atualizar_controle_agente,
+    pausar_ciclo_agente,
     proxima_tarefa_pendente,
     concluir_tarefa,
     devolver_tarefa_pendente,
+    obter_ciclo_atual,
+    fechar_snapshot_ciclo,
+    listar_membros_ciclo,
+    obter_ciclo,
+    finalizar_ciclo,
 )
 from utils.logger import info, erro, aviso
+from utils.telegram import (
+    notificar_ciclo_concluido,
+    notificar_erro_fatal,
+    notificar_relogin_required,
+)
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -54,7 +68,10 @@ ESTADOS_VALIDOS = frozenset({
     "dormindo",
     "aguardando_login",
     "erro",
+    "erro_pausado",
     "parando",
+    "pausado",
+    "interrompido",
 })
 
 TEMPO_DORMIR_SEGUNDOS = 30
@@ -73,6 +90,7 @@ class AgenteServico:
         self._mensagem_atual = ""
         self._locks = {"pje": False, "sistj": False}
         self._tarefas_por_iteracao = 3
+        self._ciclo_uuid = None
 
     # ------------------------------------------------------------------
     # Ciclo de vida público
@@ -84,11 +102,11 @@ class AgenteServico:
         signal.signal(signal.SIGTERM, self._handle_signal)
 
         init_config()
+        validar_requisitos_homologacao_local()
         init_db()
 
-        # Garante registro de controle e registra PID
-        self._set_status("parado", "Serviço iniciado. Aguardando comando.")
-        self._atualizar_pid()
+        # Garante registro de controle sem apagar ciclo pausado/retomável.
+        self._registrar_inicio_servico()
 
         info(f"AgenteServico iniciado. PID={os.getpid()}. Aguardando comando...")
 
@@ -97,7 +115,7 @@ class AgenteServico:
                 self._loop_iteration()
             except Exception as e:
                 erro(f"Erro não tratado no loop principal: {e}")
-                self._set_status("erro", str(e))
+                self._pausar_ciclo("erro_pausado", "Erro fatal no loop principal.")
                 self._stop_event.wait(timeout=TEMPO_ERRO_SEGUNDOS)
 
         self._cleanup()
@@ -124,15 +142,23 @@ class AgenteServico:
 
         comando, status_db = self._ler_comando()
 
-        # Comando 'parar' ou stop_event setado → deve parar
-        if comando == "parar" or self._stop_event.is_set():
+        # Stop externo do processo encerra; comando do dashboard pausa o ciclo.
+        if self._stop_event.is_set():
             if status_db != "parando":
-                self._set_status("parando", "Comando 'parar' recebido.")
-            self._stop_event.set()  # interrompe sleep imediatamente
+                self._set_status("parando", "Encerramento do processo recebido.")
+            return
+        if comando == "parar" and status_db in {
+            "iniciando",
+            "autenticando",
+            "executando",
+            "dormindo",
+            "parando",
+        }:
+            self._pausar_ciclo("interrompido", "Ciclo pausado por solicitação do dashboard.")
             return
 
-        # Estado parado + comando iniciar → autenticar
-        if status_db == "parado" and comando == "iniciar":
+        # Estado inicial/retomado + comando iniciar → autenticar
+        if status_db in {"parado", "pausado", "interrompido", "iniciando"} and comando == "iniciar":
             self._set_status("autenticando", "Iniciando autenticação...")
             return
 
@@ -140,27 +166,32 @@ class AgenteServico:
         if status_db == "autenticando":
             try:
                 self._autenticar_todos()
+                self._fechar_ciclo_ativo()
                 self._set_status("executando", "Autenticação OK. Iniciando execução.")
             except ReautenticacaoNecessariaError as e:
-                self._set_status(
+                self._pausar_ciclo(
                     "aguardando_login",
                     f"Sessão {e.sistema} expirada. Faça login no navegador.",
                 )
             except Exception as e:
                 erro(f"Falha na autenticação: {e}")
-                self._set_status("erro", f"Falha na autenticação: {e}")
+                self._pausar_ciclo("erro_pausado", f"Falha na autenticação: {e}")
             return
 
         # Estado aguardando_login → dispara fallback interativo
         if status_db == "aguardando_login":
+            if comando != "iniciar":
+                self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+                return
             try:
                 self._autenticar_interativo()
+                self._fechar_ciclo_ativo()
                 self._set_status("executando", "Reautenticação OK. Retomando execução.")
             except TimeoutError:
-                self._set_status("erro", "Timeout aguardando login manual.")
+                self._pausar_ciclo("erro_pausado", "Timeout aguardando login manual.")
             except Exception as e:
                 erro(f"Falha na reautenticação interativa: {e}")
-                self._set_status("erro", f"Falha na reautenticação: {e}")
+                self._pausar_ciclo("erro_pausado", f"Falha na reautenticação: {e}")
             return
 
         # Estado executando → processa tarefas pendentes primeiro, depois pipeline
@@ -169,25 +200,34 @@ class AgenteServico:
                 tarefas_processadas = self._processar_tarefas_pendentes(
                     max_tarefas=self._tarefas_por_iteracao
                 )
+                if self._status_atual == "aguardando_login":
+                    return
+                if self._deve_pausar_por_comando():
+                    self._pausar_ciclo("interrompido", "Ciclo pausado após tarefa segura.")
+                    return
                 if tarefas_processadas > 0 and self._ha_mais_tarefas_pendentes():
                     return  # volta ao loop sem dormir para processar mais tarefas
 
                 self._processar_iteracao()
+                if self._deve_pausar_por_comando():
+                    self._pausar_ciclo("interrompido", "Ciclo pausado após etapa segura.")
+                    return
                 self._set_status("dormindo", "Iteração concluída. Aguardando próximo ciclo.")
             except ReautenticacaoNecessariaError as e:
-                self._set_status(
+                self._pausar_ciclo(
                     "aguardando_login",
                     f"Sessão {e.sistema} expirada durante execução.",
                 )
             except Exception as e:
                 erro(f"Erro durante execução: {e}")
-                self._set_status("erro", str(e))
+                self._pausar_ciclo("erro_pausado", str(e))
             return
 
         # Estado dormindo → aguarda 30s interrompível
         if status_db == "dormindo":
-            dormiu = self._stop_event.wait(timeout=TEMPO_DORMIR_SEGUNDOS)
-            if not dormiu and not self._stop_event.is_set():
+            if self._aguardar_ou_pausar(TEMPO_DORMIR_SEGUNDOS):
+                return
+            if not self._stop_event.is_set():
                 self._set_status("executando", "Retomando execução.")
             return
 
@@ -198,9 +238,13 @@ class AgenteServico:
                 self._set_status("executando", "Tentando recuperação após erro.")
             return
 
-        # Estado parando → sinal de que deve sair do loop
+        # Estado parando → pausa cooperativa no ciclo atual
         if status_db == "parando":
-            self._stop_event.set()
+            self._pausar_ciclo("interrompido", "Ciclo pausado.")
+            return
+
+        if status_db in {"pausado", "interrompido", "erro_pausado"}:
+            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
             return
 
         # Estado desconhecido — espera curta
@@ -232,10 +276,30 @@ class AgenteServico:
         info("Reautenticação interativa concluída.")
         return True
 
+    def _fechar_ciclo_ativo(self) -> None:
+        """Captura a etiqueta do PJE uma vez e persiste o snapshot do ciclo."""
+        ciclo = obter_ciclo_atual()
+        if not ciclo:
+            self._ciclo_uuid = None
+            return
+        self._ciclo_uuid = ciclo["uuid"]
+        if ciclo.get("fechado_em"):
+            return
+
+        numeros = self.pje.coletar_lista_processos()
+        ciclo_fechado = fechar_snapshot_ciclo(self._ciclo_uuid, numeros)
+        info(
+            f"Ciclo {self._ciclo_uuid} fechado com "
+            f"{ciclo_fechado.get('total_membros', 0)} processo(s)."
+        )
+
     def _processar_tarefas_pendentes(self, max_tarefas: int = 3) -> int:
         """Processa até N tarefas pendentes. Retorna quantas processou."""
         processadas = 0
         for _ in range(max_tarefas):
+            if self._deve_pausar_por_comando():
+                break
+
             tarefa = proxima_tarefa_pendente()
             if not tarefa:
                 break
@@ -263,10 +327,10 @@ class AgenteServico:
                 else:
                     aviso(f"Tarefa {tarefa['id']} foi cancelada durante a execução.")
             except ReautenticacaoNecessariaError as e:
-                concluir_tarefa(
-                    tarefa["id"], "erro", mensagem_erro=f"Reautenticação necessária: {e.sistema}"
-                )
-                self._set_status("aguardando_login", f"Sessão {e.sistema} expirada durante tarefa.")
+                devolver_tarefa_pendente(tarefa["id"])
+                self._pausar_ciclo("aguardando_login", f"Sessão {e.sistema} expirada durante tarefa.")
+                processadas += 1
+                break
             except Exception as e:
                 erro(f"Erro na tarefa {tarefa['id']}: {e}")
                 concluir_tarefa(tarefa["id"], "erro", mensagem_erro=str(e))
@@ -290,10 +354,24 @@ class AgenteServico:
     def _processar_iteracao(self) -> None:
         """Coleta, preenche e emite em um ciclo."""
         # Pipeline: coleta e preenche novos processos
-        rodar_pipeline(self.pje, self.sistj)
+        if self._deve_pausar_por_comando():
+            return
+        rodar_pipeline(self.pje, self.sistj, ciclo_uuid=self._ciclo_uuid)
 
         # Emissão: processa aprovados
+        if self._deve_pausar_por_comando():
+            return
         emitir_pendentes(self.sistj, self.pje)
+
+        if self._ciclo_uuid:
+            membros = listar_membros_ciclo(self._ciclo_uuid)
+            pendentes = [m for m in membros if m.get("status_atual") == "pendente"]
+            if membros and not pendentes:
+                finalizar_ciclo(self._ciclo_uuid)
+                ciclo_finalizado = obter_ciclo(self._ciclo_uuid) or {}
+                notificar_ciclo_concluido(ciclo_finalizado, membros)
+                info(f"Ciclo {self._ciclo_uuid} finalizado.")
+                self._ciclo_uuid = None
 
     # ------------------------------------------------------------------
     # Comunicação com SQLite (agente_controle)
@@ -320,6 +398,56 @@ class AgenteServico:
             criar_ou_atualizar_controle_agente(status=status, mensagem=mensagem)
         except Exception as e:
             erro(f"Falha ao persistir status no banco: {e}")
+
+    def _registrar_inicio_servico(self) -> None:
+        """Registra PID/heartbeat preservando ciclos que ainda podem ser retomados."""
+        controle = obter_controle_agente()
+        status = (controle or {}).get("status", "parado")
+
+        if status in ESTADOS_CICLO_RETOMAVEL:
+            self._status_atual = status
+            self._mensagem_atual = (controle or {}).get("mensagem", "")
+            self._atualizar_pid()
+            return
+
+        if status in ESTADOS_CICLO_ATIVO:
+            self._pausar_ciclo(
+                "erro_pausado",
+                "Serviço reiniciado com ciclo ativo anterior. Revise e retome o mesmo ciclo.",
+            )
+            self._atualizar_pid()
+            return
+
+        self._set_status("parado", "Serviço iniciado. Aguardando comando.")
+        self._atualizar_pid()
+
+    def _pausar_ciclo(self, status: str, mensagem: str) -> None:
+        """Pausa o ciclo preservando UUID/snapshot para retomada."""
+        if status not in ESTADOS_VALIDOS:
+            status = "erro_pausado"
+        self._status_atual = status
+        self._mensagem_atual = mensagem
+        try:
+            pausar_ciclo_agente(status=status, mensagem=mensagem)
+        except Exception as e:
+            erro(f"Falha ao persistir pausa no banco: {e}")
+        if status == "aguardando_login":
+            notificar_relogin_required()
+        elif status == "erro_pausado":
+            notificar_erro_fatal()
+
+    def _deve_pausar_por_comando(self) -> bool:
+        comando, _status_db = self._ler_comando()
+        return comando == "parar" or self._stop_event.is_set()
+
+    def _aguardar_ou_pausar(self, segundos: int) -> bool:
+        for _ in range(segundos):
+            if self._deve_pausar_por_comando():
+                self._pausar_ciclo("interrompido", "Ciclo pausado durante espera.")
+                return True
+            if self._stop_event.wait(timeout=1):
+                return True
+        return False
 
     def _atualizar_heartbeat(self) -> None:
         """Atualiza timestamp e PID no banco (para dashboard detectar online)."""

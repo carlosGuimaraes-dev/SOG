@@ -14,6 +14,9 @@ class ProcessoResponse(BaseModel):
     atualizado_em: Optional[str] = None
     tentativas: Optional[int] = None
     erro_msg: Optional[str] = None
+    reprocessar_solicitado_em: Optional[str] = None
+    reprocessar_solicitado_por: Optional[str] = None
+    reprocessar_motivo: Optional[str] = None
 
 
 class ProcessoListResponse(BaseModel):
@@ -98,6 +101,15 @@ class RejeicaoRequest(BaseModel):
     observacao: str = ""
 
 
+class ReprocessamentoRequest(BaseModel):
+    motivo: str = ""
+
+
+class ReprocessamentoResponse(BaseModel):
+    message: str
+    processo: ProcessoResponse
+
+
 class HistoricoItemResponse(BaseModel):
     id: int
     numero: str
@@ -139,10 +151,49 @@ class AgenteStatusResponse(BaseModel):
     mensagem: str
     atualizado_em: Optional[str] = None
     online: bool
+    ciclo_uuid: Optional[str] = None
+    ciclo_snapshot: Optional[str] = None
+    pausado_em: Optional[str] = None
+    retomado_em: Optional[str] = None
+    pode_iniciar: bool = True
+    pode_parar: bool = False
+    relogin_required: bool = False
 
 
 class AgenteComandoResponse(BaseModel):
     message: str
+    ciclo_uuid: Optional[str] = None
+    resumed: Optional[bool] = None
+
+
+class CicloMembroResponse(BaseModel):
+    id: int
+    ciclo_uuid: str
+    processo_id: int
+    numero: str
+    numero_sem_mascara: str
+    origem: str
+    status_snapshot: str
+    status_atual: Optional[str] = None
+    criado_em: Optional[str] = None
+
+
+class CicloAgenteResponse(BaseModel):
+    uuid: str
+    rotulo: str
+    status: str
+    iniciado_em: Optional[str] = None
+    fechado_em: Optional[str] = None
+    finalizado_em: Optional[str] = None
+    total_membros: int = 0
+    total_novos: int = 0
+    total_rearmados: int = 0
+    total_concluidos: int = 0
+    total_erros: int = 0
+    erro_msg: Optional[str] = None
+    criado_em: Optional[str] = None
+    atualizado_em: Optional[str] = None
+    membros: List[CicloMembroResponse] = Field(default_factory=list)
 
 
 class CriarTarefaRequest(BaseModel):

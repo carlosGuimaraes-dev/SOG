@@ -7,7 +7,11 @@ interface Props {
   onObservacaoChange: (val: string) => void
   onAprovar: () => void
   onRejeitar: () => void
+  onReprocessar: () => void
   actionLoading: boolean
+  reprocessarLoading: boolean
+  statusProcesso: string
+  reprocessarSolicitadoEm?: string
 }
 
 export default function AcoesPanel({
@@ -15,8 +19,15 @@ export default function AcoesPanel({
   onObservacaoChange,
   onAprovar,
   onRejeitar,
+  onReprocessar,
   actionLoading,
+  reprocessarLoading,
+  statusProcesso,
+  reprocessarSolicitadoEm,
 }: Props) {
+  const podeReprocessar = ['erro', 'pendente_manual', 'rejeitado'].includes(statusProcesso)
+  const reprocessarPendente = Boolean(reprocessarSolicitadoEm)
+
   return (
     <Card>
       <CardHeader>
@@ -53,6 +64,21 @@ export default function AcoesPanel({
             {actionLoading ? 'Processando...' : '❌ Rejeitar'}
           </Button>
         </div>
+        {podeReprocessar && (
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={onReprocessar}
+            disabled={actionLoading || reprocessarLoading || reprocessarPendente}
+            aria-label="Reprocessar processo"
+          >
+            {reprocessarPendente
+              ? 'Reprocessamento solicitado'
+              : reprocessarLoading
+                ? 'Solicitando...'
+                : 'Reprocessar'}
+          </Button>
+        )}
       </CardContent>
     </Card>
   )

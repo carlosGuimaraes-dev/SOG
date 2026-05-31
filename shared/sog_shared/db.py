@@ -5,8 +5,11 @@ Sem side-effects no import. init_db() deve ser chamada explicitamente.
 """
 import json
 import os
+import re
 import sqlite3
+import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -14,6 +17,37 @@ from typing import Optional, List, Dict, Any, Tuple
 from sog_shared.config import DB_PATH
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+
+ESTADOS_CICLO_ATIVO = frozenset({
+    "iniciando",
+    "autenticando",
+    "executando",
+    "dormindo",
+    "parando",
+})
+ESTADOS_CICLO_RETOMAVEL = frozenset({
+    "pausado",
+    "interrompido",
+    "aguardando_login",
+    "erro_pausado",
+    "erro",
+})
+COLUNAS_AGENTE_CONTROLE = {
+    "ciclo_uuid": "TEXT",
+    "ciclo_snapshot": "TEXT DEFAULT '{}'",
+    "pausado_em": "DATETIME",
+    "retomado_em": "DATETIME",
+}
+COLUNAS_PROCESSOS = {
+    "reprocessar_solicitado_em": "DATETIME",
+    "reprocessar_solicitado_por": "TEXT",
+    "reprocessar_motivo": "TEXT",
+}
+STATUS_REPROCESSAMENTO_EXPLICITO = frozenset({
+    "erro",
+    "pendente_manual",
+    "rejeitado",
+})
 
 COLUNAS_PERMITIDAS_DADOS_PROCESSO = frozenset({
     "instancia",
@@ -72,6 +106,8 @@ def init_db():
     try:
         _setup_conn(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _garantir_colunas_processos(conn)
+        _garantir_colunas_agente_controle(conn)
         conn.commit()
     finally:
         conn.close()
@@ -127,6 +163,61 @@ def atualizar_status(
                 (status, erro_msg, processo_id),
             )
         conn.commit()
+
+
+def solicitar_reprocessamento(
+    processo_id: int,
+    usuario: str,
+    motivo: str = "",
+) -> Dict[str, Any]:
+    motivo_seguro = motivo.replace("\n", " ").replace("\r", "")[:500]
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            _garantir_colunas_processos(conn)
+            row = conn.execute(
+                "SELECT * FROM processos WHERE id = ?", (processo_id,)
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                return {"accepted": False, "reason": "not_found"}
+            if row["status"] not in STATUS_REPROCESSAMENTO_EXPLICITO:
+                conn.rollback()
+                return {
+                    "accepted": False,
+                    "reason": "status_not_allowed",
+                    "status": row["status"],
+                }
+
+            conn.execute(
+                """
+                UPDATE processos
+                   SET reprocessar_solicitado_em = CURRENT_TIMESTAMP,
+                       reprocessar_solicitado_por = ?,
+                       reprocessar_motivo = ?,
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id = ?
+                """,
+                (usuario, motivo_seguro, processo_id),
+            )
+            detalhes = f"Reprocessamento solicitado por {usuario}"
+            if motivo_seguro:
+                detalhes = f"{detalhes}. Motivo: {motivo_seguro}"
+            conn.execute(
+                """
+                INSERT INTO log_execucao (processo_id, etapa, status, mensagem)
+                VALUES (?, 'reprocessamento', 'ok', ?)
+                """,
+                (processo_id, detalhes),
+            )
+            atualizado = conn.execute(
+                "SELECT * FROM processos WHERE id = ?", (processo_id,)
+            ).fetchone()
+            conn.commit()
+            return {"accepted": True, "processo": dict(atualizado)}
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def listar_pendentes(limit: int = 1000, offset: int = 0) -> List[Dict[str, Any]]:
@@ -245,11 +336,54 @@ def listar_logs(processo_id: int) -> List[Dict[str, Any]]:
 
 # Agente controle ------------------------------------------------------------
 
+def _garantir_colunas_agente_controle(conn: sqlite3.Connection) -> None:
+    existentes = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(agente_controle)").fetchall()
+    }
+    for coluna, definicao in COLUNAS_AGENTE_CONTROLE.items():
+        if coluna not in existentes:
+            conn.execute(f"ALTER TABLE agente_controle ADD COLUMN {coluna} {definicao}")
+
+
+def _garantir_colunas_processos(conn: sqlite3.Connection) -> None:
+    existentes = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(processos)").fetchall()
+    }
+    for coluna, definicao in COLUNAS_PROCESSOS.items():
+        if coluna not in existentes:
+            conn.execute(f"ALTER TABLE processos ADD COLUMN {coluna} {definicao}")
+
+
+def _agora_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _snapshot_novo_ciclo() -> str:
+    return json.dumps({"criado_em": _agora_iso()}, ensure_ascii=False)
+
+
+def _obter_controle_agente_conn(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+    _garantir_colunas_agente_controle(conn)
+    row = conn.execute("SELECT * FROM agente_controle WHERE id = 1").fetchone()
+    return dict(row) if row else None
+
+
+def _inserir_controle_padrao(conn: sqlite3.Connection) -> Dict[str, Any]:
+    conn.execute(
+        """
+        INSERT INTO agente_controle (
+            id, comando, status, mensagem, pid, ciclo_snapshot
+        ) VALUES (1, 'parar', 'parado', '', NULL, '{}')
+        """
+    )
+    return _obter_controle_agente_conn(conn) or {}
+
 def obter_controle_agente() -> Optional[Dict[str, Any]]:
     """Retorna o registro de controle do agente (id=1) ou None."""
     with get_conn() as conn:
-        row = conn.execute("SELECT * FROM agente_controle WHERE id = 1").fetchone()
-        return dict(row) if row else None
+        return _obter_controle_agente_conn(conn)
 
 
 def criar_ou_atualizar_controle_agente(
@@ -257,6 +391,10 @@ def criar_ou_atualizar_controle_agente(
     status: Optional[str] = None,
     mensagem: Optional[str] = None,
     pid: Optional[int] = None,
+    ciclo_uuid: Optional[str] = None,
+    ciclo_snapshot: Optional[str] = None,
+    pausado_em: Optional[str] = None,
+    retomado_em: Optional[str] = None,
 ) -> None:
     """
     Upsert na tabela agente_controle (id=1).
@@ -266,22 +404,24 @@ def criar_ou_atualizar_controle_agente(
     with get_conn() as conn:
         try:
             conn.execute("BEGIN IMMEDIATE")
+            _garantir_colunas_agente_controle(conn)
             row = conn.execute("SELECT id FROM agente_controle WHERE id = 1").fetchone()
             if row:
                 campos = []
                 vals = []
-                if comando is not None:
-                    campos.append("comando = ?")
-                    vals.append(comando)
-                if status is not None:
-                    campos.append("status = ?")
-                    vals.append(status)
-                if mensagem is not None:
-                    campos.append("mensagem = ?")
-                    vals.append(mensagem)
-                if pid is not None:
-                    campos.append("pid = ?")
-                    vals.append(pid)
+                for campo, valor in (
+                    ("comando", comando),
+                    ("status", status),
+                    ("mensagem", mensagem),
+                    ("pid", pid),
+                    ("ciclo_uuid", ciclo_uuid),
+                    ("ciclo_snapshot", ciclo_snapshot),
+                    ("pausado_em", pausado_em),
+                    ("retomado_em", retomado_em),
+                ):
+                    if valor is not None:
+                        campos.append(f"{campo} = ?")
+                        vals.append(valor)
                 if campos:
                     campos.append("atualizado_em = CURRENT_TIMESTAMP")
                     conn.execute(
@@ -291,13 +431,161 @@ def criar_ou_atualizar_controle_agente(
                     conn.commit()
             else:
                 conn.execute(
-                    "INSERT INTO agente_controle (id, comando, status, mensagem, pid) VALUES (1, ?, ?, ?, ?)",
-                    (comando or 'parar', status or 'parado', mensagem or '', pid),
+                    """
+                    INSERT INTO agente_controle (
+                        id, comando, status, mensagem, pid, ciclo_uuid,
+                        ciclo_snapshot, pausado_em, retomado_em
+                    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        comando or "parar",
+                        status or "parado",
+                        mensagem or "",
+                        pid,
+                        ciclo_uuid,
+                        ciclo_snapshot or "{}",
+                        pausado_em,
+                        retomado_em,
+                    ),
                 )
                 conn.commit()
         except Exception:
             conn.rollback()
             raise
+
+
+def solicitar_inicio_agente() -> Dict[str, Any]:
+    """Registra um pedido de início ou retomada de ciclo de forma atômica."""
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            controle = _obter_controle_agente_conn(conn) or _inserir_controle_padrao(conn)
+            status = controle.get("status", "parado")
+            if status in ESTADOS_CICLO_ATIVO:
+                conn.rollback()
+                return {"accepted": False, "status": status, "ciclo_uuid": controle.get("ciclo_uuid")}
+
+            retomando = bool(controle.get("ciclo_uuid")) and status in ESTADOS_CICLO_RETOMAVEL
+            ciclo_uuid = controle.get("ciclo_uuid") if retomando else str(uuid.uuid4())
+            ciclo_snapshot = (controle.get("ciclo_snapshot") or "{}") if retomando else _snapshot_novo_ciclo()
+            proximo_status = "aguardando_login" if status == "aguardando_login" else "iniciando"
+
+            ciclo_existente = conn.execute(
+                "SELECT uuid FROM agente_ciclos WHERE uuid = ?",
+                (ciclo_uuid,),
+            ).fetchone()
+            if ciclo_existente:
+                conn.execute(
+                    """
+                    UPDATE agente_ciclos
+                       SET status = ?,
+                           atualizado_em = CURRENT_TIMESTAMP
+                     WHERE uuid = ?
+                    """,
+                    (proximo_status, ciclo_uuid),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO agente_ciclos (uuid, rotulo, status)
+                    VALUES (?, ?, ?)
+                    """,
+                    (ciclo_uuid, _rotulo_ciclo(), proximo_status),
+                )
+
+            conn.execute(
+                """
+                UPDATE agente_controle
+                   SET comando = 'iniciar',
+                       status = ?,
+                       mensagem = ?,
+                       ciclo_uuid = ?,
+                       ciclo_snapshot = ?,
+                       pausado_em = CASE WHEN ? THEN pausado_em ELSE NULL END,
+                       retomado_em = CURRENT_TIMESTAMP,
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id = 1
+                """,
+                (
+                    proximo_status,
+                    "Retomando ciclo pausado." if retomando else "Iniciando novo ciclo.",
+                    ciclo_uuid,
+                    ciclo_snapshot,
+                    retomando,
+                ),
+            )
+            conn.commit()
+            return {
+                "accepted": True,
+                "resumed": retomando,
+                "status": proximo_status,
+                "ciclo_uuid": ciclo_uuid,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def solicitar_parada_agente() -> Dict[str, Any]:
+    """Solicita parada cooperativa preservando UUID e snapshot do ciclo."""
+    with get_conn() as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            controle = _obter_controle_agente_conn(conn) or _inserir_controle_padrao(conn)
+            status = controle.get("status", "parado")
+            if status in {"parado", "pausado", "interrompido", "erro_pausado"}:
+                conn.execute(
+                    """
+                    UPDATE agente_controle
+                       SET comando = 'parar',
+                           atualizado_em = CURRENT_TIMESTAMP
+                     WHERE id = 1
+                    """
+                )
+                conn.commit()
+                return {
+                    "accepted": True,
+                    "already_paused": True,
+                    "status": status,
+                    "ciclo_uuid": controle.get("ciclo_uuid"),
+                }
+
+            ciclo_uuid = controle.get("ciclo_uuid") or str(uuid.uuid4())
+            ciclo_snapshot = controle.get("ciclo_snapshot") or _snapshot_novo_ciclo()
+            conn.execute(
+                """
+                UPDATE agente_controle
+                   SET comando = 'parar',
+                       status = 'parando',
+                       mensagem = 'Parada solicitada. Pausando no próximo ponto seguro.',
+                       ciclo_uuid = ?,
+                       ciclo_snapshot = ?,
+                       pausado_em = COALESCE(pausado_em, CURRENT_TIMESTAMP),
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id = 1
+                """,
+                (ciclo_uuid, ciclo_snapshot),
+            )
+            conn.commit()
+            return {
+                "accepted": True,
+                "already_paused": False,
+                "status": "parando",
+                "ciclo_uuid": ciclo_uuid,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def pausar_ciclo_agente(status: str, mensagem: str) -> None:
+    """Marca o ciclo atual como pausado sem apagar UUID/snapshot."""
+    criar_ou_atualizar_controle_agente(
+        comando="parar",
+        status=status,
+        mensagem=mensagem,
+        pausado_em=_agora_iso(),
+    )
 
 
 def listar_aprovados(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
@@ -307,6 +595,342 @@ def listar_aprovados(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
             (limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# Ciclos do agente -----------------------------------------------------------
+
+def _rotulo_ciclo(agora: Optional[datetime] = None) -> str:
+    base = agora or datetime.now()
+    return base.strftime("Ciclo %d/%m/%Y %H:%M")
+
+
+def _numero_sem_mascara(numero: str) -> str:
+    return re.sub(r"\D", "", numero)
+
+
+def _recalcular_contadores_ciclo(conn: sqlite3.Connection, ciclo_uuid: str) -> None:
+    row = conn.execute(
+        """
+        SELECT
+            COUNT(*) AS total_membros,
+            SUM(CASE WHEN origem = 'novo_pje' THEN 1 ELSE 0 END) AS total_novos,
+            SUM(CASE WHEN origem = 'rearmado' THEN 1 ELSE 0 END) AS total_rearmados
+        FROM agente_ciclo_membros
+        WHERE ciclo_uuid = ?
+        """,
+        (ciclo_uuid,),
+    ).fetchone()
+    status_rows = conn.execute(
+        """
+        SELECT p.status, COUNT(*) AS total
+        FROM agente_ciclo_membros m
+        JOIN processos p ON p.id = m.processo_id
+        WHERE m.ciclo_uuid = ?
+        GROUP BY p.status
+        """,
+        (ciclo_uuid,),
+    ).fetchall()
+    por_status = {r["status"]: r["total"] for r in status_rows}
+    total_concluidos = sum(
+        por_status.get(status, 0)
+        for status in ("aguardando_aprovacao", "aprovado", "emitido")
+    )
+    total_erros = por_status.get("erro", 0)
+    conn.execute(
+        """
+        UPDATE agente_ciclos
+           SET total_membros = ?,
+               total_novos = ?,
+               total_rearmados = ?,
+               total_concluidos = ?,
+               total_erros = ?,
+               atualizado_em = CURRENT_TIMESTAMP
+         WHERE uuid = ?
+        """,
+        (
+            row["total_membros"] or 0,
+            row["total_novos"] or 0,
+            row["total_rearmados"] or 0,
+            total_concluidos,
+            total_erros,
+            ciclo_uuid,
+        ),
+    )
+
+
+def criar_ciclo_agente() -> Dict[str, Any]:
+    """Cria um ciclo persistido para o comando Iniciar Agente."""
+    ciclo_uuid = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        ativo = conn.execute(
+            """
+            SELECT *
+            FROM agente_ciclos
+            WHERE status IN ('iniciando', 'executando')
+            ORDER BY criado_em DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if ativo:
+            conn.rollback()
+            return dict(ativo)
+        conn.execute(
+            """
+            INSERT INTO agente_ciclos (uuid, rotulo, status)
+            VALUES (?, ?, 'iniciando')
+            """,
+            (ciclo_uuid, _rotulo_ciclo()),
+        )
+        conn.commit()
+    ciclo = obter_ciclo(ciclo_uuid)
+    if ciclo is None:
+        raise RuntimeError("Ciclo criado não encontrado")
+    return ciclo
+
+
+def obter_ciclo_atual() -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        controle = _obter_controle_agente_conn(conn)
+        if controle and controle.get("ciclo_uuid"):
+            ciclo = conn.execute(
+                "SELECT * FROM agente_ciclos WHERE uuid = ?",
+                (controle["ciclo_uuid"],),
+            ).fetchone()
+            if ciclo:
+                return dict(ciclo)
+
+        row = conn.execute(
+            """
+            SELECT *
+            FROM agente_ciclos
+            WHERE status IN ('iniciando', 'executando', 'aguardando_login')
+            ORDER BY criado_em DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def obter_ultimo_ciclo() -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM agente_ciclos ORDER BY criado_em DESC LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def obter_ciclo(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM agente_ciclos WHERE uuid = ?", (ciclo_uuid,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def listar_membros_ciclo(ciclo_uuid: str) -> List[Dict[str, Any]]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                m.id,
+                m.ciclo_uuid,
+                m.processo_id,
+                m.numero,
+                m.numero_sem_mascara,
+                m.origem,
+                m.status_snapshot,
+                m.criado_em,
+                p.status AS status_atual
+            FROM agente_ciclo_membros m
+            JOIN processos p ON p.id = m.processo_id
+            WHERE m.ciclo_uuid = ?
+            ORDER BY m.id
+            """,
+            (ciclo_uuid,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def obter_ciclo_com_membros(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
+    ciclo = obter_ciclo(ciclo_uuid)
+    if not ciclo:
+        return None
+    ciclo["membros"] = listar_membros_ciclo(ciclo_uuid)
+    return ciclo
+
+
+def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje: List[str]) -> Dict[str, Any]:
+    """Fecha o lote do ciclo com novos do PJE e rearmados explicitamente."""
+    vistos = set()
+    numeros_normalizados = []
+    for numero in numeros_pje:
+        if numero in vistos:
+            continue
+        vistos.add(numero)
+        numeros_normalizados.append(numero)
+
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        ciclo = conn.execute(
+            "SELECT * FROM agente_ciclos WHERE uuid = ?", (ciclo_uuid,)
+        ).fetchone()
+        if not ciclo:
+            conn.rollback()
+            raise ValueError(f"Ciclo não encontrado: {ciclo_uuid}")
+        if ciclo["fechado_em"]:
+            membros = conn.execute(
+                """
+                SELECT
+                    m.id,
+                    m.ciclo_uuid,
+                    m.processo_id,
+                    m.numero,
+                    m.numero_sem_mascara,
+                    m.origem,
+                    m.status_snapshot,
+                    m.criado_em,
+                    p.status AS status_atual
+                FROM agente_ciclo_membros m
+                JOIN processos p ON p.id = m.processo_id
+                WHERE m.ciclo_uuid = ?
+                ORDER BY m.id
+                """,
+                (ciclo_uuid,),
+            ).fetchall()
+            ciclo_atual = dict(ciclo)
+            ciclo_atual["membros"] = [dict(r) for r in membros]
+            conn.rollback()
+            return ciclo_atual
+
+        _garantir_colunas_processos(conn)
+        rearmados = conn.execute(
+            """
+            SELECT id, numero, numero_sem_mascara, status
+            FROM processos
+            WHERE reprocessar_solicitado_em IS NOT NULL
+            ORDER BY reprocessar_solicitado_em, criado_em
+            """
+        ).fetchall()
+        rearmados_consumidos = []
+        for rearmado in rearmados:
+            rearmados_consumidos.append(rearmado["id"])
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO agente_ciclo_membros (
+                    ciclo_uuid,
+                    processo_id,
+                    numero,
+                    numero_sem_mascara,
+                    origem,
+                    status_snapshot
+                ) VALUES (?, ?, ?, ?, 'rearmado', ?)
+                """,
+                (
+                    ciclo_uuid,
+                    rearmado["id"],
+                    rearmado["numero"],
+                    rearmado["numero_sem_mascara"],
+                    rearmado["status"],
+                ),
+            )
+
+        if rearmados_consumidos:
+            placeholders = ",".join("?" for _ in rearmados_consumidos)
+            conn.execute(
+                f"""
+                UPDATE processos
+                   SET reprocessar_solicitado_em = NULL,
+                       reprocessar_solicitado_por = NULL,
+                       reprocessar_motivo = NULL,
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id IN ({placeholders})
+                """,
+                rearmados_consumidos,
+            )
+
+        for numero in numeros_normalizados:
+            existente = conn.execute(
+                "SELECT id, status, numero_sem_mascara FROM processos WHERE numero = ?",
+                (numero,),
+            ).fetchone()
+            if existente is None:
+                numero_sem_mascara = _numero_sem_mascara(numero)
+                cur = conn.execute(
+                    "INSERT INTO processos (numero, numero_sem_mascara) VALUES (?, ?)",
+                    (numero, numero_sem_mascara),
+                )
+                processo_id = cur.lastrowid
+                origem = "novo_pje"
+                status_snapshot = "pendente"
+            elif existente["status"] != "pendente":
+                continue
+            else:
+                continue
+
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO agente_ciclo_membros (
+                    ciclo_uuid,
+                    processo_id,
+                    numero,
+                    numero_sem_mascara,
+                    origem,
+                    status_snapshot
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ciclo_uuid,
+                    processo_id,
+                    numero,
+                    numero_sem_mascara,
+                    origem,
+                    status_snapshot,
+                ),
+            )
+
+        conn.execute(
+            """
+            UPDATE agente_ciclos
+               SET status = 'executando',
+                   fechado_em = COALESCE(fechado_em, CURRENT_TIMESTAMP),
+                   atualizado_em = CURRENT_TIMESTAMP
+             WHERE uuid = ?
+            """,
+            (ciclo_uuid,),
+        )
+        _recalcular_contadores_ciclo(conn, ciclo_uuid)
+        conn.commit()
+
+    ciclo = obter_ciclo_com_membros(ciclo_uuid)
+    if ciclo is None:
+        raise RuntimeError("Ciclo fechado não encontrado")
+    return ciclo
+
+
+def atualizar_contadores_ciclo(ciclo_uuid: str) -> None:
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _recalcular_contadores_ciclo(conn, ciclo_uuid)
+        conn.commit()
+
+
+def finalizar_ciclo(ciclo_uuid: str, status: str = "concluido", erro_msg: str = "") -> None:
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _recalcular_contadores_ciclo(conn, ciclo_uuid)
+        conn.execute(
+            """
+            UPDATE agente_ciclos
+               SET status = ?,
+                   erro_msg = ?,
+                   finalizado_em = CURRENT_TIMESTAMP,
+                   atualizado_em = CURRENT_TIMESTAMP
+             WHERE uuid = ?
+            """,
+            (status, erro_msg, ciclo_uuid),
+        )
+        conn.commit()
 
 
 # Tarefas -------------------------------------------------------------------

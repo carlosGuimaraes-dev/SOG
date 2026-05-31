@@ -55,6 +55,17 @@ const mockProcesso = {
   documentos: [],
 }
 
+function processoComStatus(status: string, extraProcesso = {}) {
+  return {
+    ...mockProcesso,
+    processo: {
+      ...mockProcesso.processo,
+      status,
+      ...extraProcesso,
+    },
+  }
+}
+
 function renderDetalhe() {
   return render(
     <MemoryRouter initialEntries={['/detalhe/1']}>
@@ -135,6 +146,63 @@ describe('Detalhe', () => {
       expect(mockedPost).toHaveBeenCalledWith('/rejeitar/1', { observacao: 'Obs de teste' })
     })
     vi.unstubAllGlobals()
+  })
+
+  it('não exibe reprocessar para status não elegível', async () => {
+    mockedGet.mockResolvedValueOnce({ data: mockProcesso })
+    renderDetalhe()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /aprovar processo/i })).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: /reprocessar processo/i })).not.toBeInTheDocument()
+  })
+
+  it.each(['erro', 'pendente_manual', 'rejeitado'])(
+    'chama reprocessar para status %s',
+    async (status) => {
+      mockedGet
+        .mockResolvedValueOnce({ data: processoComStatus(status) })
+        .mockResolvedValueOnce({
+          data: processoComStatus(status, {
+            reprocessar_solicitado_em: '2026-05-30T00:00:00',
+          }),
+        })
+      mockedPost.mockResolvedValueOnce({ data: {} })
+      vi.stubGlobal('confirm', () => true)
+
+      renderDetalhe()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /reprocessar processo/i })).toBeInTheDocument()
+      })
+
+      const textarea = screen.getByLabelText(/observações do operador/i)
+      fireEvent.change(textarea, { target: { value: 'Motivo teste' } })
+      fireEvent.click(screen.getByRole('button', { name: /reprocessar processo/i }))
+
+      await waitFor(() => {
+        expect(mockedPost).toHaveBeenCalledWith('/processos/1/reprocessar', {
+          motivo: 'Motivo teste',
+        })
+      })
+      vi.unstubAllGlobals()
+    }
+  )
+
+  it('bloqueia reprocessar quando já existe solicitação pendente', async () => {
+    mockedGet.mockResolvedValueOnce({
+      data: processoComStatus('erro', {
+        reprocessar_solicitado_em: '2026-05-30T00:00:00',
+      }),
+    })
+    renderDetalhe()
+
+    const button = await screen.findByRole('button', { name: /reprocessar processo/i })
+
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('Reprocessamento solicitado')
   })
 
   it('exibe tabela de sucumbentes', async () => {
