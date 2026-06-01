@@ -25,11 +25,23 @@ function File-Fingerprint($Path) {
     return $null
   }
   $item = Get-Item $Path
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $hashBytes = $sha256.ComputeHash($stream)
+    } finally {
+      $sha256.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
+  $hash = [System.BitConverter]::ToString($hashBytes).Replace("-", "")
   return [ordered]@{
     path = $Path
     exists = $true
     length = $item.Length
-    sha256 = (Get-FileHash -Algorithm SHA256 -Path $Path).Hash
+    sha256 = $hash
   }
 }
 
