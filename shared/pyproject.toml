@@ -14,3 +14,6 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["sog_shared*"]
+
+[tool.setuptools.package-data]
+sog_shared = ["schema.sql"]

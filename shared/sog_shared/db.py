@@ -113,11 +113,14 @@ def init_db():
     conn = sqlite3.connect(DB_PATH, timeout=30)
     try:
         _setup_conn(conn)
+        _pre_migrar_tabelas_existentes(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         _garantir_colunas_processos(conn)
         _garantir_colunas_agente_controle(conn)
         _garantir_colunas_agente_ciclo_membros(conn)
         _garantir_colunas_log_execucao(conn)
+        if _obter_controle_agente_conn(conn) is None:
+            _inserir_controle_padrao(conn)
         conn.commit()
     finally:
         conn.close()
@@ -547,6 +550,18 @@ def _garantir_colunas_log_execucao(conn: sqlite3.Connection) -> None:
             WHERE chave_idempotencia IS NOT NULL
         """
     )
+
+
+def _pre_migrar_tabelas_existentes(conn: sqlite3.Connection) -> None:
+    """Prepara bancos antigos para índices do schema que usam colunas novas."""
+    tabelas = {
+        row["name"]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    if "log_execucao" in tabelas:
+        _garantir_colunas_log_execucao(conn)
 
 
 def _agora_iso() -> str:

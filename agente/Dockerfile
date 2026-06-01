@@ -26,13 +26,13 @@ RUN wget -q "$SUPERCRONIC_URL" -O /tmp/supercronic && \
 FROM python:3.12-slim
 
 # Dependências de sistema mínimas para Chromium headless.
-# Removidas: libcups2 (impressão), libasound2 (áudio), libatspi2.0-0 (acessibilidade),
-# wget/procps (baixados no builder; healthcheck em Python puro).
+# wget/procps ficam fora do runtime; o healthcheck usa Python puro.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libnss3 libnspr4 libatk1.0-0 \
-    libatk-bridge2.0-0 libdrm2 libxkbcommon0 \
+    libatk-bridge2.0-0 libatspi2.0-0t64 libdrm2 libxkbcommon0 \
     libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
     libpango-1.0-0 libcairo2 \
+    libcups2t64 libasound2t64 \
     fonts-liberation libfontconfig1 \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -47,9 +47,6 @@ COPY --from=builder /root/.cache/ms-playwright /home/appuser/.cache/ms-playwrigh
 COPY --from=builder /tmp/supercronic /usr/local/bin/supercronic
 RUN chown -R appuser:appuser /opt/venv /home/appuser/.cache
 
-# Remover drivers Playwright desnecessários (macOS, Windows) para economizar espaço
-RUN find /opt/venv/lib -path "*/playwright/driver*" \( -name "*.exe" -o -name "*mac*" \) -delete || true
-
 ENV PATH="/opt/venv/bin:$PATH" \
     PLAYWRIGHT_BROWSERS_PATH=/home/appuser/.cache/ms-playwright \
     PYTHONUNBUFFERED=1
@@ -62,14 +59,15 @@ RUN chmod 0600 /app/crontab
 USER appuser
 WORKDIR /app
 
-# Healthcheck em Python puro — verifica se supercronic está rodando em qualquer processo
+# Healthcheck em Python puro — verifica se o serviço longo do agente está rodando.
 RUN printf '%s\n' \
     'import os, sys' \
     'for pid in os.listdir("/proc"):' \
     '    if pid.isdigit():' \
     '        try:' \
     '            with open(f"/proc/{pid}/cmdline", "rb") as f:' \
-    '                if b"supercronic" in f.read():' \
+    '                cmdline = f.read()' \
+    '                if b"/app/src/servico.py" in cmdline:' \
     '                    sys.exit(0)' \
     '        except Exception:' \
     '            pass' \
@@ -78,4 +76,4 @@ RUN printf '%s\n' \
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python /app/healthcheck.py
 
-CMD ["supercronic", "/app/crontab"]
+CMD ["python", "/app/src/servico.py"]

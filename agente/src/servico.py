@@ -102,11 +102,15 @@ class AgenteServico:
         signal.signal(signal.SIGTERM, self._handle_signal)
 
         init_config()
-        validar_requisitos_homologacao_local()
         init_db()
 
         # Garante registro de controle sem apagar ciclo pausado/retomável.
         self._registrar_inicio_servico()
+
+        try:
+            validar_requisitos_homologacao_local()
+        except RuntimeError as e:
+            self._pausar_ciclo("erro_pausado", str(e))
 
         info(f"AgenteServico iniciado. PID={os.getpid()}. Aguardando comando...")
 
@@ -155,6 +159,14 @@ class AgenteServico:
             "parando",
         }:
             self._pausar_ciclo("interrompido", "Ciclo pausado por solicitação do dashboard.")
+            return
+
+        if status_db == "parado":
+            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+            return
+
+        if status_db in {"pausado", "interrompido", "erro_pausado", "erro"} and comando != "iniciar":
+            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
             return
 
         # Estado inicial/retomado + comando iniciar → autenticar
