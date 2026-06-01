@@ -1,14 +1,18 @@
 export interface Processo {
   id: number
   numero: string
+  numero_sem_mascara?: string
   status: string
   criado_em: string
+  atualizado_em?: string
   tentativas?: number
   erro_msg?: string
   reprocessar_solicitado_em?: string
   reprocessar_solicitado_por?: string
   reprocessar_motivo?: string
   valor_total_recolher?: string
+  polo_ativo?: string
+  polo_passivo?: string
 }
 
 export interface Log {

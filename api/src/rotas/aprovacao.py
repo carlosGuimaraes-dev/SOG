@@ -41,6 +41,9 @@ def aprovar_processo(
             "INSERT INTO log_execucao (processo_id, etapa, status, mensagem) VALUES (?, ?, ?, ?)",
             (processo_id, "aprovacao", "ok", f"Aprovado por {user}"),
         )
+        ciclo_uuid = db._obter_ciclo_mais_recente_do_processo_conn(conn, processo_id)
+        if ciclo_uuid:
+            db._recalcular_contadores_ciclo(conn, ciclo_uuid)
         conn.commit()
 
     return {"message": "Aprovação registrada. O agente processará a emissão em breve."}

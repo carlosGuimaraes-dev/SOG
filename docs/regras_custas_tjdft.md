@@ -1,3 +1,20 @@
+# Template de mapeamento de custas TJDFT
+
+Este arquivo **não** é uma fonte homologada de regras de negócio do SOG.
+
+Uso correto:
+
+- servir como formulário de coleta manual
+- registrar hipóteses ou insumos a validar com a área responsável
+- apoiar futura implementação depois de validação externa
+
+Uso incorreto:
+
+- documentar o comportamento atual do sistema como se já estivesse confirmado
+- afirmar regras TJDFT apenas com base neste arquivo
+
+---
+
 crie # Mapeamento de Custas — SISTJWEB / TJDFT
 
 Este documento serve para anotar quais itens da guia de custas são usados em cada área do direito no SISTJWEB do TJDFT. Com essas informações, o sistema SOG consegue calcular as custas automaticamente.

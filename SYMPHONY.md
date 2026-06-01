@@ -1,3 +1,6 @@
+> Status deste arquivo: artefato histórico de orquestração.
+> Ele registra contexto legado de execução e não substitui a documentação
+> canônica do produto e do runtime atual.
 ---
 symphony:
   version: 1

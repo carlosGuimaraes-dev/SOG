@@ -1,109 +1,130 @@
-# SOG — Sistema de Ordem de Guias (Custas Processuais TJDFT)
+# SOG
 
-Sistema automatizado para extração, preenchimento e emissão de guias de custas processuais no TJDFT. Integra PJE, SISTJWEB e API Datajud (CNJ) com dashboard de aprovação humana.
+Sistema para controlar e emitir guias finais de custas processuais no TJDFT.
+O repositório combina:
 
-## Arquitetura
+- `agente/`: automação Python/Playwright para PJe, SISTJWEB e integrações auxiliares
+- `api/`: backend FastAPI do dashboard operacional
+- `frontend/`: dashboard React para login, fila, detalhe, histórico e ciclo atual
+- `shared/`: acesso compartilhado ao SQLite e contratos comuns
+- `nginx/`: ponto de entrada HTTP do Compose
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Agente    │────▶│   API       │◀────│  Frontend   │
-│  (Python)   │     │  (FastAPI)  │     │  (React)    │
-└─────────────┘     └─────────────┘     └─────────────┘
-       │                   │                   │
-       ▼                   ▼                   ▼
-   PJE/SISTJWEB        SQLite            Nginx
-   Datajud CNJ      (shared vol)       (proxy/ssl)
-```
+## Estado atual
 
-## Stack
+O dashboard já controla o agente por API e SQLite, com suporte a:
 
-- **Agente**: Python 3.12 + Playwright (automação PJE/SISTJWEB)
-- **API**: FastAPI + JWT Auth + SQLite
-- **Frontend**: React 18 + Tailwind CSS + Vite
-- **Infra**: Docker Compose local + Nginx
+- autenticação por cookies `httpOnly`
+- comandos `iniciar` e `parar` do agente
+- acompanhamento de ciclo atual e último ciclo
+- reprocessamento de processos elegíveis
+- screenshot autenticado por processo
+- fila, detalhe e histórico no frontend
+
+Há um desalinhamento importante entre arquitetura desejada e empacotamento atual:
+
+- o código do serviço longo do agente existe em `agente/src/servico.py`
+- a imagem entregue em Docker ainda sobe `supercronic` com `agente/crontab`
+
+Por isso, este README descreve o comportamento implementado e aponta quando algo
+continua como direção arquitetural, não como estado fechado.
+
+## Documentação canônica
+
+- [docs/README.md](docs/README.md): mapa da documentação e classificação de artefatos históricos
+- [docs/architecture.md](docs/architecture.md): componentes, fluxo e persistência
+- [docs/api.md](docs/api.md): autenticação, rotas principais e estados
+- [docs/operacao-local-docker.md](docs/operacao-local-docker.md): execução local em Docker e limitações
+- [frontend/README.md](frontend/README.md): visão do dashboard e experiência atual de frontend
 
 ## Requisitos
 
-- Docker + Docker Compose
-- Node.js 20+ (apenas para desenvolvimento fora do Docker)
-- Python 3.12+ (apenas para desenvolvimento/testes fora do Docker)
+- Docker e Docker Compose
+- Node.js 20+ para desenvolvimento local do frontend
+- Python 3.12+ para desenvolvimento local da API ou do agente
 
-## Setup
+## Configuração
 
-### 1. Clone e configure
+O projeto usa dois arquivos de ambiente:
+
+- `.env.api`: configura o serviço FastAPI
+- `.env.agente`: configura a automação e integrações do agente
+
+Crie ambos a partir de `.env.example`:
 
 ```bash
-git clone git@github.com:carlosGuimaraes-dev/SOG.git
-cd SOG
-cp .env.example .env
-# Edite .env com as chaves de serviço necessárias
+cp .env.example .env.api
+cp .env.example .env.agente
 ```
 
-### 2. Variáveis de ambiente (.env)
+Revise os blocos correspondentes dentro do próprio `.env.example` antes de subir
+o Compose. Em especial:
 
-```env
-# PJE
-PJE_URL=https://pje.tjdft.jus.br/...
-PJE_ETIQUETA=SHEILA DE DEUS (TREINAMENTO)
+- `DASHBOARD_SENHA_HASH` precisa ser um hash bcrypt válido
+- `JWT_SECRET_KEY` precisa ter pelo menos 32 caracteres
+- PJe e SISTJWEB usam login interativo; não há usuário/senha desses sistemas no `.env`
+- Telegram é tratado como obrigatório para homologação local do agente
 
-# SISTJWEB
-SISTJ_URL=https://sistj.tjdft.jus.br/sistj/sistj
+Para gerar o hash bcrypt:
 
-# Datajud API
-DATAJUD_API_KEY=sua_chave
-DATAJUD_URL=https://api-publica.datajud.cnj.jus.br/api_publica_tjdft/_search
-
-# Dashboard
-DASHBOARD_USUARIO=admin
-DASHBOARD_SENHA_HASH=$2b$12$...  # bcrypt hash
-
-# Notificação (opcional)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORTA=587
-SMTP_USUARIO=...
-SMTP_SENHA=...
-EMAIL_DESTINO=...
+```bash
+python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"
 ```
 
-PJE e SISTJWEB usam SSO com 2FA. O agente abre um navegador visível quando a
-sessão expira; o usuário faz o login manualmente e o sistema salva o
-`storage_state` para reutilizar a sessão. Não configure usuário ou senha desses
-sistemas em arquivos `.env`.
+## Subir com Docker
 
-> Para gerar o hash bcrypt: `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`
+Produção local:
 
-### 3. Operação local em Docker
+```bash
+docker-compose up -d --build
+```
 
-O modo operacional alvo é local e totalmente containerizado. O agente roda como
-serviço longo dentro do Docker Compose, sem cron e sem VPS.
+Desenvolvimento:
 
-Fluxo esperado:
+```bash
+docker-compose -f docker-compose.dev.yml up -d --build
+```
 
-1. Subir o Compose.
-2. Acessar o dashboard.
-3. Clicar em **Iniciar Agente**.
-4. O agente abre um navegador interativo containerizado para SSO/2FA do PJe e
-   SISTJWEB.
-5. Após o login manual, o agente salva `storage_state` em volume persistente e
-   inicia o trabalho.
+URLs úteis:
 
-Detalhes: [docs/operacao-local-docker.md](docs/operacao-local-docker.md).
+| Ambiente | URL | Observação |
+|---|---|---|
+| Compose principal | <http://localhost> | entrada via nginx |
+| Compose principal | <http://localhost/api/v1/health> | health da API via nginx |
+| Compose dev | <http://localhost:8080> | nginx dev |
+| Compose dev | <http://localhost:3001> | frontend Vite |
 
-### 4. Dev Local (sem Docker)
+## Fluxo operacional resumido
 
-**API + Agente:**
+1. O operador acessa o dashboard e faz login.
+2. O frontend consulta `/api/v1/auth/me` e as rotas operacionais via cookies.
+3. O dashboard envia comandos para `/api/v1/agente/iniciar` ou `/api/v1/agente/parar`.
+4. A API grava o controle no SQLite compartilhado.
+5. O agente processa ciclos, filas e tarefas assíncronas, atualizando tabelas de
+   `processos`, `agente_controle`, `agente_ciclos`, `agente_ciclo_membros` e
+   `tarefas`.
+
+## Desenvolvimento fora do Docker
+
+API:
+
+```bash
+cd api
+pip install -r requirements.txt
+pip install -e ../shared
+uvicorn src.app:app --reload --port 8000
+```
+
+Agente:
 
 ```bash
 cd agente
 pip install -r requirements.txt
+pip install -e ../shared
 playwright install chromium
-
-cd ../api
-pip install -r requirements.txt
-uvicorn src.app:app --reload --port 8000
+python src/servico.py
 ```
 
-**Frontend:**
+Frontend:
 
 ```bash
 cd frontend
@@ -111,163 +132,15 @@ npm install
 npm run dev
 ```
 
-## Subir o Projeto
-
-### Docker (Produção local)
-
-```bash
-docker-compose up -d --build
-```
-
-### Docker Dev (Hot reload)
-
-```bash
-docker-compose -f docker-compose.dev.yml up -d --build
-```
-
-| Serviço | URL |
-|---------|-----|
-| Dashboard | <http://localhost> |
-| API direta | <http://localhost:8000> |
-| Swagger | <http://localhost:8000/docs> |
-
-### Login
-
-Como o `DASHBOARD_SENHA_HASH` no `.env` está com placeholder inválido, o sistema entra em **modo desenvolvimento**:
-
-- **Usuário:** `admin`
-- **Senha:** qualquer coisa
-
-> Para definir uma senha real, gere o hash:  
-> `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`  
-> e cole no `.env` como `DASHBOARD_SENHA_HASH`.
-
-### Comandos úteis
-
-```bash
-# Ver status dos containers
-docker-compose -f docker-compose.dev.yml ps
-
-# Logs em tempo real
-docker-compose -f docker-compose.dev.yml logs -f api
-
-# Parar tudo
-docker-compose -f docker-compose.dev.yml down
-
-# Rebuildar só a API
-docker-compose -f docker-compose.dev.yml up -d --build api
-```
-
 ## Testes
 
 ```bash
-# Todos os testes
 pytest agente/tests/ api/tests/ -v
-
-# Apenas agente
-pytest agente/tests/ -v
-
-# Apenas API
-pytest api/tests/ -v
+cd frontend && npm test
 ```
 
-## Estrutura
+## Limites e ambiguidades já conhecidas
 
-```text
-SOG/
-├── agente/              # Automação Playwright
-│   ├── src/
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── regras.py
-│   │   ├── modulos/
-│   │   │   ├── pje.py
-│   │   │   ├── sistjweb.py
-│   │   │   ├── datajud.py
-│   │   │   ├── extrator_pdf.py
-│   │   │   ├── extrator_sentenca.py
-│   │   │   ├── parser.py
-│   │   │   ├── emissor.py
-│   │   │   ├── retry.py
-│   │   │   └── selectors.py
-│   │   └── banco/
-│   │       ├── db.py
-│   │       └── schema.sql
-│   └── tests/
-│       ├── test_datajud.py
-│       ├── test_extrator_pdf.py
-│       ├── test_parser.py
-│       └── test_regras.py
-├── api/                 # FastAPI + JWT
-│   ├── src/
-│   │   ├── app.py
-│   │   ├── auth.py
-│   │   └── rotas/
-│   │       ├── auth.py
-│   │       ├── processos.py
-│   │       ├── aprovacao.py
-│   │       └── historico.py
-│   └── tests/
-│       └── test_api.py
-├── frontend/            # React + Tailwind
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   ├── index.css
-│   │   ├── lib/
-│   │   │   ├── api.ts
-│   │   │   └── auth.tsx
-│   │   ├── components/ui/
-│   │   │   ├── Button.tsx
-│   │   │   ├── Card.tsx
-│   │   │   ├── Badge.tsx
-│   │   │   ├── Alert.tsx
-│   │   │   ├── Input.tsx
-│   │   │   └── Skeleton.tsx
-│   │   ├── hooks/
-│   │   │   └── useToast.ts
-│   │   └── pages/
-│   │       ├── Login.tsx
-│   │       ├── Fila.tsx
-│   │       ├── Detalhe.tsx
-│   │       └── Historico.tsx
-├── nginx/
-│   ├── nginx.conf
-│   └── nginx-dev.conf
-├── docker-compose.yml
-├── docker-compose.dev.yml
-└── .env
-```
-
-## API Endpoints
-
-| Método | Endpoint | Auth | Descrição |
-|--------|----------|------|-----------|
-| POST | `/auth/login` | Público | Login JWT |
-| POST | `/auth/refresh` | Público | Refresh token |
-| GET | `/health` | Público | Health check |
-| GET | `/processos` | JWT | Lista pendentes |
-| GET | `/processos/{id}` | JWT | Detalhes |
-| POST | `/aprovar/{id}` | JWT | Aprova e emite |
-| POST | `/rejeitar/{id}` | JWT | Rejeita com obs |
-| GET | `/historico` | JWT | Histórico paginado |
-
-## Fluxo de Trabalho
-
-1. **Agente** (serviço longo iniciado pelo dashboard) coleta processos do PJE
-2. Para cada processo: consulta Datajud + extrai documentos + extrai custas iniciais do PDF + preenche SISTJWEB
-3. Status → `aguardando_aprovacao`
-4. **Operador** revisa no dashboard e clica **Aprovar** ou **Rejeitar**
-5. Ao aprovar: agente emite PDF e anexa no PJE
-6. Status → `emitido`
-
-## Segurança
-
-- `.env` nunca deve ser commitado
-- JWT com refresh tokens
-- Senhas armazenadas com bcrypt
-- Screenshots em `/dados/screenshots/` (volume Docker)
-
-## Licença
-
-Uso interno.
+- `docs/regras_custas_tjdft.md` é um template de coleta manual, não uma verdade homologada de regra de negócio.
+- `docs/PRD.md` e `SYMPHONY.md` permanecem como artefatos de origem/histórico.
+- A persistência do `storage_state` do Playwright não está descrita de forma consistente entre código e Compose; veja a nota em `docs/operacao-local-docker.md`.

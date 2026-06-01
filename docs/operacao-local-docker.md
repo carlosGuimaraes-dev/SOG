@@ -1,60 +1,69 @@
-# Operacao local em Docker
+# Operação local em Docker
 
-Este documento registra a arquitetura alvo atual do SOG.
+Este documento descreve o que o repositório entrega hoje e explicita onde a
+implementação ainda diverge da arquitetura desejada.
 
-## Decisao atual
+## Serviços do Compose principal
 
-O sistema deve rodar localmente com todos os componentes em Docker Compose:
-
-- `nginx`
-- `frontend`
-- `api`
 - `agente`
+- `api`
+- `frontend`
+- `nginx`
 
-O projeto nao deve depender de VPS, cron do host, Python/Node instalados no host
-para operacao normal, nem execucao manual recorrente do agente fora do Compose.
+O `nginx` é o ponto de entrada do ambiente principal. Em desenvolvimento existe
+também `docker-compose.dev.yml`, com Vite exposto em `localhost:3001` e nginx em
+`localhost:8080`.
 
-## Agente
+## Estado implementado hoje
 
-O agente deve ser um processo longo dentro do container, sem cron. O container
-permanece ativo aguardando comandos do dashboard via SQLite.
+### API e frontend
 
-Fluxo esperado:
+- A API sobe com healthcheck local em `http://localhost:8000/health` dentro do container.
+- O frontend sobe em container separado e é consumido via nginx.
+- A autenticação do dashboard usa cookies `httpOnly`.
 
-1. O usuario acessa o dashboard.
-2. O usuario clica em `Iniciar Agente`.
-3. A API grava `comando='iniciar'` em `agente_controle`.
-4. O agente, ja em execucao no container, le o comando.
-5. O agente abre um navegador interativo dentro do ambiente containerizado.
-6. O usuario faz login SSO/2FA no PJe e no SISTJWEB.
-7. O agente salva `storage_state` em volume persistente.
-8. O agente executa o ciclo de trabalho: coleta, preenche, acompanha aprovados,
-   emite e anexa.
+### Agente
 
-## Navegador interativo
+- O código do serviço longo existe em `agente/src/servico.py`.
+- O container publicado ainda inicializa `supercronic` com `CMD ["supercronic", "/app/crontab"]`.
+- O crontab roda a entrada empacotada do agente; portanto, a documentação não
+  deve afirmar que a migração para serviço longo puro já foi concluída.
 
-Como o agente roda em Docker, o navegador do fluxo SSO/2FA deve ser exposto de
-forma containerizada. A abordagem preferida e uma interface de browser remoto
-do proprio container, por exemplo noVNC ou mecanismo equivalente.
+### Banco e arquivos
 
-O usuario usa o navegador local apenas para acessar essa interface. O Chromium,
-cookies, sessoes e `storage_state` ficam isolados no container/volume Docker.
+- `./dados` é montado em `agente` e `api`.
+- O SQLite compartilhado fica em `/dados/custas.db`.
+- Screenshots e demonstrativos também usam `./dados`.
 
-Nao usar login programatico com usuario/senha de PJe/SISTJWEB. Essas credenciais
-nao devem existir em arquivos `.env`.
+## Fluxo operacional confirmado
 
-## Persistencia
+1. Subir o Compose.
+2. Acessar o dashboard.
+3. Fazer login com as credenciais da API.
+4. Acionar o agente pelo dashboard.
+5. A API grava comandos em `agente_controle`.
+6. O agente atualiza `agente_controle`, `agente_ciclos`, `agente_ciclo_membros`
+   e demais tabelas operacionais ao processar ciclos e tarefas.
 
-O Compose deve persistir:
+## Login interativo e `storage_state`
 
-- banco SQLite em `./dados`
-- screenshots e demonstrativos em `./dados`
-- `storage_state` do PJe/SISTJWEB em volume Docker ou subdiretorio persistente
-  controlado pelo Compose
+O código usa `storage_state` do Playwright para PJe e SISTJWEB, mas há um ponto
+que precisa ser tratado com cuidado:
 
-## Fora de escopo
+- o caminho default vem de `Path.home() / ".sog" / "auth"`
+- o Compose atual não documenta nem monta um volume dedicado para esse diretório
 
-- Rodar o agente no host nativo.
-- Rodar o agente por cron.
-- Rodar em VPS.
-- Abrir o Chrome instalado no host via CDP como mecanismo principal.
+Então a existência do mecanismo é confirmada pelo código, mas a persistência
+entre rebuilds não deve ser prometida sem validação adicional.
+
+## Limitações confirmadas
+
+- Não documente credenciais de PJe ou SISTJWEB em `.env`; o fluxo é interativo.
+- Não trate `docs/regras_custas_tjdft.md` como regra homologada de cálculo.
+- Não assuma que `PRD.md` ou `SYMPHONY.md` representam o estado atual do runtime.
+
+## Direção arquitetural ainda aberta
+
+O alvo declarado no projeto continua sendo um agente controlado pelo dashboard
+como serviço longo no container. O repositório já contém boa parte dessa lógica,
+mas o bootstrap atual ainda depende de `supercronic` e `agente/crontab`.

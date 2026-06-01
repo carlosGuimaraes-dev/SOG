@@ -70,8 +70,25 @@ CREATE TABLE IF NOT EXISTS log_execucao (
     etapa TEXT NOT NULL,
     status TEXT NOT NULL,     -- ok | erro | aviso
     mensagem TEXT,
+    chave_idempotencia TEXT,
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(processo_id, etapa, status, mensagem)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_log_execucao_chave
+    ON log_execucao (COALESCE(processo_id, -1), etapa, status, chave_idempotencia)
+    WHERE chave_idempotencia IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS evidencias_emissao (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    processo_id INTEGER NOT NULL REFERENCES processos(id),
+    etapa TEXT NOT NULL,
+    referencia_arquivo TEXT,
+    referencia_externa TEXT,
+    metadados TEXT DEFAULT '{}',
+    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(processo_id, etapa)
 );
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (

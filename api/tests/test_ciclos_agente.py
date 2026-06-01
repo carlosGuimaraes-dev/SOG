@@ -109,3 +109,27 @@ def test_snapshot_fechado_inclui_novos_e_rearmados_explicitos_uma_vez(
     novo_ciclo = db.criar_ciclo_agente()
     segundo_fechado = db.fechar_snapshot_ciclo(novo_ciclo["uuid"], [])
     assert segundo_fechado["total_rearmados"] == 0
+
+
+def test_aprovar_processo_recalcula_contadores_do_ciclo_atual(
+    client,
+    mock_db,
+    auth_headers,
+):
+    from sog_shared import db
+
+    numero = "0000007-00.0000.0.00.0000"
+    ciclo = db.criar_ciclo_agente()
+    db.fechar_snapshot_ciclo(ciclo["uuid"], [numero])
+    processo_id = db.processo_existe(numero)["id"]
+    db.atualizar_status(processo_id, "aguardando_aprovacao")
+
+    antes = db.obter_ciclo(ciclo["uuid"])
+    assert antes["total_concluidos"] == 0
+
+    resp = client.post(f"/api/v1/aprovar/{processo_id}", headers=auth_headers)
+
+    assert resp.status_code == 200
+    depois = db.obter_ciclo(ciclo["uuid"])
+    assert depois["total_concluidos"] == 1
+    assert depois["total_erros"] == 0

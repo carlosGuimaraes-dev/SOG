@@ -1,4 +1,8 @@
-# Plano Técnico — Correção das 98 Issues do Code Review Enterprise
+# Plano técnico — correção das issues do code review enterprise
+
+> Este arquivo descreve o plano de execução das correções.
+> Para um resumo do que foi declarado como corrigido, consulte
+> `correcoes-code-review.md`.
 
 **Projeto:** SOG — Sistema de Ordem de Guias (Custas Processuais TJDFT)  
 **Data:** 2026-05-15  

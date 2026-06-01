@@ -1,4 +1,7 @@
-# Plano Técnico — Melhorias de UX no Dashboard (TODO_frontend.md)
+# Plano técnico histórico — melhorias de UX no dashboard
+
+> Este arquivo permanece como registro técnico da decomposição das waves de
+> frontend. Para comportamento atual do dashboard, consulte `frontend/README.md`.
 
 > Decomposição das 14 features do `docs/TODO_frontend.md` em waves incrementais verificáveis.
 > Baseado no codebase atual: React 18 + Vite + Tailwind + React Router v6 + Vitest/RTL.

@@ -79,6 +79,10 @@ coverage.xml
 cover/
 
 # Ferramentas
+.agents/
+.claude/
+.playwright-cli/
+.qa_vendor/
 .mypy_cache/
 .dmypy.json
 dmypy.json

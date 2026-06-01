@@ -6,8 +6,14 @@ from utils import telegram
 
 
 class FakeResponse:
-    def __init__(self, status_code=200):
+    def __init__(self, status_code=200, json_data=None):
         self.status_code = status_code
+        self._json_data = json_data
+
+    def json(self):
+        if self._json_data is None:
+            raise ValueError("sem corpo JSON")
+        return self._json_data
 
 
 def test_sender_usa_send_message_notify_only():
@@ -38,6 +44,21 @@ def test_sender_usa_send_message_notify_only():
 def test_falha_http_nao_propaga_excecao():
     def fake_post(_url, **_kwargs):
         raise requests.Timeout("timeout")
+
+    assert telegram.enviar_mensagem(
+        "mensagem",
+        http_post=fake_post,
+        token="token-test",
+        chat_id="chat-test",
+    ) is False
+
+
+def test_falha_bot_api_com_http_200_retorna_false():
+    def fake_post(_url, **_kwargs):
+        return FakeResponse(
+            status_code=200,
+            json_data={"ok": False, "description": "Bad Request: chat not found"},
+        )
 
     assert telegram.enviar_mensagem(
         "mensagem",

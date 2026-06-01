@@ -58,6 +58,16 @@ def enviar_mensagem(
         erro(f"Falha ao enviar Telegram: HTTP {status_code}")
         return False
 
+    try:
+        body = response.json()
+    except (AttributeError, TypeError, ValueError):
+        body = None
+
+    if isinstance(body, dict) and body.get("ok") is False:
+        descricao = body.get("description") or "resposta Telegram inválida"
+        erro(f"Falha ao enviar Telegram: {descricao}")
+        return False
+
     info("Notificação Telegram enviada com sucesso.")
     return True
 

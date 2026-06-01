@@ -7,6 +7,7 @@ import ThemeToggle from './components/ThemeToggle'
 import Button from './components/ui/Button'
 import Skeleton from './components/ui/Skeleton'
 import Login from './pages/Login'
+import CicloAtual from './pages/CicloAtual'
 import Fila from './pages/Fila'
 
 const Detalhe = React.lazy(() => import('./pages/Detalhe'))
@@ -31,36 +32,43 @@ function RequireAuth() {
 function Layout() {
   const { logout } = useAuth()
   const location = useLocation()
+  const navItems = [
+    { to: '/', label: 'Ciclo atual', active: location.pathname === '/' },
+    { to: '/processos', label: 'Processos', active: location.pathname.startsWith('/processos') || location.pathname.startsWith('/detalhe/') },
+    { to: '/historico', label: 'Histórico', active: location.pathname.startsWith('/historico') },
+  ]
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-6">
-            <h1 className="text-xl font-bold">Custas TJDFT</h1>
-            <nav className="flex gap-4 text-sm">
-              <Link
-                to="/"
-                className={`transition-colors hover:text-primary ${location.pathname === '/' ? 'font-medium text-primary' : 'text-muted-foreground'}`}
-                aria-label="Ir para fila de aprovação"
-              >
-                Fila de Aprovação
-              </Link>
-              <Link
-                to="/historico"
-                className={`transition-colors hover:text-primary ${location.pathname === '/historico' ? 'font-medium text-primary' : 'text-muted-foreground'}`}
-                aria-label="Ir para histórico"
-              >
-                Histórico
-              </Link>
-            </nav>
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-xl font-bold">Custas TJDFT</h1>
+              <p className="text-sm text-muted-foreground">Dashboard operacional para controle e emissão final.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <Button variant="ghost" size="sm" onClick={logout} aria-label="Sair da conta">
+                Sair
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={logout} aria-label="Sair da conta">
-              Sair
-            </Button>
-          </div>
+          <nav className="inline-flex w-full flex-wrap gap-2 rounded-lg border border-border bg-muted/40 p-1 text-sm" aria-label="Navegação principal do dashboard">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`inline-flex min-h-10 flex-1 items-center justify-center rounded-md px-3 py-2 font-medium transition-colors ${
+                  item.active
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-background hover:text-foreground'
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
@@ -79,7 +87,8 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route element={<RequireAuth />}>
               <Route element={<Layout />}>
-                <Route path="/" element={<Fila />} />
+                <Route path="/" element={<CicloAtual />} />
+                <Route path="/processos" element={<Fila />} />
                 <Route
                   path="/detalhe/:id"
                   element={

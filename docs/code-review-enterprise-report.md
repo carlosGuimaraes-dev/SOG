@@ -1,4 +1,6 @@
-# Enterprise Code Review Report
+# Enterprise code review report
+
+> Documento canônico do relatório enterprise consolidado nesta auditoria.
 ## SOG — Sistema de Ordem de Guias (Custas Processuais TJDFT)
 
 **Data:** 2026-05-15  

@@ -42,7 +42,13 @@ def _obter_ou_criar_processo(
         processo_id = existente["id"]
         if rearmado:
             db.atualizar_status(processo_id, "pendente", erro_msg="", incrementar_tentativa=False)
-            db.registrar_log(processo_id, "reprocessamento", "ok", "Reprocessamento rearmado consumido no ciclo")
+            db.registrar_log(
+                processo_id,
+                "reprocessamento",
+                "ok",
+                "Reprocessamento rearmado consumido no ciclo",
+                chave_idempotencia="reprocessamento:consumido_no_ciclo",
+            )
             return processo_id
         if existente["status"] not in {"erro", "pendente"}:
             info(f"Processo {numero} já existe com status '{existente['status']}'. Pulando.")
@@ -51,6 +57,7 @@ def _obter_ou_criar_processo(
                 "pipeline",
                 "aviso",
                 f"Skip idempotente: status {existente['status']} já tratado",
+                chave_idempotencia=f"pipeline:skip_status:{existente['status']}",
             )
             return 0
         if existente["status"] == "pendente":
@@ -62,6 +69,7 @@ def _obter_ou_criar_processo(
                     "pipeline",
                     "aviso",
                     "Skip idempotente: dados do processo já salvos",
+                    chave_idempotencia="pipeline:skip_dados_salvos",
                 )
                 return 0
             return processo_id
@@ -178,7 +186,13 @@ def processar_processo(
         if processo_id == 0:
             return
 
-        db.registrar_log(processo_id, "inicio", "ok", "Iniciando pipeline")
+        db.registrar_log(
+            processo_id,
+            "inicio",
+            "ok",
+            "Iniciando pipeline",
+            chave_idempotencia="pipeline:inicio",
+        )
 
         dados_datajud = _coletar_datajud(numero, numero_sem_mascara, processo_id)
         docs, textos = _coletar_documentos(numero, processo_id, pje)

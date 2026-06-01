@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { ToastProvider } from '../components/ToastProvider'
 import Fila from '../pages/Fila'
+import { ENDPOINTS } from '../lib/endpoints'
 
 vi.mock('../lib/api', () => ({
   default: {
@@ -10,8 +11,46 @@ vi.mock('../lib/api', () => ({
   },
 }))
 
+vi.mock('../components/agente/AgenteStatusBar', () => ({
+  default: () => <div>Status do agente</div>,
+}))
+
 import api from '../lib/api'
 const mockedGet = vi.mocked(api.get)
+
+const dashboardResumo = {
+  agente_online: true,
+  agente_status: 'executando',
+  tarefas_pendentes: 5,
+  tarefas_executando: 2,
+  pje: { sistema: 'pje', logado: true, mensagem: 'Sessão ativa' },
+  sistj: { sistema: 'sistj', logado: false, mensagem: 'Sessão pendente' },
+}
+
+function mockApi({
+  aguardando = [],
+  manual = [],
+}: {
+  aguardando?: Array<Record<string, unknown>>
+  manual?: Array<Record<string, unknown>>
+}) {
+  mockedGet.mockImplementation((url: string) => {
+    if (url === ENDPOINTS.PROCESSOS) {
+      return Promise.resolve({
+        data: {
+          aguardando_aprovacao: aguardando,
+          pendente_manual: manual,
+        },
+      })
+    }
+
+    if (url === ENDPOINTS.DASHBOARD_SESSOES) {
+      return Promise.resolve({ data: dashboardResumo })
+    }
+
+    return Promise.resolve({ data: null })
+  })
+}
 
 function renderFila() {
   return render(
@@ -29,19 +68,21 @@ describe('Fila', () => {
   })
 
   it('exibe loading inicial', () => {
-    mockedGet.mockReturnValueOnce(new Promise(() => {}))
+    mockedGet.mockImplementation((url: string) => {
+      if (url === ENDPOINTS.PROCESSOS) {
+        return new Promise(() => {})
+      }
+      return Promise.resolve({ data: dashboardResumo })
+    })
     renderFila()
     expect(screen.getAllByRole('status', { name: /carregando/i }).length).toBeGreaterThan(0)
   })
 
   it('lista processos aguardando aprovação', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
+      ],
     })
     renderFila()
 
@@ -52,9 +93,7 @@ describe('Fila', () => {
   })
 
   it('mostra estado vazio quando não há processos', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: { aguardando_aprovacao: [], pendente_manual: [] },
-    })
+    mockApi({})
     renderFila()
 
     await waitFor(() => {
@@ -62,31 +101,28 @@ describe('Fila', () => {
     })
   })
 
-  it('lista processos pendentes manuais com badge', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [],
-        pendente_manual: [
-          { id: 2, numero: '0000023-12.2023.8.07.0002', status: 'pendente_manual', criado_em: '2024-01-02T10:00:00' },
-        ],
-      },
+  it('lista processos pendentes manuais na aba correspondente', async () => {
+    mockApi({
+      manual: [
+        { id: 2, numero: '0000023-12.2023.8.07.0002', status: 'pendente_manual', criado_em: '2024-01-02T10:00:00' },
+      ],
     })
     renderFila()
 
+    const tabManual = await screen.findByRole('tab', { name: /pendência manual/i })
+    fireEvent.click(tabManual)
+
     await waitFor(() => {
       expect(screen.getByText('0000023-12.2023.8.07.0002')).toBeInTheDocument()
-      expect(screen.getByText('Manual')).toBeInTheDocument()
+      expect(screen.getByText('Pendente manual')).toBeInTheDocument()
     })
   })
 
   it('exibe tentativas quando maior que zero', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', tentativas: 3 },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', tentativas: 3 },
+      ],
     })
     renderFila()
 
@@ -96,13 +132,10 @@ describe('Fila', () => {
   })
 
   it('exibe badge de erro e borda vermelha quando erro_msg existe', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', erro_msg: 'Falha na conexão' },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', erro_msg: 'Falha na conexão' },
+      ],
     })
     renderFila()
 
@@ -114,14 +147,11 @@ describe('Fila', () => {
   })
 
   it('filtra processos por número de processo', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
-          { id: 2, numero: '0000023-12.2023.8.07.0002', status: 'aguardando_aprovacao', criado_em: '2024-01-02T10:00:00' },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
+        { id: 2, numero: '0000023-12.2023.8.07.0002', status: 'aguardando_aprovacao', criado_em: '2024-01-02T10:00:00' },
+      ],
     })
     renderFila()
 
@@ -140,13 +170,10 @@ describe('Fila', () => {
   })
 
   it('exibe mensagem de estado vazio quando busca não encontra resultados', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
+      ],
     })
     renderFila()
 
@@ -163,13 +190,10 @@ describe('Fila', () => {
   })
 
   it('exibe badge de prioridade Urgente quando há tentativas e erro_msg', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', tentativas: 2, erro_msg: 'Falha' },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', tentativas: 2, erro_msg: 'Falha' },
+      ],
     })
     renderFila()
 
@@ -179,13 +203,10 @@ describe('Fila', () => {
   })
 
   it('exibe badge de prioridade Alto Valor quando valor > R$ 50.000', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', valor_total_recolher: 'R$ 75.000,00' },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00', valor_total_recolher: 'R$ 75.000,00' },
+      ],
     })
     renderFila()
 
@@ -196,13 +217,10 @@ describe('Fila', () => {
 
   it('exibe badge de prioridade Antigo quando processo tem mais de 7 dias', async () => {
     const dataAntiga = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: dataAntiga },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: dataAntiga },
+      ],
     })
     renderFila()
 
@@ -212,13 +230,10 @@ describe('Fila', () => {
   })
 
   it('limpa busca ao clicar no botão de limpar', async () => {
-    mockedGet.mockResolvedValueOnce({
-      data: {
-        aguardando_aprovacao: [
-          { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
-        ],
-        pendente_manual: [],
-      },
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
+      ],
     })
     renderFila()
 
@@ -238,5 +253,26 @@ describe('Fila', () => {
     await waitFor(() => {
       expect(screen.getByText('0000012-75.2023.8.07.0001')).toBeInTheDocument()
     })
+  })
+
+  it('exibe resumo operacional do backend no topo do dashboard', async () => {
+    mockApi({
+      aguardando: [
+        { id: 1, numero: '0000012-75.2023.8.07.0001', status: 'aguardando_aprovacao', criado_em: '2024-01-01T10:00:00' },
+      ],
+      manual: [
+        { id: 2, numero: '0000023-12.2023.8.07.0002', status: 'pendente_manual', criado_em: '2024-01-02T10:00:00' },
+      ],
+    })
+    renderFila()
+
+    await waitFor(() => {
+      expect(screen.getByText('Controle de custas para revisão final')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('Executando / pendentes no orquestrador.')).toBeInTheDocument()
+    expect(screen.getByText('Sessão PJE')).toBeInTheDocument()
+    expect(screen.getAllByText('Sessão ativa').length).toBeGreaterThan(0)
   })
 })

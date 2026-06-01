@@ -1,5 +1,10 @@
 # PRD.md — Pipeline de Custas Processuais TJDFT
 
+> Status deste arquivo: artefato histórico de origem.
+> Não use este documento como espelho fiel do runtime atual sem validar contra o
+> código e contra os docs canônicos em `README.md`, `docs/architecture.md`,
+> `docs/api.md` e `docs/operacao-local-docker.md`.
+
 > Documento de referência completo para implementação via Claude Code.
 > Leia integralmente antes de escrever qualquer linha de código.
 

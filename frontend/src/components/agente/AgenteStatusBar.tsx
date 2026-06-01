@@ -34,6 +34,21 @@ interface CicloAgente {
   total_erros: number
 }
 
+interface AgenteStatusResponse {
+  status: AgenteStatus
+  mensagem: string
+  online: boolean
+  ciclo_uuid?: string | null
+  pode_iniciar?: boolean
+  pode_parar?: boolean
+  relogin_required?: boolean
+}
+
+interface AgenteComandoResponse {
+  message?: string
+  resumed?: boolean
+}
+
 const STATUS_CONFIG: Record<string, StatusConfig> = {
   executando: { cor: 'bg-green-500', label: 'Executando' },
   dormindo: { cor: 'bg-green-400', label: 'Executando (pausa)' },
@@ -49,6 +64,20 @@ const STATUS_CONFIG: Record<string, StatusConfig> = {
   parando: { cor: 'bg-orange-500', label: 'Parando' },
 }
 
+const ESTADOS_CICLO_ATIVO: AgenteStatus[] = [
+  'iniciando',
+  'autenticando',
+  'executando',
+  'dormindo',
+  'parando',
+]
+const ESTADOS_CICLO_RETOMAVEL: AgenteStatus[] = [
+  'pausado',
+  'interrompido',
+  'erro_pausado',
+  'erro',
+  'aguardando_login',
+]
 const INICIAR_HABILITADO: AgenteStatus[] = [
   'parado',
   'desconhecido',
@@ -70,6 +99,7 @@ export default function AgenteStatusBar() {
   const [status, setStatus] = useState<AgenteStatus>('desconhecido')
   const [mensagem, setMensagem] = useState('')
   const [online, setOnline] = useState(false)
+  const [cicloUuid, setCicloUuid] = useState<string | null>(null)
   const [podeIniciarApi, setPodeIniciarApi] = useState(true)
   const [podePararApi, setPodePararApi] = useState(false)
   const [reloginRequired, setReloginRequired] = useState(false)
@@ -93,23 +123,18 @@ export default function AgenteStatusBar() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await api.get<{
-        status: AgenteStatus
-        mensagem: string
-        online: boolean
-        pode_iniciar?: boolean
-        pode_parar?: boolean
-        relogin_required?: boolean
-      }>(ENDPOINTS.AGENTE_STATUS)
+      const res = await api.get<AgenteStatusResponse>(ENDPOINTS.AGENTE_STATUS)
       setStatus(res.data.status)
       setMensagem(res.data.mensagem)
       setOnline(res.data.online)
+      setCicloUuid(res.data.ciclo_uuid ?? null)
       setPodeIniciarApi(res.data.pode_iniciar ?? true)
       setPodePararApi(res.data.pode_parar ?? false)
       setReloginRequired(res.data.relogin_required ?? false)
     } catch {
       setStatus('desconhecido')
       setOnline(false)
+      setCicloUuid(null)
       setPodeIniciarApi(true)
       setPodePararApi(false)
       setReloginRequired(false)
@@ -126,7 +151,10 @@ export default function AgenteStatusBar() {
   async function handleIniciar() {
     setLoading(true)
     try {
-      await api.post(ENDPOINTS.AGENTE_INICIAR)
+      const res = await api.post<AgenteComandoResponse>(ENDPOINTS.AGENTE_INICIAR)
+      if (res.data.message) {
+        addToast(res.data.message, res.data.resumed ? 'info' : 'success')
+      }
       await fetchStatus()
     } catch (error: any) {
       const detail = error?.response?.data?.detail
@@ -139,10 +167,14 @@ export default function AgenteStatusBar() {
   async function handleParar() {
     setLoading(true)
     try {
-      await api.post(ENDPOINTS.AGENTE_PARAR)
+      const res = await api.post<AgenteComandoResponse>(ENDPOINTS.AGENTE_PARAR)
+      if (res.data.message) {
+        addToast(res.data.message, 'info')
+      }
       await fetchStatus()
-    } catch {
-      addToast('Erro ao enviar comando de parar', 'error')
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail
+      addToast(detail || 'Erro ao enviar comando de parar', 'error')
     } finally {
       setLoading(false)
     }
@@ -151,6 +183,29 @@ export default function AgenteStatusBar() {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.desconhecido
   const podeIniciar = podeIniciarApi && INICIAR_HABILITADO.includes(status)
   const podeParar = podePararApi && PARAR_HABILITADO.includes(status)
+  const cicloAtivo = ESTADOS_CICLO_ATIVO.includes(status)
+  const cicloRetomavel = Boolean(cicloUuid) && ESTADOS_CICLO_RETOMAVEL.includes(status)
+  const acaoPrimariaLabel = reloginRequired || status === 'aguardando_login'
+    ? '▶ Retomar após login'
+    : cicloRetomavel
+      ? '▶ Retomar ciclo'
+      : '▶ Iniciar novo ciclo'
+  const cicloBadge = reloginRequired || status === 'aguardando_login'
+    ? {
+        className: 'bg-yellow-100 text-yellow-900',
+        label: 'Relogin pendente',
+      }
+    : cicloAtivo
+      ? {
+          className: 'bg-green-100 text-green-800',
+          label: 'Ciclo ativo',
+        }
+      : cicloRetomavel
+        ? {
+            className: 'bg-amber-100 text-amber-900',
+            label: 'Ciclo pausado',
+          }
+        : null
 
   return (
     <div
@@ -175,6 +230,11 @@ export default function AgenteStatusBar() {
       </div>
       {ciclo && (
         <div className="text-sm text-muted-foreground">
+          {cicloBadge && (
+            <span className={`mr-2 rounded px-2 py-0.5 text-xs font-medium ${cicloBadge.className}`}>
+              {cicloBadge.label}
+            </span>
+          )}
           <span className="font-medium text-foreground">{ciclo.rotulo}</span>
           <span>
             {' '}
@@ -190,9 +250,7 @@ export default function AgenteStatusBar() {
           disabled={!podeIniciar || loading}
           aria-label="Iniciar agente de automação"
         >
-          {status === 'interrompido' || status === 'pausado' || status === 'aguardando_login'
-            ? '▶ Retomar Agente'
-            : '▶ Iniciar Agente'}
+          {acaoPrimariaLabel}
         </Button>
         <Button
           onClick={handleParar}

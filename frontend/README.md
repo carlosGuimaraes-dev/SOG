@@ -2,6 +2,20 @@
 
 Interface React do Sistema de Ordem de Guias. Dashboard para revisão e aprovação humana de guias de custas processuais extraídas automaticamente do PJE.
 
+## Estado atual do dashboard
+
+O frontend atual não é mais centrado apenas na fila. As rotas protegidas
+confirmadas no código são:
+
+- `/`: ciclo atual
+- `/processos`: fila
+- `/detalhe/:id`: revisão e ações por processo
+- `/historico`: histórico operacional
+
+A autenticação do cliente usa cookies `httpOnly` com `withCredentials: true`.
+O frontend faz refresh automático via `/api/v1/auth/refresh` e não depende de
+`localStorage` para guardar tokens.
+
 ## Stack
 
 - React 18 + TypeScript

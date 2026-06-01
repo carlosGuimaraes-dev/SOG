@@ -1,4 +1,8 @@
-# Correções do Code Review Enterprise — SOG
+# Resumo declarado — correções do code review enterprise
+
+> Este arquivo resume correções declaradas como aplicadas.
+> Ele não substitui o plano em `code-review-fixes.md` nem valida sozinho que
+> todas as mudanças ainda correspondem ao código atual.
 
 > **Projeto:** SOG — Sistema de Ordem de Guias (Custas Processuais TJDFT)  
 > **Data:** 2026-05-15  

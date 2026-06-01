@@ -46,11 +46,16 @@ COLUNAS_PROCESSOS = {
 COLUNAS_AGENTE_CICLO_MEMBROS = {
     "processado_em": "DATETIME",
 }
+COLUNAS_LOG_EXECUCAO = {
+    "chave_idempotencia": "TEXT",
+}
 STATUS_REPROCESSAMENTO_EXPLICITO = frozenset({
     "erro",
     "pendente_manual",
     "rejeitado",
 })
+ETAPA_EVIDENCIA_DEMONSTRATIVO_SISTJ = "demonstrativo_emitido_sistj"
+ETAPA_EVIDENCIA_ANEXO_PJE = "demonstrativo_anexado_pje"
 
 COLUNAS_PERMITIDAS_DADOS_PROCESSO = frozenset({
     "instancia",
@@ -112,6 +117,7 @@ def init_db():
         _garantir_colunas_processos(conn)
         _garantir_colunas_agente_controle(conn)
         _garantir_colunas_agente_ciclo_membros(conn)
+        _garantir_colunas_log_execucao(conn)
         conn.commit()
     finally:
         conn.close()
@@ -358,25 +364,55 @@ def listar_documentos(processo_id: int) -> List[Dict[str, Any]]:
 
 # Log ------------------------------------------------------------------------
 
-def registrar_log(processo_id: Optional[int], etapa: str, status: str, mensagem: str = ""):
+def registrar_log(
+    processo_id: Optional[int],
+    etapa: str,
+    status: str,
+    mensagem: str = "",
+    chave_idempotencia: Optional[str] = None,
+):
     with get_conn() as conn:
-        existente = conn.execute(
-            """
-            SELECT id
-            FROM log_execucao
-            WHERE processo_id IS ?
-              AND etapa = ?
-              AND status = ?
-              AND COALESCE(mensagem, '') = COALESCE(?, '')
-            LIMIT 1
-            """,
-            (processo_id, etapa, status, mensagem),
-        ).fetchone()
+        _garantir_colunas_log_execucao(conn)
+        existente = None
+        if chave_idempotencia is not None:
+            existente = conn.execute(
+                """
+                SELECT id
+                FROM log_execucao
+                WHERE processo_id IS ?
+                  AND etapa = ?
+                  AND status = ?
+                  AND chave_idempotencia = ?
+                LIMIT 1
+                """,
+                (processo_id, etapa, status, chave_idempotencia),
+            ).fetchone()
+        if existente is None:
+            existente = conn.execute(
+                """
+                SELECT id
+                FROM log_execucao
+                WHERE processo_id IS ?
+                  AND etapa = ?
+                  AND status = ?
+                  AND COALESCE(mensagem, '') = COALESCE(?, '')
+                LIMIT 1
+                """,
+                (processo_id, etapa, status, mensagem),
+            ).fetchone()
         if existente:
             return existente["id"]
         cur = conn.execute(
-            "INSERT INTO log_execucao (processo_id, etapa, status, mensagem) VALUES (?, ?, ?, ?)",
-            (processo_id, etapa, status, mensagem),
+            """
+            INSERT INTO log_execucao (
+                processo_id,
+                etapa,
+                status,
+                mensagem,
+                chave_idempotencia
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (processo_id, etapa, status, mensagem, chave_idempotencia),
         )
         conn.commit()
         return cur.lastrowid
@@ -389,6 +425,79 @@ def listar_logs(processo_id: int) -> List[Dict[str, Any]]:
             (processo_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# Evidencias de emissao ------------------------------------------------------
+
+def salvar_evidencia_emissao(
+    processo_id: int,
+    etapa: str,
+    referencia_arquivo: Optional[str] = None,
+    referencia_externa: Optional[str] = None,
+    metadados: Optional[Dict[str, Any]] = None,
+) -> int:
+    metadados_json = json.dumps(metadados or {}, ensure_ascii=False)
+    with get_conn() as conn:
+        existente = conn.execute(
+            """
+            SELECT id
+            FROM evidencias_emissao
+            WHERE processo_id = ? AND etapa = ?
+            LIMIT 1
+            """,
+            (processo_id, etapa),
+        ).fetchone()
+        if existente:
+            conn.execute(
+                """
+                UPDATE evidencias_emissao
+                   SET referencia_arquivo = ?,
+                       referencia_externa = ?,
+                       metadados = ?,
+                       atualizado_em = CURRENT_TIMESTAMP
+                 WHERE id = ?
+                """,
+                (referencia_arquivo, referencia_externa, metadados_json, existente["id"]),
+            )
+            conn.commit()
+            return existente["id"]
+
+        cur = conn.execute(
+            """
+            INSERT INTO evidencias_emissao (
+                processo_id,
+                etapa,
+                referencia_arquivo,
+                referencia_externa,
+                metadados
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (processo_id, etapa, referencia_arquivo, referencia_externa, metadados_json),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def obter_evidencia_emissao(processo_id: int, etapa: str) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM evidencias_emissao
+            WHERE processo_id = ? AND etapa = ?
+            LIMIT 1
+            """,
+            (processo_id, etapa),
+        ).fetchone()
+        if not row:
+            return None
+        evidencia = dict(row)
+        if evidencia.get("metadados"):
+            try:
+                evidencia["metadados"] = json.loads(evidencia["metadados"])
+            except json.JSONDecodeError:
+                pass
+        return evidencia
 
 
 # Agente controle ------------------------------------------------------------
@@ -421,6 +530,23 @@ def _garantir_colunas_agente_ciclo_membros(conn: sqlite3.Connection) -> None:
     for coluna, definicao in COLUNAS_AGENTE_CICLO_MEMBROS.items():
         if coluna not in existentes:
             conn.execute(f"ALTER TABLE agente_ciclo_membros ADD COLUMN {coluna} {definicao}")
+
+
+def _garantir_colunas_log_execucao(conn: sqlite3.Connection) -> None:
+    existentes = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(log_execucao)").fetchall()
+    }
+    for coluna, definicao in COLUNAS_LOG_EXECUCAO.items():
+        if coluna not in existentes:
+            conn.execute(f"ALTER TABLE log_execucao ADD COLUMN {coluna} {definicao}")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_log_execucao_chave
+            ON log_execucao (COALESCE(processo_id, -1), etapa, status, chave_idempotencia)
+            WHERE chave_idempotencia IS NOT NULL
+        """
+    )
 
 
 def _agora_iso() -> str:
@@ -723,6 +849,45 @@ def _recalcular_contadores_ciclo(conn: sqlite3.Connection, ciclo_uuid: str) -> N
             ciclo_uuid,
         ),
     )
+
+
+def _obter_ciclo_mais_recente_do_processo_conn(
+    conn: sqlite3.Connection,
+    processo_id: int,
+) -> Optional[str]:
+    row = conn.execute(
+        """
+        SELECT m.ciclo_uuid
+        FROM agente_ciclo_membros m
+        JOIN agente_ciclos c ON c.uuid = m.ciclo_uuid
+        WHERE m.processo_id = ?
+        ORDER BY c.criado_em DESC, m.id DESC
+        LIMIT 1
+        """,
+        (processo_id,),
+    ).fetchone()
+    if not row:
+        return None
+    return row["ciclo_uuid"]
+
+
+def obter_ciclo_mais_recente_do_processo(processo_id: int) -> Optional[str]:
+    with get_conn() as conn:
+        _garantir_colunas_agente_ciclo_membros(conn)
+        return _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id)
+
+
+def atualizar_contadores_ciclo_do_processo(processo_id: int) -> Optional[str]:
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _garantir_colunas_agente_ciclo_membros(conn)
+        ciclo_uuid = _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id)
+        if not ciclo_uuid:
+            conn.commit()
+            return None
+        _recalcular_contadores_ciclo(conn, ciclo_uuid)
+        conn.commit()
+        return ciclo_uuid
 
 
 def criar_ciclo_agente() -> Dict[str, Any]:

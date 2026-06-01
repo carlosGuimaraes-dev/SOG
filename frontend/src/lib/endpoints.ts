@@ -15,4 +15,5 @@ export const ENDPOINTS = {
   AGENTE_STATUS: '/agente/status',
   AGENTE_CICLO_ATUAL: '/agente/ciclos/atual',
   AGENTE_ULTIMO_CICLO: '/agente/ciclos/ultimo',
+  DASHBOARD_SESSOES: '/dashboard/sessoes',
 } as const

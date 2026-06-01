@@ -178,9 +178,44 @@ def _gravar_aprovar_sistj(payload, pje, sistj):
     numero = processo.get("numero", "")
     numero_sem_mascara = processo.get("numero_sem_mascara", "")
 
+    evidencia = db.obter_evidencia_emissao(
+        processo_id,
+        db.ETAPA_EVIDENCIA_DEMONSTRATIVO_SISTJ,
+    )
+    if evidencia and not payload.get("confirmar_reemissao"):
+        caminho_existente = evidencia.get("referencia_arquivo")
+        if caminho_existente and Path(caminho_existente).exists():
+            db.registrar_log(
+                processo_id,
+                "emissao",
+                "aviso",
+                "Skip idempotente: demonstrativo SISTJ já emitido",
+                chave_idempotencia="emissao:sistj:skip",
+            )
+            return {
+                "caminho_pdf": caminho_existente,
+                "numero_processo": numero,
+                "processo_id": processo_id,
+                "skipped": True,
+                "reason": "already_emitted_sistj",
+            }
+
     sistj.garantir_autenticado()
     caminho_pdf = sistj.gravar_e_aprovar(numero_sem_mascara)
-    db.registrar_log(processo_id, "sistjweb", "ok", f"PDF: {caminho_pdf}")
+    db.salvar_evidencia_emissao(
+        processo_id,
+        db.ETAPA_EVIDENCIA_DEMONSTRATIVO_SISTJ,
+        referencia_arquivo=caminho_pdf,
+        referencia_externa=numero_sem_mascara,
+        metadados={"origem": "sistjweb"},
+    )
+    db.registrar_log(
+        processo_id,
+        "sistjweb",
+        "ok",
+        f"PDF: {caminho_pdf}",
+        chave_idempotencia="emissao:sistj:ok",
+    )
 
     return {"caminho_pdf": caminho_pdf, "numero_processo": numero, "processo_id": processo_id}
 
@@ -192,12 +227,36 @@ def _anexar_demonstrativo_pje(payload, pje, sistj):
 
     numero = processo.get("numero", "")
     numero_sem_mascara = processo.get("numero_sem_mascara", "")
+    evidencia_anexo = db.obter_evidencia_emissao(
+        processo_id,
+        db.ETAPA_EVIDENCIA_ANEXO_PJE,
+    )
+    if evidencia_anexo and not payload.get("confirmar_reemissao"):
+        if processo.get("status") != "emitido":
+            db.atualizar_status(processo_id, "emitido")
+            db.atualizar_contadores_ciclo_do_processo(processo_id)
+        db.registrar_log(
+            processo_id,
+            "emissao",
+            "aviso",
+            "Skip idempotente: demonstrativo já anexado no PJe",
+            chave_idempotencia="emissao:anexo_pje:skip",
+        )
+        return {
+            "sucesso": False,
+            "skipped": True,
+            "reason": "already_attached_pje",
+            "numero_processo": numero,
+            "processo_id": processo_id,
+        }
+
     if processo.get("status") == "emitido" and not payload.get("confirmar_reemissao"):
         db.registrar_log(
             processo_id,
             "emissao",
             "aviso",
             "Skip idempotente: demonstrativo já anexado no PJe",
+            chave_idempotencia="emissao:anexo_pje:skip",
         )
         return {
             "sucesso": False,
@@ -207,11 +266,19 @@ def _anexar_demonstrativo_pje(payload, pje, sistj):
             "processo_id": processo_id,
         }
 
-    candidatos = [
+    evidencia_demonstrativo = db.obter_evidencia_emissao(
+        processo_id,
+        db.ETAPA_EVIDENCIA_DEMONSTRATIVO_SISTJ,
+    )
+    candidatos = []
+    if evidencia_demonstrativo and evidencia_demonstrativo.get("referencia_arquivo"):
+        candidatos.append(Path(evidencia_demonstrativo["referencia_arquivo"]))
+
+    candidatos.extend([
         Path(DEMONSTRATIVOS_DIR) / f"{numero_sem_mascara}.pdf",
         Path(DEMONSTRATIVOS_DIR) / f"{numero}.pdf",
         Path(DEMONSTRATIVOS_DIR) / f"{numero_sem_mascara}_sistjweb.pdf",
-    ]
+    ])
     caminho_pdf = next((p for p in candidatos if p.exists()), None)
     if not caminho_pdf:
         raise FileNotFoundError(f"PDF do demonstrativo não encontrado para {numero}")
@@ -220,8 +287,22 @@ def _anexar_demonstrativo_pje(payload, pje, sistj):
     sucesso = pje.anexar_demonstrativo(numero, str(caminho_pdf))
 
     if sucesso:
+        db.salvar_evidencia_emissao(
+            processo_id,
+            db.ETAPA_EVIDENCIA_ANEXO_PJE,
+            referencia_arquivo=str(caminho_pdf),
+            referencia_externa=numero,
+            metadados={"origem": "pje"},
+        )
         db.atualizar_status(processo_id, "emitido")
-        db.registrar_log(processo_id, "emissao", "ok", f"Anexado: {caminho_pdf}")
+        db.atualizar_contadores_ciclo_do_processo(processo_id)
+        db.registrar_log(
+            processo_id,
+            "emissao",
+            "ok",
+            f"Anexado: {caminho_pdf}",
+            chave_idempotencia="emissao:anexo_pje:ok",
+        )
     else:
         raise RuntimeError(f"Falha ao anexar demonstrativo no PJe para {numero}")
 
