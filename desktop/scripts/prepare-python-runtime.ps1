@@ -56,9 +56,13 @@ if (Test-Path $SmokeFile) {
   Remove-Item -Force $SmokeFile
 }
 $env:SOG_DESKTOP_SMOKE_OUTPUT = $SmokeFile
-& (Join-Path $AgentDist "sog-agent.exe") --desktop-smoke --desktop-smoke-output $SmokeFile
-if ($LASTEXITCODE -ne 0) {
-  throw "Smoke do sog-agent.exe retornou codigo $LASTEXITCODE"
+$smokeProcess = Start-Process `
+  -FilePath (Join-Path $AgentDist "sog-agent.exe") `
+  -ArgumentList @("--desktop-smoke", "--desktop-smoke-output", $SmokeFile) `
+  -Wait `
+  -PassThru
+if ($smokeProcess.ExitCode -ne 0) {
+  throw "Smoke do sog-agent.exe retornou codigo $($smokeProcess.ExitCode)"
 }
 if (-not (Test-Path $SmokeFile)) {
   throw "Smoke do sog-agent.exe nao gerou evidencia"
