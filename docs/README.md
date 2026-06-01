@@ -6,6 +6,7 @@
 - `architecture.md`: componentes, fluxo operacional e persistência
 - `api.md`: contratos principais consumidos pelo dashboard
 - `operacao-local-docker.md`: execução local em Docker e diferenças entre estado atual e direção arquitetural
+- `homologacao-docker-10-processos-template.md`: modelo de coleta de evidências para homologação Docker com lote de 10 processos
 - `../frontend/README.md`: comportamento atual do dashboard
 
 ## Artefatos históricos ou de apoio
