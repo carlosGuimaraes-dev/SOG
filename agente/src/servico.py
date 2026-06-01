@@ -29,10 +29,21 @@ if str(SHARED_DIR) not in sys.path:
 
 DESKTOP_SMOKE_ARG = "--desktop-smoke"
 DESKTOP_LOGIN_SMOKE_ARG = "--desktop-login-smoke"
+DESKTOP_SMOKE_OUTPUT_ARG = "--desktop-smoke-output"
+
+
+def _desktop_smoke_output_path() -> str:
+    if DESKTOP_SMOKE_OUTPUT_ARG in sys.argv:
+        index = sys.argv.index(DESKTOP_SMOKE_OUTPUT_ARG)
+        if index + 1 < len(sys.argv):
+            candidate = sys.argv[index + 1].strip()
+            if candidate:
+                return candidate
+    return os.getenv("SOG_DESKTOP_SMOKE_OUTPUT", "")
 
 
 def _write_desktop_smoke_payload(payload: dict) -> None:
-    output_path = os.getenv("SOG_DESKTOP_SMOKE_OUTPUT")
+    output_path = _desktop_smoke_output_path()
     encoded = json.dumps(payload, ensure_ascii=False)
     if output_path:
         Path(output_path).write_text(encoded, encoding="utf-8")
