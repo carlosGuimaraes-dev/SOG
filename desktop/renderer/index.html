@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SOG Desktop</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="rail">
+        <div>
+          <p class="eyebrow">TJDFT</p>
+          <h1>SOG Desktop</h1>
+          <p class="muted">Instalador grafico e supervisor local para custas processuais.</p>
+        </div>
+        <ol class="steps">
+          <li class="active">Preflight</li>
+          <li>Configuracao</li>
+          <li>Servicos</li>
+          <li>Diagnostico</li>
+        </ol>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <h2>Console local</h2>
+            <p id="paths" class="muted">Carregando pastas...</p>
+          </div>
+          <button id="refresh" class="icon-button" title="Atualizar status">Atualizar</button>
+        </header>
+
+        <section class="status-grid">
+          <article class="panel">
+            <span id="docker-dot" class="dot"></span>
+            <p class="label">Docker Desktop</p>
+            <strong id="docker-status">Verificando</strong>
+            <p id="docker-message" class="muted"></p>
+            <button id="open-docker" class="secondary">Abrir Docker Desktop</button>
+            <button id="install-docker" class="secondary">Instalar Docker Desktop</button>
+          </article>
+          <article class="panel">
+            <span id="api-dot" class="dot"></span>
+            <p class="label">Dashboard/API</p>
+            <strong id="api-status">Offline</strong>
+            <p id="api-message" class="muted">Entrada local em http://localhost</p>
+          </article>
+          <article class="panel">
+            <span id="agent-dot" class="dot"></span>
+            <p class="label">Agente desktop</p>
+            <strong id="agent-status">Parado</strong>
+            <p class="muted">Chromium local para login PJe e SISTJWEB.</p>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <div>
+              <h3>Configuracao inicial</h3>
+              <p class="muted">O SOG nao armazena usuario ou senha do PJe/SISTJWEB.</p>
+            </div>
+            <button id="save-config">Salvar configuracao</button>
+          </div>
+          <form id="config-form" class="form-grid">
+            <label>Usuario do dashboard<input name="dashboardUsuario" autocomplete="username" /></label>
+            <label>Senha do dashboard<input name="dashboardSenha" type="password" autocomplete="new-password" /></label>
+            <label>URL do PJe<input name="pjeUrl" /></label>
+            <label>Etiqueta PJe<input name="pjeEtiqueta" /></label>
+            <label>URL do SISTJWEB<input name="sistjUrl" /></label>
+            <label>URL Datajud<input name="datajudUrl" /></label>
+            <label>Chave Datajud<input name="datajudApiKey" type="password" /></label>
+            <label>Telegram Bot Token<input name="telegramBotToken" type="password" /></label>
+            <label>Telegram Chat ID<input name="telegramChatId" /></label>
+            <label class="wide">Pasta de dados
+              <span class="field-row">
+                <input name="dataDir" />
+                <button id="choose-data-dir" type="button" class="secondary">Escolher pasta</button>
+              </span>
+            </label>
+            <label>Porta HTTP do dashboard<input name="httpPort" inputmode="numeric" /></label>
+            <label>Imagem Docker API<input name="apiImage" /></label>
+            <label>Imagem Docker Frontend<input name="frontendImage" /></label>
+            <label>Politica de pull
+              <select name="imagePullPolicy">
+                <option value="missing">missing</option>
+                <option value="always">always</option>
+                <option value="never">never</option>
+              </select>
+            </label>
+          </form>
+        </section>
+
+        <section class="actions">
+          <button id="start-stack">Subir Docker</button>
+          <button id="restart-stack" class="secondary">Reiniciar Docker</button>
+          <button id="stop-stack" class="secondary">Parar Docker</button>
+          <button id="start-agent">Iniciar agente</button>
+          <button id="test-chromium" class="secondary">Testar Chromium</button>
+          <button id="stop-agent" class="secondary">Parar agente</button>
+          <button id="open-dashboard">Abrir dashboard</button>
+          <button id="diagnostics" class="secondary">Gerar diagnostico</button>
+        </section>
+
+        <section class="panel log-panel">
+          <h3>Eventos</h3>
+          <pre id="log" aria-live="polite"></pre>
+        </section>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

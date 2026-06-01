@@ -1,0 +1,78 @@
+name: SOG Desktop Windows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "agente/**"
+      - "api/**"
+      - "frontend/**"
+      - "shared/**"
+      - "nginx/**"
+      - "docker-compose.desktop.yml"
+      - ".github/workflows/sog-desktop-windows.yml"
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Verify desktop package contract
+        working-directory: desktop
+        run: npm run verify
+
+      - name: Build Windows installer
+        working-directory: desktop
+        run: npm run build:win
+
+      - name: Verify Windows installer artifact
+        working-directory: desktop
+        run: npm run verify:win-artifact
+
+      - name: Verify upgrade preservation smoke script
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "sog-upgrade-preservation"
+          npm run smoke:upgrade -- --Mode baseline --InstallRoot $root
+          npm run smoke:upgrade -- --Mode verify --InstallRoot $root
+
+      - name: Write build evidence summary
+        shell: pwsh
+        run: |
+          "## SOG Desktop Windows evidence" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "- npm run verify: passed" >> $env:GITHUB_STEP_SUMMARY
+          "- npm run build:win: passed" >> $env:GITHUB_STEP_SUMMARY
+          "- npm run verify:win-artifact: passed" >> $env:GITHUB_STEP_SUMMARY
+          "- npm run smoke:upgrade baseline/verify: passed" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "Manual evidence still required on an operator workstation: install the .exe, run smoke:win, start SOG Desktop, click Testar Chromium, and confirm visible Chromium opens PJe/SISTJWEB." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sog-desktop-windows
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.blockmap
+          if-no-files-found: error

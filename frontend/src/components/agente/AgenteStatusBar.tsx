@@ -97,6 +97,7 @@ const PARAR_HABILITADO: AgenteStatus[] = [
 
 function normalizarMensagemAgente(mensagem: string): string {
   if (!mensagem) return ''
+  const lower = mensagem.toLowerCase()
   const erroBrowser =
     mensagem.includes('BrowserType.launch') ||
     mensagem.includes('Target page, context or browser has been closed') ||
@@ -104,10 +105,25 @@ function normalizarMensagemAgente(mensagem: string): string {
     mensagem.includes('Connection reset by peer')
 
   if (erroBrowser) {
-    return 'Não foi possível abrir o navegador do agente para login. O SOG tenta abrir PJe e SISTJWEB automaticamente, mas o Chromium fechou ao iniciar neste ambiente. Verifique o suporte gráfico do Docker/Playwright e reinicie o agente.'
+    return 'Chromium não abriu para login. Inicie o agente pelo SOG Desktop para que o navegador local abra PJe e SISTJWEB em janela visível.'
+  }
+
+  if (lower.includes('sessão pje') || lower.includes('sessao pje')) {
+    return 'Sessão PJe pendente. Faça login no Chromium aberto pelo agente desktop e clique em Retomar após login.'
+  }
+
+  if (lower.includes('sessão sistj') || lower.includes('sessao sistj')) {
+    return 'Sessão SISTJWEB pendente. Faça login no Chromium aberto pelo agente desktop e clique em Retomar após login.'
   }
 
   return mensagem.length > 280 ? `${mensagem.slice(0, 280)}...` : mensagem
+}
+
+function reloginLabel(mensagem: string): string {
+  const lower = mensagem.toLowerCase()
+  if (lower.includes('pje')) return 'Sessão PJe pendente'
+  if (lower.includes('sistj')) return 'Sessão SISTJWEB pendente'
+  return 'Relogin necessário'
 }
 
 export default function AgenteStatusBar() {
@@ -148,6 +164,7 @@ export default function AgenteStatusBar() {
       setReloginRequired(res.data.relogin_required ?? false)
     } catch {
       setStatus('desconhecido')
+      setMensagem('Docker/API offline. Abra o SOG Desktop e verifique se os serviços locais estão em execução.')
       setOnline(false)
       setCicloUuid(null)
       setPodeIniciarApi(true)
@@ -239,7 +256,7 @@ export default function AgenteStatusBar() {
         )}
         {reloginRequired && (
           <span className="rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-900">
-            Relogin necessário
+            {reloginLabel(mensagem)}
           </span>
         )}
       </div>

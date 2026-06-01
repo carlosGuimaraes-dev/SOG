@@ -92,11 +92,35 @@ describe('AgenteStatusBar', () => {
     render(<AgenteStatusBar />)
 
     expect(await screen.findByText('Relogin pendente')).toBeInTheDocument()
-    expect(screen.getByText('Relogin necessário')).toBeInTheDocument()
+    expect(screen.getByText('Sessão PJe pendente')).toBeInTheDocument()
+    expect(screen.getByText(/Faça login no Chromium aberto pelo agente desktop/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /iniciar agente de automação/i })).toHaveTextContent(
       '▶ Retomar após login'
     )
     expect(screen.getByRole('button', { name: /parar agente de automação/i })).toBeDisabled()
+  })
+
+  it('diferencia sessão SISTJWEB pendente', async () => {
+    mockStatusBarRequests({
+      status: 'aguardando_login',
+      mensagem: 'Sessão sistjweb expirada.',
+      online: true,
+      ciclo_uuid: 'ciclo-login',
+      pode_iniciar: true,
+      pode_parar: false,
+      relogin_required: true,
+    }, {
+      ...CICLO_FIXTURE,
+      uuid: 'ciclo-login',
+      status: 'aguardando_login',
+    })
+
+    render(<AgenteStatusBar />)
+
+    expect(await screen.findByText('Sessão SISTJWEB pendente')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /iniciar agente de automação/i })).toHaveTextContent(
+      '▶ Retomar após login'
+    )
   })
 
   it('trata erro pausado como retomada do mesmo ciclo e usa a mensagem real da API', async () => {

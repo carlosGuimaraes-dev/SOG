@@ -88,7 +88,12 @@ class AuthManager:
             return True
 
         # Sessão expirada — fallback interativo
-        self._fallback_interativo(url, verificar_sucesso_fn, interativo_timeout_ms)
+        self._fallback_interativo(
+            url,
+            verificar_sucesso_fn,
+            interativo_timeout_ms,
+            accept_downloads=accept_downloads,
+        )
         return True
 
     def forcar_reautenticacao_interativa(
@@ -102,7 +107,12 @@ class AuthManager:
         Sempre abre o fluxo interativo visível, mesmo que a sessão atual ainda pareça válida.
         """
         self.fechar()
-        self._fallback_interativo(url, verificar_sucesso_fn, interativo_timeout_ms)
+        self._fallback_interativo(
+            url,
+            verificar_sucesso_fn,
+            interativo_timeout_ms,
+            accept_downloads=accept_downloads,
+        )
         self.fechar()
         self.iniciar(accept_downloads=accept_downloads)
         self.page.goto(url, wait_until="networkidle")
@@ -114,6 +124,7 @@ class AuthManager:
         url: str,
         verificar_sucesso_fn: Callable[[Page], bool],
         timeout_ms: int,
+        accept_downloads: bool = False,
     ):
         """Abre navegador visível, aguarda login manual, salva storage state."""
         aviso("Sessão expirada. Abrindo navegador visível para reautenticação...")
@@ -130,7 +141,10 @@ class AuthManager:
             raise BrowserIndisponivelError(
                 self._mensagem_browser_indisponivel(e, visivel=True)
             ) from e
-        self.context = self.browser.new_context(viewport={"width": 1920, "height": 1080})
+        self.context = self.browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            accept_downloads=accept_downloads,
+        )
         self.page = self.context.new_page()
 
         self.page.goto(url, wait_until="networkidle")
@@ -161,7 +175,7 @@ class AuthManager:
 
         # Fecha visível e reabre headless
         self.fechar()
-        self.iniciar()
+        self.iniciar(accept_downloads=accept_downloads)
 
     def _mensagem_browser_indisponivel(self, erro_original: Exception, visivel: bool) -> str:
         modo = "visível para login assistido" if visivel else "headless"
@@ -169,9 +183,9 @@ class AuthManager:
         return (
             f"Não foi possível abrir o navegador {modo} do agente. "
             "O SOG tenta abrir o Chromium automaticamente para PJe e SISTJWEB quando a sessão precisa de login, "
-            "mas o navegador fechou ao iniciar neste ambiente Docker. "
-            "Verifique se o container tem suporte gráfico para janela visível ou execute o agente em um ambiente desktop "
-            "com Playwright/Chromium habilitado. "
+            "mas o navegador fechou ao iniciar neste computador. "
+            "Abra o SOG Desktop, confira se o agente local foi iniciado e use o botão Testar Chromium para validar "
+            "o navegador visível antes de iniciar um ciclo real. "
             f"Detalhe técnico resumido: {detalhe}"
         )
 

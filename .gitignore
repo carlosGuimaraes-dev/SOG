@@ -19,6 +19,8 @@ env.bak/
 venv.bak/
 .Python
 build/
+!desktop/build/
+!desktop/build/**
 develop-eggs/
 dist/
 downloads/
@@ -27,6 +29,8 @@ eggs/
 lib/
 lib64/
 !frontend/src/lib/
+!desktop/lib/
+!desktop/lib/**
 parts/
 sdist/
 var/
@@ -37,6 +41,16 @@ share/python-wheels/
 *.egg
 # Node
 node_modules/
+desktop/dist/
+desktop/vendor/agent/*
+desktop/vendor/ms-playwright/*
+desktop/vendor/pyinstaller-build/
+desktop/vendor/pyinstaller-spec/
+desktop/vendor/python-build/
+!desktop/vendor/agent/.gitkeep
+!desktop/vendor/agent/README.md
+!desktop/vendor/ms-playwright/.gitkeep
+!desktop/vendor/ms-playwright/README.md
 
 # Dados do projeto
 dados/screenshots/

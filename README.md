@@ -8,6 +8,8 @@ O repositório combina:
 - `frontend/`: dashboard React para login, fila, detalhe, histórico e ciclo atual
 - `shared/`: acesso compartilhado ao SQLite e contratos comuns
 - `nginx/`: ponto de entrada HTTP do Compose
+- `desktop/`: instalador/app Electron para operadores leigos, com Docker guiado
+  e agente Playwright local
 
 ## Estado atual
 
@@ -20,13 +22,13 @@ O dashboard já controla o agente por API e SQLite, com suporte a:
 - screenshot autenticado por processo
 - fila, detalhe e histórico no frontend
 
-Há um desalinhamento importante entre arquitetura desejada e empacotamento atual:
+O caminho recomendado para usuario final e o SOG Desktop:
 
-- o código do serviço longo do agente existe em `agente/src/servico.py`
-- a imagem entregue em Docker ainda sobe `supercronic` com `agente/crontab`
-
-Por isso, este README descreve o comportamento implementado e aponta quando algo
-continua como direção arquitetural, não como estado fechado.
+- API, frontend e nginx rodam em Docker Desktop;
+- o agente Playwright roda fora do container para abrir Chromium visivel;
+- PJe e SISTJWEB continuam com login manual por SSO/2FA, sem armazenar senha;
+- `docker-compose.desktop.yml` remove o container `agente` do fluxo de usuario
+  final e preserva os dados em `%LOCALAPPDATA%/SOG/dados`.
 
 ## Documentação canônica
 
@@ -34,6 +36,7 @@ continua como direção arquitetural, não como estado fechado.
 - [docs/architecture.md](docs/architecture.md): componentes, fluxo e persistência
 - [docs/api.md](docs/api.md): autenticação, rotas principais e estados
 - [docs/operacao-local-docker.md](docs/operacao-local-docker.md): execução local em Docker e limitações
+- [docs/instalador-desktop.md](docs/instalador-desktop.md): instalador gráfico, runtime desktop e fluxo do operador
 - [frontend/README.md](frontend/README.md): visão do dashboard e experiência atual de frontend
 
 ## Requisitos
@@ -77,6 +80,19 @@ Produção local:
 ```bash
 docker-compose up -d --build
 ```
+
+Usuario final Windows 11:
+
+```powershell
+cd desktop
+npm install
+npm run build:win
+```
+
+O instalador gerado abre uma interface grafica para configurar o SOG, guiar a
+instalacao do Docker Desktop quando ausente, subir a stack e iniciar o agente
+local. A interface tambem permite reiniciar a stack Docker e mudar a porta do
+dashboard quando a porta 80 estiver ocupada.
 
 Desenvolvimento:
 

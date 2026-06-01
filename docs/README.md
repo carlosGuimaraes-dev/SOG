@@ -6,6 +6,8 @@
 - `architecture.md`: componentes, fluxo operacional e persistência
 - `api.md`: contratos principais consumidos pelo dashboard
 - `operacao-local-docker.md`: execução local em Docker e diferenças entre estado atual e direção arquitetural
+- `instalador-desktop.md`: operação leigo-friendly com SOG Desktop, Docker Desktop guiado e agente local
+- `issues-installer-desktop.md`: slices de implementação e validação do instalador gráfico
 - `homologacao-docker-10-processos-template.md`: modelo de coleta de evidências para homologação Docker com lote de 10 processos
 - `../frontend/README.md`: comportamento atual do dashboard
 

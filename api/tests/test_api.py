@@ -456,7 +456,7 @@ class TestAgente:
         data = resp.json()
         assert data["status"] == "desconhecido"
         assert data["online"] is False
-        assert "Agente não registrado" in data["mensagem"]
+        assert "Agente desktop não iniciado" in data["mensagem"]
 
     def test_iniciar_agente(self, client, mock_db):
         from auth import create_access_token

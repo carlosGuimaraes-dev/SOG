@@ -1,0 +1,121 @@
+{
+  "name": "sog-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Instalador grafico e supervisor desktop do SOG.",
+  "author": "SOG",
+  "main": "main.js",
+  "scripts": {
+    "dev": "electron .",
+    "prepare:python:win": "powershell -ExecutionPolicy Bypass -File scripts/prepare-python-runtime.ps1",
+    "generate:icon": "node scripts/generate-icon.js",
+    "smoke:win": "powershell -ExecutionPolicy Bypass -File scripts/smoke-windows.ps1",
+    "smoke:upgrade": "powershell -ExecutionPolicy Bypass -File scripts/smoke-upgrade-preservation.ps1",
+    "build:win": "npm run generate:icon && npm run verify && npm run prepare:python:win && electron-builder --win nsis && npm run verify:packed-runtime && npm run verify:win-artifact",
+    "pack:dir": "electron-builder --dir && npm run verify:packed-runtime",
+    "verify": "npm run verify:package && npm run verify:plan && npm run verify:env && npm run verify:config && npm run verify:redaction && npm run check",
+    "verify:config": "node scripts/verify-config-merge.js",
+    "verify:package": "node scripts/verify-package.js",
+    "verify:plan": "node scripts/audit-plan.js",
+    "verify:env": "node scripts/verify-env-format.js",
+    "verify:redaction": "node scripts/verify-redaction.js",
+    "verify:packed-runtime": "node scripts/verify-packed-runtime.js",
+    "verify:win-artifact": "node scripts/verify-win-artifact.js",
+    "check": "node --check main.js && node --check preload.js && node --check renderer/app.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "icon": "build/icon.png",
+    "appId": "br.jus.tjdft.sog.desktop",
+    "productName": "SOG Desktop",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/agent",
+        "to": "agent"
+      },
+      {
+        "from": "vendor/ms-playwright",
+        "to": "ms-playwright"
+      },
+      {
+        "from": "../docker-compose.desktop.yml",
+        "to": "sog-runtime/docker-compose.desktop.yml"
+      },
+      {
+        "from": "../api",
+        "to": "sog-runtime/api",
+        "filter": [
+          "**/*",
+          "!tests/**/*",
+          "!.pytest_cache/**/*",
+          "!__pycache__/**/*",
+          "!**/__pycache__/**/*"
+        ]
+      },
+      {
+        "from": "../frontend",
+        "to": "sog-runtime/frontend",
+        "filter": [
+          "**/*",
+          "!node_modules/**/*",
+          "!dist/**/*",
+          "!coverage/**/*"
+        ]
+      },
+      {
+        "from": "../shared",
+        "to": "sog-runtime/shared",
+        "filter": [
+          "**/*",
+          "!*.egg-info/**/*",
+          "!__pycache__/**/*",
+          "!**/__pycache__/**/*"
+        ]
+      },
+      {
+        "from": "../agente",
+        "to": "sog-runtime/agente",
+        "filter": [
+          "**/*",
+          "!__pycache__/**/*",
+          "!**/__pycache__/**/*",
+          "!.pytest_cache/**/*",
+          "!tests/**/*"
+        ]
+      },
+      {
+        "from": "../nginx",
+        "to": "sog-runtime/nginx"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "identity": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "SOG Desktop"
+    }
+  }
+}

@@ -57,7 +57,7 @@ def status_agente(
     if not controle:
         return {
             "status": "desconhecido",
-            "mensagem": "Agente não registrado. Execute o aplicativo no desktop.",
+            "mensagem": "Agente desktop não iniciado. Abra o SOG Desktop e clique em Iniciar agente.",
             "atualizado_em": None,
             "online": False,
         }
