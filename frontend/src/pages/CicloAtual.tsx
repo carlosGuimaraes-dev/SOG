@@ -360,7 +360,7 @@ export default function CicloAtual() {
             </p>
             <h2 className="text-3xl font-semibold tracking-tight">Acompanhamento operacional da emissão</h2>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              A tabela abaixo mostra o lote efetivamente carregado no ciclo do agente. Cada ação replica a regra operacional válida para o status atual do processo.
+              Eu preciso acrescentar subtitulo aqui.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -450,7 +450,7 @@ export default function CicloAtual() {
             <div className="space-y-1">
               <CardTitle>Tabela operacional do ciclo</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Os cards e a tabela usam os componentes de `Card`, `Badge` e `Button` do shell UI atual, no padrão shadcn-style já consolidado no app Vite.
+                Eu preciso alterar mensagem aqui!.
               </p>
             </div>
             {ciclo && <Badge variant="outline">{ciclo.rotulo}</Badge>}

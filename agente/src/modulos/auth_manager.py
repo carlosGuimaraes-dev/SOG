@@ -19,6 +19,10 @@ class ReautenticacaoNecessariaError(Exception):
         super().__init__(f"Reautenticação necessária no {sistema}")
 
 
+class BrowserIndisponivelError(RuntimeError):
+    """Levantada quando o navegador Playwright não consegue iniciar."""
+
+
 class AuthManager:
     """
     Gerencia browser Playwright com:
@@ -40,8 +44,14 @@ class AuthManager:
         if self._playwright:
             return
 
-        self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=self.headless_default)
+        try:
+            self._playwright = sync_playwright().start()
+            self.browser = self._playwright.chromium.launch(headless=self.headless_default)
+        except Exception as e:
+            self.fechar()
+            raise BrowserIndisponivelError(
+                self._mensagem_browser_indisponivel(e, visivel=not self.headless_default)
+            ) from e
 
         context_kwargs = {
             "viewport": {"width": 1920, "height": 1080},
@@ -112,8 +122,14 @@ class AuthManager:
         self.fechar()
 
         # Abre visível
-        self._playwright = sync_playwright().start()
-        self.browser = self._playwright.chromium.launch(headless=False)
+        try:
+            self._playwright = sync_playwright().start()
+            self.browser = self._playwright.chromium.launch(headless=False)
+        except Exception as e:
+            self.fechar()
+            raise BrowserIndisponivelError(
+                self._mensagem_browser_indisponivel(e, visivel=True)
+            ) from e
         self.context = self.browser.new_context(viewport={"width": 1920, "height": 1080})
         self.page = self.context.new_page()
 
@@ -146,6 +162,31 @@ class AuthManager:
         # Fecha visível e reabre headless
         self.fechar()
         self.iniciar()
+
+    def _mensagem_browser_indisponivel(self, erro_original: Exception, visivel: bool) -> str:
+        modo = "visível para login assistido" if visivel else "headless"
+        detalhe = self._resumir_erro_playwright(erro_original)
+        return (
+            f"Não foi possível abrir o navegador {modo} do agente. "
+            "O SOG tenta abrir o Chromium automaticamente para PJe e SISTJWEB quando a sessão precisa de login, "
+            "mas o navegador fechou ao iniciar neste ambiente Docker. "
+            "Verifique se o container tem suporte gráfico para janela visível ou execute o agente em um ambiente desktop "
+            "com Playwright/Chromium habilitado. "
+            f"Detalhe técnico resumido: {detalhe}"
+        )
+
+    def _resumir_erro_playwright(self, erro_original: Exception) -> str:
+        texto = str(erro_original).replace("\n", " ")
+        marcadores = [
+            "Target page, context or browser has been closed",
+            "Host system is missing dependencies",
+            "Connection reset by peer",
+            "No such file or directory",
+        ]
+        for marcador in marcadores:
+            if marcador in texto:
+                return marcador
+        return texto[:240] + ("..." if len(texto) > 240 else "")
 
     def fechar(self):
         """Fecha context, browser e playwright de forma segura."""

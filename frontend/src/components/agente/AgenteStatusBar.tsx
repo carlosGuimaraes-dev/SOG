@@ -95,6 +95,21 @@ const PARAR_HABILITADO: AgenteStatus[] = [
   'iniciando',
 ]
 
+function normalizarMensagemAgente(mensagem: string): string {
+  if (!mensagem) return ''
+  const erroBrowser =
+    mensagem.includes('BrowserType.launch') ||
+    mensagem.includes('Target page, context or browser has been closed') ||
+    mensagem.includes('chrome_crashpad_handler') ||
+    mensagem.includes('Connection reset by peer')
+
+  if (erroBrowser) {
+    return 'Não foi possível abrir o navegador do agente para login. O SOG tenta abrir PJe e SISTJWEB automaticamente, mas o Chromium fechou ao iniciar neste ambiente. Verifique o suporte gráfico do Docker/Playwright e reinicie o agente.'
+  }
+
+  return mensagem.length > 280 ? `${mensagem.slice(0, 280)}...` : mensagem
+}
+
 export default function AgenteStatusBar() {
   const [status, setStatus] = useState<AgenteStatus>('desconhecido')
   const [mensagem, setMensagem] = useState('')
@@ -125,7 +140,7 @@ export default function AgenteStatusBar() {
     try {
       const res = await api.get<AgenteStatusResponse>(ENDPOINTS.AGENTE_STATUS)
       setStatus(res.data.status)
-      setMensagem(res.data.mensagem)
+      setMensagem(normalizarMensagemAgente(res.data.mensagem))
       setOnline(res.data.online)
       setCicloUuid(res.data.ciclo_uuid ?? null)
       setPodeIniciarApi(res.data.pode_iniciar ?? true)
@@ -213,14 +228,14 @@ export default function AgenteStatusBar() {
       role="region"
       aria-label="Status do agente de automação"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <span
           className={`w-3 h-3 rounded-full ${cfg.cor} ${online ? '' : 'opacity-40'}`}
           aria-hidden="true"
         />
         <span className="font-medium">{cfg.label}</span>
         {mensagem && (
-          <span className="text-sm text-muted-foreground">— {mensagem}</span>
+          <span className="min-w-0 break-words text-sm text-muted-foreground">— {mensagem}</span>
         )}
         {reloginRequired && (
           <span className="rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-900">
