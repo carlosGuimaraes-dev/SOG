@@ -27,6 +27,83 @@ SHARED_DIR = Path(__file__).resolve().parent.parent.parent / "shared"
 if str(SHARED_DIR) not in sys.path:
     sys.path.insert(0, str(SHARED_DIR))
 
+DESKTOP_SMOKE_ARG = "--desktop-smoke"
+DESKTOP_LOGIN_SMOKE_ARG = "--desktop-login-smoke"
+
+
+def _write_desktop_smoke_payload(payload: dict) -> None:
+    output_path = os.getenv("SOG_DESKTOP_SMOKE_OUTPUT")
+    encoded = json.dumps(payload, ensure_ascii=False)
+    if output_path:
+        Path(output_path).write_text(encoded, encoding="utf-8")
+        return
+    print(encoded)
+
+
+def _desktop_smoke() -> int:
+    """Valida o executável desktop sem iniciar o loop longo do agente."""
+    from config import DB_PATH, STORAGE_STATE_DIR
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto("data:text/html,<title>sog-agent-smoke</title>")
+        title = page.title()
+        browser.close()
+
+    _write_desktop_smoke_payload({
+        "status": "ok",
+        "title": title,
+        "storage_state_dir": str(STORAGE_STATE_DIR),
+        "db_path": DB_PATH,
+    })
+    return 0
+
+
+def _desktop_login_smoke() -> int:
+    """Abre Chromium visível nas URLs de login para validação manual do desktop."""
+    from config import PJE_URL, SISTJ_URL
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=False)
+        page = browser.new_page()
+        page.goto(PJE_URL, wait_until="domcontentloaded", timeout=30000)
+        page = browser.new_page()
+        page.goto(SISTJ_URL, wait_until="domcontentloaded", timeout=30000)
+        print(json.dumps({
+            "status": "ok",
+            "message": "Chromium aberto para login PJe/SISTJWEB.",
+            "pje_url": PJE_URL,
+            "sistj_url": SISTJ_URL,
+        }, ensure_ascii=False))
+        page.wait_for_timeout(int(os.getenv("SOG_LOGIN_SMOKE_HOLD_MS", "15000")))
+        browser.close()
+
+    return 0
+
+
+def _run_desktop_cli() -> int | None:
+    try:
+        if DESKTOP_SMOKE_ARG in sys.argv:
+            return _desktop_smoke()
+        if DESKTOP_LOGIN_SMOKE_ARG in sys.argv:
+            return _desktop_login_smoke()
+    except Exception as exc:
+        if DESKTOP_SMOKE_ARG in sys.argv:
+            _write_desktop_smoke_payload({
+                "status": "error",
+                "error": str(exc),
+            })
+        raise
+    return None
+
+
+_desktop_exit_code = _run_desktop_cli()
+if _desktop_exit_code is not None:
+    raise SystemExit(_desktop_exit_code)
+
 from config import (
     DB_PATH,
     PJE_URL,
@@ -503,56 +580,9 @@ class AgenteServico:
             aviso(f"Erro ao fechar SistjClient: {e}")
 
 
-def _desktop_smoke() -> int:
-    """Valida o executável desktop sem iniciar o loop longo do agente."""
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto("data:text/html,<title>sog-agent-smoke</title>")
-        title = page.title()
-        browser.close()
-
-    payload = {
-        "status": "ok",
-        "title": title,
-        "storage_state_dir": str(STORAGE_STATE_DIR),
-        "db_path": DB_PATH,
-    }
-    output_path = os.getenv("SOG_DESKTOP_SMOKE_OUTPUT")
-    if output_path:
-        Path(output_path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    else:
-        print(json.dumps(payload, ensure_ascii=False))
-    return 0
-
-
-def _desktop_login_smoke() -> int:
-    """Abre Chromium visível nas URLs de login para validação manual do desktop."""
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
-        page = browser.new_page()
-        page.goto(PJE_URL, wait_until="domcontentloaded", timeout=30000)
-        page = browser.new_page()
-        page.goto(SISTJ_URL, wait_until="domcontentloaded", timeout=30000)
-        print(json.dumps({
-            "status": "ok",
-            "message": "Chromium aberto para login PJe/SISTJWEB.",
-            "pje_url": PJE_URL,
-            "sistj_url": SISTJ_URL,
-        }, ensure_ascii=False))
-        page.wait_for_timeout(int(os.getenv("SOG_LOGIN_SMOKE_HOLD_MS", "15000")))
-        browser.close()
-
-    return 0
-
-
 if __name__ == "__main__":
-    if "--desktop-smoke" in sys.argv:
+    if DESKTOP_SMOKE_ARG in sys.argv:
         raise SystemExit(_desktop_smoke())
-    if "--desktop-login-smoke" in sys.argv:
+    if DESKTOP_LOGIN_SMOKE_ARG in sys.argv:
         raise SystemExit(_desktop_login_smoke())
     AgenteServico().run()
