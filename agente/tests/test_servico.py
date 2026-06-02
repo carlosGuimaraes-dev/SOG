@@ -10,11 +10,34 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from modulos.auth_manager import ReautenticacaoNecessariaError
-from servico import AgenteServico
+from servico import AgenteServico, _goto_login_smoke_page
 from sog_shared import db
 
 
 SCHEMA_SQL = Path(__file__).parent.parent / "src" / "banco" / "schema.sql"
+
+
+def test_login_smoke_tolera_goto_abortado_por_sso():
+    page = MagicMock()
+    page.goto.side_effect = Exception(
+        "Page.goto: net::ERR_ABORTED; maybe frame was detached?"
+    )
+
+    _goto_login_smoke_page(page, "https://pje.tjdft.jus.br/pje/login.seam")
+
+    page.goto.assert_called_once_with(
+        "https://pje.tjdft.jus.br/pje/login.seam",
+        wait_until="domcontentloaded",
+        timeout=30000,
+    )
+
+
+def test_login_smoke_nao_esconde_erro_real_de_navegacao():
+    page = MagicMock()
+    page.goto.side_effect = Exception("Page.goto: net::ERR_NAME_NOT_RESOLVED")
+
+    with pytest.raises(Exception, match="ERR_NAME_NOT_RESOLVED"):
+        _goto_login_smoke_page(page, "https://pje.tjdft.jus.br/pje/login.seam")
 
 
 @pytest.fixture

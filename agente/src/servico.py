@@ -80,9 +80,9 @@ def _desktop_login_smoke() -> int:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
         page = browser.new_page()
-        page.goto(PJE_URL, wait_until="domcontentloaded", timeout=30000)
+        _goto_login_smoke_page(page, PJE_URL)
         page = browser.new_page()
-        page.goto(SISTJ_URL, wait_until="domcontentloaded", timeout=30000)
+        _goto_login_smoke_page(page, SISTJ_URL)
         print(json.dumps({
             "status": "ok",
             "message": "Chromium aberto para login PJe/SISTJWEB.",
@@ -93,6 +93,15 @@ def _desktop_login_smoke() -> int:
         browser.close()
 
     return 0
+
+
+def _goto_login_smoke_page(page, url: str) -> None:
+    """Navegação visual: SSO pode abortar o frame mesmo com a janela aberta."""
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    except Exception as exc:
+        if "ERR_ABORTED" not in str(exc):
+            raise
 
 
 def _run_desktop_cli() -> int | None:
