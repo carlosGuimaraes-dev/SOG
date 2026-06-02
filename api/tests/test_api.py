@@ -1,7 +1,11 @@
 """
 Testes da API FastAPI com banco SQLite em memória.
 """
+import os
 import sqlite3
+import subprocess
+import sys
+import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
@@ -63,6 +67,40 @@ class TestHealth:
         assert data["status"] in ("ok", "degraded")
         assert "version" in data
         assert "database" in data
+
+    def test_health_inicia_sem_dashboard_senha_hash(self, tmp_path):
+        root = Path(__file__).resolve().parents[2]
+        script = textwrap.dedent(
+            f"""
+            import os
+            import sys
+            from fastapi.testclient import TestClient
+
+            sys.path.insert(0, {str(root / "api" / "src")!r})
+            sys.path.insert(0, {str(root / "shared")!r})
+
+            os.environ["DB_PATH"] = {str(tmp_path / "custas.db")!r}
+            os.environ["JWT_SECRET_KEY"] = "test-secret-key-com-mais-de-32-caracteres!"
+            os.environ.pop("DASHBOARD_SENHA_HASH", None)
+
+            from app import app
+
+            with TestClient(app) as client:
+                resp = client.get("/api/v1/health")
+                assert resp.status_code == 200, resp.text
+            """
+        )
+        env = os.environ.copy()
+        env.pop("DASHBOARD_SENHA_HASH", None)
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=root,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
 
 
 class TestAuth:

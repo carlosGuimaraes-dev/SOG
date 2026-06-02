@@ -16,9 +16,8 @@ from limiter import limiter
 from schemas import HealthResponse
 
 from sog_shared import db
-from sog_shared.config import DASHBOARD_SENHA_HASH, init_config
+from sog_shared.config import init_config
 from rotas import auth, processos, aprovacao, historico, agente, tarefas, pje, sistjweb, acoes, dashboard
-from auth import _hash_valido
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,9 +30,6 @@ logger = logging.getLogger("custas_api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_config()
-    if not _hash_valido(DASHBOARD_SENHA_HASH):
-        logger.error("DASHBOARD_SENHA_HASH ausente ou inválido. Aplicação não pode iniciar.")
-        raise RuntimeError("DASHBOARD_SENHA_HASH ausente ou inválido")
     db.init_db()
     logger.info("API iniciada")
     yield
