@@ -12,7 +12,7 @@ const { pipeline } = require("node:stream/promises");
 const PACKAGE_VERSION = "0.1.0";
 const DISPLAY_NAME = "iSOG";
 const REPO_RELEASE_BASE = "https://github.com/carlosGuimaraes-dev/SOG/releases/download";
-const DEFAULT_ASSET_NAME = `SOG Desktop Setup ${PACKAGE_VERSION}.exe`;
+const DEFAULT_ASSET_NAME = `SOG.Desktop.Setup.${PACKAGE_VERSION}.exe`;
 const DEFAULT_SHA256 = "b160e23d8f9114b1026794311e89f29445081f2502ab6059b7268d9c64dbfc7b";
 
 function usage() {
@@ -52,7 +52,7 @@ function requireWindows() {
 
 function getInstallConfig() {
   const version = process.env.ISOG_VERSION || PACKAGE_VERSION;
-  const assetName = process.env.ISOG_ASSET_NAME || `SOG Desktop Setup ${version}.exe`;
+  const assetName = process.env.ISOG_ASSET_NAME || `SOG.Desktop.Setup.${version}.exe`;
   const releaseBase = `${REPO_RELEASE_BASE}/v${version}`;
   const assetUrl = process.env.ISOG_ASSET_URL || `${releaseBase}/${encodeURIComponent(assetName)}`;
   const cacheRoot = process.env.LOCALAPPDATA || os.tmpdir();

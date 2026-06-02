@@ -15,6 +15,12 @@ entrega o usuario ao instalador oficial. Depois da instalacao, o aplicativo
 iSOG/SOG Desktop instalado inicia a stack local e abre o dashboard no navegador
 padrao do Windows, que pode ser o Chrome.
 
+Asset padrao da versao `0.1.0`:
+
+```text
+SOG.Desktop.Setup.0.1.0.exe
+```
+
 ## Publicacao
 
 1. Publique o instalador Windows como asset da release `v0.1.0`.
