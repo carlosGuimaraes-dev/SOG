@@ -245,8 +245,6 @@ function readEnvFile(filePath) {
 function defaultConfig() {
   const p = paths()
   return {
-    dashboardUsuario: 'admin',
-    dashboardSenha: '',
     pjeUrl: 'https://pje.tjdft.jus.br/pje/login.seam',
     pjeEtiqueta: 'SHEILA DE DEUS (TREINAMENTO)',
     sistjUrl: 'https://sistj.tjdft.jus.br/sistj/sistj',
@@ -275,8 +273,6 @@ function loadConfig() {
   const { apiEnv, agentEnv, composeEnv } = existingConfig()
   return {
     ...defaults,
-    dashboardUsuario: apiEnv.DASHBOARD_USUARIO || defaults.dashboardUsuario,
-    dashboardSenha: '',
     pjeUrl: agentEnv.PJE_URL || defaults.pjeUrl,
     pjeEtiqueta: agentEnv.PJE_ETIQUETA || defaults.pjeEtiqueta,
     sistjUrl: agentEnv.SISTJ_URL || defaults.sistjUrl,
@@ -334,11 +330,10 @@ async function saveConfig(input) {
   const dataDir = config.dataDir || p.data
   fs.mkdirSync(dataDir, { recursive: true })
   fs.mkdirSync(path.join(dataDir, 'auth'), { recursive: true })
-  const dashboardSenha = chooseSecret(config.dashboardSenha, existing.apiEnv.DASHBOARD_SENHA)
   const jwtSecret = existing.apiEnv.JWT_SECRET_KEY || crypto.randomBytes(32).toString('hex')
   writeEnvFile(p.envApi, {
-    DASHBOARD_USUARIO: config.dashboardUsuario || 'admin',
-    DASHBOARD_SENHA: dashboardSenha,
+    DASHBOARD_AUTH_DISABLED: 'true',
+    DASHBOARD_LOCAL_USER: 'operador-local',
     JWT_SECRET_KEY: jwtSecret,
     FRONTEND_URL: dashboardUrlForPort(config.httpPort || existing.composeEnv.SOG_HTTP_PORT || '80'),
     DB_PATH: '/dados/custas.db',

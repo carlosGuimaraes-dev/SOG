@@ -17,7 +17,8 @@ Em termos de experiencia do usuario:
 3. O instalador instala o sistema no Windows.
 4. O usuario abre o aplicativo instalado.
 5. O aplicativo inicia a stack local e abre o dashboard no navegador padrao do
-   Windows, que pode ser o Chrome.
+   Windows, que pode ser o Chrome. O dashboard local nao exige senha propria; o
+   login manual obrigatorio acontece no PJe/SISTJWEB quando o agente precisar.
 
 Ou seja: o npm nao hospeda o sistema completo. O npm hospeda apenas o comando
 de bootstrap. O sistema completo continua sendo entregue pelo instalador
@@ -26,8 +27,8 @@ Windows versionado.
 ## Fluxo inicial
 
 1. Gerar o instalador Windows pelo fluxo existente do desktop.
-2. Publicar o instalador no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.4/` com o nome
-   `SOG.Desktop.Setup.0.1.4.exe`.
+2. Publicar o instalador no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.5/` com o nome
+   `SOG.Desktop.Setup.0.1.5.exe`.
 3. Confirmar que o instalador publicado corresponde a verificacao interna do
    bootstrap da versao.
 4. Publicar `packages/sogtj` no npm.

@@ -30,7 +30,7 @@ function RequireAuth() {
 }
 
 function Layout() {
-  const { logout } = useAuth()
+  const { authRequired, logout } = useAuth()
   const location = useLocation()
   const navItems = [
     { to: '/', label: 'Ciclo atual', active: location.pathname === '/' },
@@ -49,9 +49,11 @@ function Layout() {
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Button variant="ghost" size="sm" onClick={logout} aria-label="Sair da conta">
-                Sair
-              </Button>
+              {authRequired && (
+                <Button variant="ghost" size="sm" onClick={logout} aria-label="Sair da conta">
+                  Sair
+                </Button>
+              )}
             </div>
           </div>
           <nav className="inline-flex w-full flex-wrap gap-2 rounded-lg border border-border bg-muted/40 p-1 text-sm" aria-label="Navegação principal do dashboard">

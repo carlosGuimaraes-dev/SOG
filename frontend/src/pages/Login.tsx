@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import Button from '../components/ui/Button'
@@ -9,8 +9,14 @@ export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const { login, isLoading } = useAuth()
+  const { user, authRequired, login, isLoading } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (user && !authRequired) {
+      navigate('/', { replace: true })
+    }
+  }, [authRequired, navigate, user])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

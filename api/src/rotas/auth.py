@@ -13,6 +13,7 @@ from auth import (
     authenticate_user,
     create_access_token,
     create_refresh_token,
+    dashboard_auth_disabled,
     decode_token,
     get_current_user,
     refresh_token_eh_valido,
@@ -105,6 +106,9 @@ def _json_response_with_cleared_cookies(
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("5/minute")
 def login(req: LoginRequest, response: Response, request: Request):
+    if dashboard_auth_disabled():
+        return {"message": "Login dispensado no modo desktop local"}
+
     if not authenticate_user(req.username, req.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -156,11 +160,15 @@ def refresh(request: Request, response: Response):
 
 @router.get("/me", response_model=MeResponse)
 def me(username: str = Depends(get_current_user)):
-    return {"username": username}
+    return {"username": username, "auth_required": not dashboard_auth_disabled()}
 
 
 @router.post("/logout", response_model=LogoutResponse)
 def logout(request: Request, response: Response):
+    if dashboard_auth_disabled():
+        _clear_auth_cookies(response)
+        return {"message": "Logout dispensado no modo desktop local"}
+
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
         payload = decode_token(refresh_token)

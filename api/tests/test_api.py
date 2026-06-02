@@ -16,6 +16,12 @@ from fastapi.testclient import TestClient
 SCHEMA_SQL = Path(__file__).parent.parent.parent / "agente" / "src" / "banco" / "schema.sql"
 
 
+@pytest.fixture(autouse=True)
+def dashboard_auth_env(monkeypatch):
+    monkeypatch.delenv("DASHBOARD_AUTH_DISABLED", raising=False)
+    monkeypatch.delenv("DASHBOARD_LOCAL_USER", raising=False)
+
+
 @pytest.fixture
 def mock_db(monkeypatch):
     """Fixture que substitui o banco SQLite por :memory: com schema inicializado."""
@@ -82,6 +88,7 @@ class TestHealth:
             os.environ["DB_PATH"] = {str(tmp_path / "custas.db")!r}
             os.environ["JWT_SECRET_KEY"] = "test-secret-key-com-mais-de-32-caracteres!"
             os.environ.pop("DASHBOARD_SENHA", None)
+            os.environ.pop("DASHBOARD_AUTH_DISABLED", None)
 
             from app import app
 
@@ -92,6 +99,7 @@ class TestHealth:
         )
         env = os.environ.copy()
         env.pop("DASHBOARD_SENHA", None)
+        env.pop("DASHBOARD_AUTH_DISABLED", None)
         result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=root,
@@ -237,7 +245,7 @@ class TestAuth:
         client.cookies.set("access_token", token, domain="testserver.local", path="/")
         resp = client.get("/api/v1/auth/me")
         assert resp.status_code == 200
-        assert resp.json() == {"username": "admin"}
+        assert resp.json() == {"username": "admin", "auth_required": True}
 
     def test_me_sem_cookie(self, client):
         client.cookies.clear()
@@ -253,7 +261,20 @@ class TestAuth:
             "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
         )
         assert resp.status_code == 200
-        assert resp.json() == {"username": "admin"}
+        assert resp.json() == {"username": "admin", "auth_required": True}
+
+    def test_me_modo_desktop_local_dispensa_cookie(self, client, monkeypatch):
+        monkeypatch.setenv("DASHBOARD_AUTH_DISABLED", "true")
+        monkeypatch.setenv("DASHBOARD_LOCAL_USER", "operador-local")
+        client.cookies.clear()
+
+        resp = client.get("/api/v1/auth/me")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "username": "operador-local",
+            "auth_required": False,
+        }
 
     def test_logout_com_refresh_valido(self, client, mock_db):
         from auth import create_refresh_token

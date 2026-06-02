@@ -30,6 +30,19 @@ JWT_AUDIENCE = "custas-dashboard"
 security = HTTPBearer(auto_error=False)
 
 
+def dashboard_auth_disabled() -> bool:
+    return os.getenv("DASHBOARD_AUTH_DISABLED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def dashboard_local_user() -> str:
+    return os.getenv("DASHBOARD_LOCAL_USER", "operador-local")
+
+
 # ---------------------------------------------------------------------------
 # Token creation / decoding
 # ---------------------------------------------------------------------------
@@ -98,6 +111,9 @@ def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> str:
+    if dashboard_auth_disabled():
+        return dashboard_local_user()
+
     # Prioriza cookie httpOnly; fallback para Authorization header
     token = request.cookies.get("access_token")
     if not token and credentials:

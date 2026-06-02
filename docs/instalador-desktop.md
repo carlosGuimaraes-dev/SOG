@@ -9,6 +9,8 @@ Playwright fora do container para permitir login interativo em Chromium visivel.
 - `desktop/`: app Electron, wizard de configuracao, preflight, status e diagnostico.
 - `docker-compose.desktop.yml`: stack de usuario final sem container `agente`.
 - Docker Desktop: executa `api`, `frontend` e `nginx`.
+- Dashboard local: publicado apenas em `127.0.0.1` e sem senha propria no modo
+  desktop.
 - Imagens Docker: o Compose aceita `SOG_API_IMAGE` e `SOG_FRONTEND_IMAGE` para
   puxar imagens prepublicadas; se nao forem informadas, usa build local como
   fallback de desenvolvimento.
@@ -36,8 +38,9 @@ Se a stack local precisar ser recriada, use `Reiniciar Docker` no proprio SOG
 Desktop. O operador final nao precisa abrir terminal para subir, parar ou
 reiniciar os containers.
 
-O SOG nao armazena usuario ou senha de PJe/SISTJWEB. O login permanece manual
-por SSO/2FA e o agente salva apenas `storage_state`.
+O SOG nao armazena usuario ou senha de PJe/SISTJWEB. Esse login permanece
+manual por SSO/2FA e o agente salva apenas `storage_state`; ele e requisito para
+o sistema funcionar.
 
 No campo `Pasta de dados`, use `Escolher pasta` para selecionar graficamente o
 diretorio persistente. Essa pasta e preservada em reinstalacao/upgrade e e

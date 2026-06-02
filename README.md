@@ -26,6 +26,7 @@ O caminho recomendado para usuario final e o SOG Desktop:
 
 - API, frontend e nginx rodam em Docker Desktop;
 - o agente Playwright roda fora do container para abrir Chromium visivel;
+- o dashboard desktop roda apenas em `localhost` e nao exige login proprio;
 - PJe e SISTJWEB continuam com login manual por SSO/2FA, sem armazenar senha;
 - `docker-compose.desktop.yml` remove o container `agente` do fluxo de usuario
   final e preserva os dados em `%LOCALAPPDATA%/SOG/dados`.
@@ -63,8 +64,8 @@ e abre o dashboard no navegador.
 6. Se o Docker Desktop ainda nao estiver instalado, use a acao indicada pelo
    aplicativo para instalar o Docker Desktop. Depois da instalacao, abra o
    Docker Desktop e aguarde ele ficar em execucao.
-7. No iSOG/SOG Desktop, crie o usuario e a senha do dashboard no assistente,
-   confirme as demais configuracoes iniciais e inicie a stack do sistema.
+7. No iSOG/SOG Desktop, confirme as configuracoes iniciais e inicie a stack do
+   sistema. O dashboard local nao pede uma senha propria.
 8. O aplicativo subira os containers Docker locais do SOG, incluindo API,
    frontend e nginx.
 9. Quando a stack estiver pronta, o dashboard sera aberto no navegador padrao em
@@ -110,8 +111,9 @@ cp .env.example .env.agente
 Revise os blocos correspondentes dentro do próprio `.env.example` antes de subir
 o Compose. Em especial:
 
-- No SOG Desktop, o usuario e a senha do dashboard sao criados no assistente do
-  aplicativo; o usuario final nao precisa editar `.env` nem gerar chaves.
+- No SOG Desktop, o dashboard local roda com `DASHBOARD_AUTH_DISABLED=true` e
+  porta presa a `127.0.0.1`; o usuario final nao precisa criar senha local nem
+  editar `.env`.
 - Em execução manual fora do instalador, a configuração técnica do dashboard
   precisa ser preenchida no `.env.api`.
 - `JWT_SECRET_KEY` precisa ter pelo menos 32 caracteres
@@ -156,8 +158,10 @@ URLs úteis:
 
 ## Fluxo operacional resumido
 
-1. O operador acessa o dashboard e faz login.
-2. O frontend consulta `/api/v1/auth/me` e as rotas operacionais via cookies.
+1. O operador acessa o dashboard. No SOG Desktop local nao ha login proprio do
+   dashboard; em execucao manual, o login do dashboard segue a configuracao do
+   `.env.api`.
+2. O frontend consulta `/api/v1/auth/me` e usa o modo informado pela API.
 3. O dashboard envia comandos para `/api/v1/agente/iniciar` ou `/api/v1/agente/parar`.
 4. A API grava o controle no SQLite compartilhado.
 5. O agente processa ciclos, filas e tarefas assíncronas, atualizando tabelas de

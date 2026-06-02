@@ -95,7 +95,7 @@ assert(main.includes('latestAgentLog'), 'main.js deve anexar trecho do log do ag
 assert(main.includes('packageDir'), 'main.js deve gerar pacote/diretorio de diagnostico')
 assert(main.includes('agente-ultimas-linhas.log'), 'main.js deve separar log recente no pacote de diagnostico')
 assert(main.includes('shell.openPath(packageDir)'), 'main.js deve abrir pasta do pacote de diagnostico')
-assert(main.includes('DASHBOARD_SENHA'), 'main.js deve mascarar segredos do dashboard no diagnostico')
+assert(main.includes('DASHBOARD_AUTH_DISABLED'), 'main.js deve configurar dashboard desktop sem login proprio')
 
 const smoke = read('desktop/scripts/smoke-windows.ps1')
 const smokeUpgrade = read('desktop/scripts/smoke-upgrade-preservation.ps1')
@@ -107,6 +107,7 @@ assert(html.includes('name="apiImage"'), 'wizard deve permitir configurar imagem
 assert(html.includes('name="frontendImage"'), 'wizard deve permitir configurar imagem Docker frontend')
 assert(html.includes('name="imagePullPolicy"'), 'wizard deve permitir configurar politica de pull')
 assert(html.includes('name="httpPort"'), 'wizard deve permitir configurar porta HTTP')
+assert(!html.includes('dashboardSenha'), 'wizard desktop nao deve pedir senha propria do dashboard')
 assert(html.includes('id="choose-data-dir"'), 'wizard deve ter seletor grafico para pasta de dados')
 assert(html.includes('id="restart-stack"'), 'UI deve expor botao para reiniciar Docker')
 assert(html.includes('id="test-chromium"'), 'UI deve expor botao para testar Chromium visivel')

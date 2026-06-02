@@ -66,7 +66,7 @@ services:
     image: nginx:alpine@sha256:dc48b7a872a79fb541ba5081d320b11b549231bc63ba465a7495afaa7d2ebcb8
     container_name: custas-nginx
     ports:
-      - "${SOG_HTTP_PORT:-80}:80"
+      - "127.0.0.1:${SOG_HTTP_PORT:-80}:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:

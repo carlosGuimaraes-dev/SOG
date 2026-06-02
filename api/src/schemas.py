@@ -138,6 +138,7 @@ class LogoutResponse(BaseModel):
 
 class MeResponse(BaseModel):
     username: str
+    auth_required: bool = True
 
 
 class HealthResponse(BaseModel):

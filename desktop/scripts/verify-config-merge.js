@@ -14,7 +14,6 @@ function assert(condition, message) {
 
 const existing = {
   apiEnv: {
-    DASHBOARD_SENHA: 'senha-existente',
     JWT_SECRET_KEY: 'jwt-existente',
   },
   agentEnv: {
@@ -25,7 +24,6 @@ const existing = {
 }
 
 const partialInput = {
-  dashboardSenha: '',
   pjeUrl: 'https://pje.tjdft.jus.br/pje/login.seam',
   sistjUrl: 'https://sistj.tjdft.jus.br/sistj/sistj',
   datajudApiKey: '',
@@ -36,30 +34,26 @@ const partialInput = {
 assert(missingConfigLabels(partialInput, existing).length === 0, 'config parcial deveria preservar segredos existentes')
 assert(chooseSecret('', existing.agentEnv.DATAJUD_API_KEY) === existing.agentEnv.DATAJUD_API_KEY, 'segredo vazio deve preservar existente')
 assert(chooseSecret('novo', existing.agentEnv.DATAJUD_API_KEY) === 'novo', 'segredo preenchido deve substituir existente')
-assert(chooseSecret('', existing.apiEnv.DASHBOARD_SENHA) === existing.apiEnv.DASHBOARD_SENHA, 'senha vazia deve preservar senha do dashboard existente')
-assert(chooseSecret('nova-senha', existing.apiEnv.DASHBOARD_SENHA) === 'nova-senha', 'senha preenchida deve substituir senha do dashboard existente')
 
 const flags = secretConfigured(existing.apiEnv, existing.agentEnv)
-assert(flags.dashboardSenha, 'dashboardSenha deveria aparecer como configurado')
 assert(flags.datajudApiKey, 'datajudApiKey deveria aparecer como configurado')
 assert(flags.telegramBotToken, 'telegramBotToken deveria aparecer como configurado')
 assert(flags.telegramChatId, 'telegramChatId deveria aparecer como configurado')
 assert(flags.jwtSecret, 'jwtSecret deveria aparecer como configurado')
 
 const missing = missingConfigLabels({
-  dashboardSenha: '',
   pjeUrl: '',
   sistjUrl: '',
   datajudApiKey: '',
   telegramBotToken: '',
   telegramChatId: '',
 }, { apiEnv: {}, agentEnv: {} })
-for (const label of ['URL do PJe', 'URL do SISTJWEB', 'Senha do dashboard', 'Chave Datajud', 'Token do Telegram', 'Chat ID do Telegram']) {
+for (const label of ['URL do PJe', 'URL do SISTJWEB', 'Chave Datajud', 'Token do Telegram', 'Chat ID do Telegram']) {
   assert(missing.includes(label), `campo obrigatorio ausente nao reportado: ${label}`)
 }
 
 const runtimeMissing = runtimeConfigMissingLabels(
-  { DASHBOARD_SENHA: existing.apiEnv.DASHBOARD_SENHA },
+  {},
   {
     PJE_URL: 'https://pje.tjdft.jus.br/pje/login.seam',
     SISTJ_URL: 'https://sistj.tjdft.jus.br/sistj/sistj',
@@ -75,14 +69,8 @@ const runtimeMissing = runtimeConfigMissingLabels(
 )
 assert(runtimeMissing.length === 0, 'runtime completo nao deveria reportar pendencia')
 
-const missingDashboardPassword = missingConfigLabels(partialInput, {
-  ...existing,
-  apiEnv: { DASHBOARD_SENHA: '' },
-})
-assert(missingDashboardPassword.includes('Senha do dashboard'), 'senha ausente deve exigir senha nova')
-
 const runtimeBroken = runtimeConfigMissingLabels({}, {}, { SOG_HTTP_PORT: '99999' })
-for (const label of ['URL do PJe', 'URL do SISTJWEB', 'Senha do dashboard', 'Pasta de dados', 'Configuração da API para Docker', 'Porta HTTP válida']) {
+for (const label of ['URL do PJe', 'URL do SISTJWEB', 'Chave Datajud', 'Token do Telegram', 'Chat ID do Telegram', 'Pasta de dados', 'Configuração da API para Docker', 'Porta HTTP válida']) {
   assert(runtimeBroken.includes(label), `runtime incompleto nao reportou: ${label}`)
 }
 

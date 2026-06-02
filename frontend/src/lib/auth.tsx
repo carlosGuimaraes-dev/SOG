@@ -8,6 +8,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null
+  authRequired: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   isLoading: boolean
@@ -17,11 +18,13 @@ const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [authRequired, setAuthRequired] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     api.get(ENDPOINTS.ME)
       .then((res) => {
+        setAuthRequired(res.data?.auth_required !== false)
         if (res.data?.username) {
           setUser({ username: res.data.username })
         }
@@ -39,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.post(ENDPOINTS.LOGIN, { username, password })
       const me = await api.get(ENDPOINTS.ME)
+      setAuthRequired(me.data?.auth_required !== false)
       setUser({ username: me.data.username })
     } finally {
       setIsLoading(false)
@@ -56,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, authRequired, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   )

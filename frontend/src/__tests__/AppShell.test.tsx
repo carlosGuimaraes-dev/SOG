@@ -7,6 +7,7 @@ vi.mock('../lib/auth', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useAuth: () => ({
     user: { username: 'operador' },
+    authRequired: true,
     isLoading: false,
     logout: vi.fn(),
   }),
