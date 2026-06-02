@@ -20,7 +20,7 @@ function usage() {
 ${DISPLAY_NAME} installer
 
 Uso:
-  npx -y isog
+  npx -y sogtj
 
 Opcoes:
   --help          Mostra esta ajuda.

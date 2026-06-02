@@ -1,12 +1,12 @@
 {
-  "name": "isog",
+  "name": "sogtj",
   "version": "0.1.0",
   "description": "Instalador via npx para o iSOG.",
   "bin": {
-    "isog": "bin/isog.js"
+    "sogtj": "bin/sogtj.js"
   },
   "files": [
-    "bin/isog.js",
+    "bin/sogtj.js",
     "README.md"
   ],
   "keywords": [

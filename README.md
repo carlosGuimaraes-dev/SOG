@@ -53,7 +53,7 @@ e abre o dashboard no navegador.
 2. Execute:
 
    ```powershell
-   npx -y isog
+   npx -y sogtj
    ```
 
 3. Aguarde o download e a abertura do instalador do iSOG/SOG Desktop.
@@ -82,7 +82,7 @@ necessario.
 - [docs/README.md](docs/README.md): mapa da documentação e classificação de artefatos históricos
 - [docs/architecture.md](docs/architecture.md): componentes, fluxo e persistência
 - [docs/api.md](docs/api.md): autenticação, rotas principais e estados
-- [docs/distribuicao-npx-isog.md](docs/distribuicao-npx-isog.md): distribuição do iSOG via `npx`
+- [docs/distribuicao-npx-sogtj.md](docs/distribuicao-npx-sogtj.md): distribuição do iSOG via `npx`
 - [docs/operacao-local-docker.md](docs/operacao-local-docker.md): execução local em Docker e limitações
 - [docs/instalador-desktop.md](docs/instalador-desktop.md): instalador gráfico, runtime desktop e fluxo do operador
 - [frontend/README.md](frontend/README.md): visão do dashboard e experiência atual de frontend

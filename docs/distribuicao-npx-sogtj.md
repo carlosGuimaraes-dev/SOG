@@ -3,16 +3,16 @@
 Comando alvo para operadores Windows:
 
 ```powershell
-npx -y isog
+npx -y sogtj
 ```
 
-O pacote npm `isog` deve permanecer pequeno. Ele nao carrega o instalador
+O pacote npm `sogtj` deve permanecer pequeno. Ele nao carrega o instalador
 inteiro no npm; ele baixa o asset versionado da release, valida o SHA256 e abre
 o instalador Windows.
 
 Em termos de experiencia do usuario:
 
-1. O usuario executa `npx -y isog` no PowerShell.
+1. O usuario executa `npx -y sogtj` no PowerShell.
 2. O `npx` baixa e abre o instalador oficial do iSOG/SOG Desktop.
 3. O instalador instala o sistema no Windows.
 4. O usuario abre o aplicativo instalado.
@@ -30,19 +30,19 @@ Windows versionado.
    `SOG.Desktop.Setup.0.1.0.exe`.
 3. Confirmar que o SHA256 do instalador publicado corresponde ao hash fixado no
    bootstrap da versao.
-4. Publicar `packages/isog` no npm.
+4. Publicar `packages/sogtj` no npm.
 5. Testar em um desktop Windows limpo:
 
 ```powershell
-npx -y isog --verify-only
-npx -y isog
+npx -y sogtj --verify-only
+npx -y sogtj
 ```
 
 ## Nome
 
 - Marca: `iSOG`
-- Pacote npm: `isog`
-- Comando: `npx -y isog`
+- Pacote npm: `sogtj`
+- Comando: `npx -y sogtj`
 
 O npm exige pacote/comando em minusculas para esse caso. A interface textual do
 bootstrap usa a marca `iSOG`.
@@ -51,4 +51,4 @@ bootstrap usa a marca `iSOG`.
 
 Na versao inicial, plataformas que nao sejam Windows recebem uma mensagem clara
 de indisponibilidade. Quando macOS e Linux estiverem prontos, o mesmo comando
-`npx -y isog` podera escolher o asset correto por plataforma.
+`npx -y sogtj` podera escolher o asset correto por plataforma.
