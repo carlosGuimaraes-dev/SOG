@@ -4,7 +4,6 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-import bcrypt  # noqa: E402
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -15,10 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
 # Variáveis obrigatórias para os testes
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-com-mais-de-32-caracteres!")
-
-# Gera um hash bcrypt válido para testes que exercitam autenticação.
-_test_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
-os.environ.setdefault("DASHBOARD_SENHA_HASH", _test_hash)
 
 SCHEMA_SQL = Path(__file__).parent.parent.parent / "agente" / "src" / "banco" / "schema.sql"
 

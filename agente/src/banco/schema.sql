@@ -99,6 +99,13 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS dashboard_credenciais (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    usuario TEXT NOT NULL,
+    senha TEXT NOT NULL,
+    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS agente_controle (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     comando TEXT NOT NULL DEFAULT 'parar',

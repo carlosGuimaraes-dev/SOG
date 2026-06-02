@@ -9,10 +9,8 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-import bcrypt
 
 from sog_shared import db
-from sog_shared.config import DASHBOARD_USUARIO, DASHBOARD_SENHA_HASH
 
 # ---------------------------------------------------------------------------
 # Configurações JWT
@@ -30,22 +28,6 @@ JWT_ISSUER = os.getenv("JWT_ISSUER", "sog-api")
 JWT_AUDIENCE = "custas-dashboard"
 
 security = HTTPBearer(auto_error=False)
-
-
-# ---------------------------------------------------------------------------
-# Password helpers
-# ---------------------------------------------------------------------------
-def verify_password(plain: str, hashed: str) -> bool:
-    if not hashed or len(hashed) < 10:
-        return False
-    try:
-        return bcrypt.checkpw(plain.encode(), hashed.encode())
-    except Exception:
-        return False
-
-
-def get_password_hash(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 # ---------------------------------------------------------------------------
@@ -147,23 +129,16 @@ def get_current_user(
 
 
 # ---------------------------------------------------------------------------
-# Hash validation
-# ---------------------------------------------------------------------------
-def _hash_valido(hashed: str) -> bool:
-    """Verifica se a string parece um hash bcrypt válido."""
-    return bool(hashed and hashed.startswith(("$2a$", "$2b$", "$2x$", "$2y$")) and len(hashed) >= 59)
-
-
-# ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
 def authenticate_user(username: str, password: str) -> bool:
-    """Verifica credenciais contra .env. Sempre exige hash bcrypt válido."""
-    if username != DASHBOARD_USUARIO:
+    """Verifica credenciais do dashboard salvas no SQLite."""
+    credenciais = db.obter_credenciais_dashboard()
+    if not credenciais:
         return False
-    if not _hash_valido(DASHBOARD_SENHA_HASH):
+    if username != credenciais["usuario"]:
         return False
-    return verify_password(password, DASHBOARD_SENHA_HASH)
+    return password == credenciais["senha"]
 
 
 # ---------------------------------------------------------------------------

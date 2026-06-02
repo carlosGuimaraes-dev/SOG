@@ -6,17 +6,13 @@ function chooseSecret(inputValue, existingValue) {
   return hasValue(inputValue) ? inputValue : existingValue
 }
 
-function isDashboardPasswordHash(value) {
-  return /^\$2[abxy]\$\d{2}\$.{53,}$/.test(String(value || ''))
-}
-
 function missingConfigLabels(input, existing) {
   const required = [
     ['pjeUrl', 'URL do PJe'],
     ['sistjUrl', 'URL do SISTJWEB'],
   ]
   const secretRequired = [
-    ['dashboardSenha', isDashboardPasswordHash(existing.apiEnv?.DASHBOARD_SENHA_HASH) ? existing.apiEnv.DASHBOARD_SENHA_HASH : '', 'Senha do dashboard'],
+    ['dashboardSenha', existing.apiEnv?.DASHBOARD_SENHA, 'Senha do dashboard'],
     ['datajudApiKey', existing.agentEnv?.DATAJUD_API_KEY, 'Chave Datajud'],
     ['telegramBotToken', existing.agentEnv?.TELEGRAM_BOT_TOKEN, 'Token do Telegram'],
     ['telegramChatId', existing.agentEnv?.TELEGRAM_CHAT_ID, 'Chat ID do Telegram'],
@@ -34,7 +30,7 @@ function missingConfigLabels(input, existing) {
 
 function secretConfigured(apiEnv, agentEnv) {
   return {
-    dashboardSenha: isDashboardPasswordHash(apiEnv.DASHBOARD_SENHA_HASH),
+    dashboardSenha: hasValue(apiEnv.DASHBOARD_SENHA),
     datajudApiKey: hasValue(agentEnv.DATAJUD_API_KEY),
     telegramBotToken: hasValue(agentEnv.TELEGRAM_BOT_TOKEN),
     telegramChatId: hasValue(agentEnv.TELEGRAM_CHAT_ID),
@@ -50,7 +46,7 @@ function validPort(value) {
 
 function runtimeConfigMissingLabels(apiEnv, agentEnv, composeEnv) {
   const missing = missingConfigLabels({
-    dashboardSenha: isDashboardPasswordHash(apiEnv.DASHBOARD_SENHA_HASH) ? 'configurado' : '',
+    dashboardSenha: apiEnv.DASHBOARD_SENHA,
     pjeUrl: agentEnv.PJE_URL,
     sistjUrl: agentEnv.SISTJ_URL,
     datajudApiKey: agentEnv.DATAJUD_API_KEY,
@@ -71,7 +67,6 @@ function runtimeConfigMissingLabels(apiEnv, agentEnv, composeEnv) {
 module.exports = {
   chooseSecret,
   hasValue,
-  isDashboardPasswordHash,
   missingConfigLabels,
   runtimeConfigMissingLabels,
   secretConfigured,

@@ -132,7 +132,7 @@ DATAJUD_URL=https://api-publica.datajud.cnj.jus.br/api_publica_tjdft/_search
 
 # Dashboard
 DASHBOARD_USUARIO=admin
-DASHBOARD_SENHA_HASH=
+DASHBOARD_SENHA=
 
 # Notificação
 SMTP_HOST=

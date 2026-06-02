@@ -68,7 +68,7 @@ class TestHealth:
         assert "version" in data
         assert "database" in data
 
-    def test_health_inicia_sem_dashboard_senha_hash(self, tmp_path):
+    def test_health_inicia_sem_dashboard_senha(self, tmp_path):
         root = Path(__file__).resolve().parents[2]
         script = textwrap.dedent(
             f"""
@@ -81,7 +81,7 @@ class TestHealth:
 
             os.environ["DB_PATH"] = {str(tmp_path / "custas.db")!r}
             os.environ["JWT_SECRET_KEY"] = "test-secret-key-com-mais-de-32-caracteres!"
-            os.environ.pop("DASHBOARD_SENHA_HASH", None)
+            os.environ.pop("DASHBOARD_SENHA", None)
 
             from app import app
 
@@ -91,11 +91,51 @@ class TestHealth:
             """
         )
         env = os.environ.copy()
-        env.pop("DASHBOARD_SENHA_HASH", None)
+        env.pop("DASHBOARD_SENHA", None)
         result = subprocess.run(
             [sys.executable, "-c", script],
             cwd=root,
             env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+
+    def test_startup_salva_credenciais_dashboard_no_banco(self, tmp_path):
+        root = Path(__file__).resolve().parents[2]
+        db_path = tmp_path / "custas.db"
+        script = textwrap.dedent(
+            f"""
+            import os
+            import sqlite3
+            import sys
+            from fastapi.testclient import TestClient
+
+            sys.path.insert(0, {str(root / "api" / "src")!r})
+            sys.path.insert(0, {str(root / "shared")!r})
+
+            os.environ["DB_PATH"] = {str(db_path)!r}
+            os.environ["JWT_SECRET_KEY"] = "test-secret-key-com-mais-de-32-caracteres!"
+            os.environ["DASHBOARD_USUARIO"] = "operador"
+            os.environ["DASHBOARD_SENHA"] = "senha-informada"
+
+            from app import app
+
+            with TestClient(app) as client:
+                assert client.get("/api/v1/health").status_code == 200
+
+            conn = sqlite3.connect({str(db_path)!r})
+            row = conn.execute(
+                "SELECT usuario, senha FROM dashboard_credenciais WHERE id = 1"
+            ).fetchone()
+            assert row == ("operador", "senha-informada")
+            """
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=root,
+            env=os.environ.copy(),
             text=True,
             capture_output=True,
             check=False,
@@ -108,6 +148,31 @@ class TestAuth:
         resp = client.post(
             "/api/v1/auth/login", json={"username": "x", "password": "y"}
         )
+        assert resp.status_code == 401
+
+    def test_login_valida_credenciais_salvas_no_banco(self, client):
+        from sog_shared import db
+
+        db.salvar_credenciais_dashboard("operador", "senha-informada")
+
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"username": "operador", "password": "senha-informada"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json() == {"message": "Login realizado"}
+
+    def test_login_senha_errada_com_credenciais_no_banco(self, client):
+        from sog_shared import db
+
+        db.salvar_credenciais_dashboard("operador", "senha-informada")
+
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"username": "operador", "password": "errada"},
+        )
+
         assert resp.status_code == 401
 
     @patch("rotas.auth.authenticate_user", return_value=True)
@@ -159,8 +224,7 @@ class TestAuth:
         assert client.cookies.get("access_token") is None or client.cookies.get("access_token") == ""
         assert client.cookies.get("refresh_token") is None or client.cookies.get("refresh_token") == ""
 
-    @patch("auth.DASHBOARD_SENHA_HASH", "")
-    def test_authenticate_user_hash_vazio_retorna_401(self):
+    def test_authenticate_user_sem_credencial_no_banco_retorna_false(self, mock_db):
         from auth import authenticate_user
 
         assert authenticate_user("admin", "qualquer") is False

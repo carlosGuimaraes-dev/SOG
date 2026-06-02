@@ -60,7 +60,7 @@ Variáveis lidas pelo container `custas-api`:
 ```bash
 # Obrigatórias
 DASHBOARD_USUARIO=admin
-DASHBOARD_SENHA_HASH=$2b$12$...        # bcrypt hash válido
+DASHBOARD_SENHA=senha-do-dashboard     # senha simples salva no SQLite
 JWT_SECRET_KEY=change-me-min-32-chars  # ≥32 caracteres, aleatório
 
 # Opcionais (têm defaults)
@@ -71,7 +71,7 @@ ENV=production                          # development | production
 
 **Validação no startup:**
 - Se `JWT_SECRET_KEY` estiver ausente ou tiver < 32 caracteres, a aplicação **falha imediatamente** (`RuntimeError`).
-- Se `DASHBOARD_SENHA_HASH` for vazio ou não for um hash bcrypt válido, a aplicação **falha imediatamente**.
+- Se `DASHBOARD_USUARIO` e `DASHBOARD_SENHA` forem informados, a API salva a credencial do dashboard no SQLite.
 - Não existe mais "modo dev sem senha".
 
 ### 2.2 `.env.agente` — Serviço de Automação
@@ -107,7 +107,7 @@ DB_PATH=/dados/custas.db
 
 ```bash
 # Validar que os arquivos existem e não estão vazios
-cat .env.api | grep -E "^(JWT_SECRET_KEY|DASHBOARD_SENHA_HASH)="
+cat .env.api | grep -E "^(JWT_SECRET_KEY|DASHBOARD_USUARIO|DASHBOARD_SENHA)="
 cat .env.agente | grep -E "^(PJE_|SISTJ_|DATAJUD_)" | wc -l   # deve retornar ≥ 6
 ```
 
@@ -287,7 +287,7 @@ Este checklist descreve **o que foi corrigido** e **como verificar** que a corre
 
 | Issue | Correção | Como verificar |
 |-------|----------|----------------|
-| CR-003 — JWT secret comprometido/backdoor | `JWT_SECRET_KEY` separada, falha no startup se ausente; `authenticate_user` sempre exige hash bcrypt válido | `unset JWT_SECRET_KEY && docker-compose up api` → container deve sair com erro. Tentativa de login com senha errada deve retornar 401. |
+| CR-003 — JWT secret comprometido/backdoor | `JWT_SECRET_KEY` separada, falha no startup se ausente; `authenticate_user` valida usuario/senha salvos no SQLite | `unset JWT_SECRET_KEY && docker-compose up api` → container deve sair com erro. Tentativa de login com senha errada deve retornar 401. |
 | CR-014 — Refresh token reutilizável | Rotação com blacklist: tabela `refresh_tokens` armazena `jti`; ao usar, marca `revoked_at` e emite novo par | Teste `test_refresh_token_reuso_retorna_401` passa. Reutilizar cookie `refresh_token` após refresh retorna 401. |
 | CR-006 — JWT em localStorage (XSS) | Cookies `httpOnly Secure SameSite=Strict`; frontend sem acesso ao token | `document.cookie` no DevTools não mostra valor do token (só o nome). `localStorage.getItem('access_token')` retorna `null`. |
 | CR-010 — Erro silenciado no refresh | `return Promise.reject(refreshError)` no catch do interceptor | No DevTools, se refresh falhar, a Promise é rejeitada (não fica pendente) e redireciona para `/login`. |

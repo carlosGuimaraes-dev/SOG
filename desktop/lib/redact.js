@@ -5,8 +5,8 @@ function escapeRegExp(value) {
 function redact(text, extraPaths = []) {
   let output = String(text || '')
     .replace(/(TOKEN|SECRET|SENHA|PASSWORD|API_KEY|CHAT_ID)=.+/gi, '$1=***')
-    .replace(/"(TOKEN|SECRET|SENHA|PASSWORD|API_KEY|CHAT_ID|DASHBOARD_SENHA_HASH|JWT_SECRET_KEY)"\s*:\s*"[^"]*"/gi, '"$1": "***"')
-    .replace(/(DASHBOARD_SENHA_HASH|JWT_SECRET_KEY)=.+/gi, '$1=***')
+    .replace(/"(TOKEN|SECRET|SENHA|PASSWORD|API_KEY|CHAT_ID|DASHBOARD_SENHA|JWT_SECRET_KEY)"\s*:\s*"[^"]*"/gi, '"$1": "***"')
+    .replace(/(DASHBOARD_SENHA|JWT_SECRET_KEY)=.+/gi, '$1=***')
     .replace(/\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/g, '***processo***')
     .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '***cpf***')
 

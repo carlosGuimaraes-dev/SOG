@@ -31,6 +31,10 @@ logger = logging.getLogger("custas_api")
 async def lifespan(app: FastAPI):
     init_config()
     db.init_db()
+    dashboard_usuario = os.getenv("DASHBOARD_USUARIO", "").strip()
+    dashboard_senha = os.getenv("DASHBOARD_SENHA", "")
+    if dashboard_usuario and dashboard_senha:
+        db.salvar_credenciais_dashboard(dashboard_usuario, dashboard_senha)
     logger.info("API iniciada")
     yield
     logger.info("API encerrada")

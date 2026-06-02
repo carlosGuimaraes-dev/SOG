@@ -136,6 +136,33 @@ def get_conn():
         conn.close()
 
 
+# Dashboard -------------------------------------------------------------------
+
+def salvar_credenciais_dashboard(usuario: str, senha: str) -> None:
+    """Salva a credencial unica do dashboard."""
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO dashboard_credenciais (id, usuario, senha, atualizado_em)
+            VALUES (1, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+                usuario = excluded.usuario,
+                senha = excluded.senha,
+                atualizado_em = CURRENT_TIMESTAMP
+            """,
+            (usuario, senha),
+        )
+        conn.commit()
+
+
+def obter_credenciais_dashboard() -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT usuario, senha FROM dashboard_credenciais WHERE id = 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+
 # Processos ------------------------------------------------------------------
 
 def processo_existe(numero: str) -> Optional[Dict[str, Any]]:

@@ -4,11 +4,9 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const http = require('node:http')
 const path = require('node:path')
-const bcrypt = require('bcryptjs')
 const {
   chooseSecret,
   hasValue,
-  isDashboardPasswordHash,
   missingConfigLabels,
   runtimeConfigMissingLabels,
   secretConfigured,
@@ -336,15 +334,11 @@ async function saveConfig(input) {
   const dataDir = config.dataDir || p.data
   fs.mkdirSync(dataDir, { recursive: true })
   fs.mkdirSync(path.join(dataDir, 'auth'), { recursive: true })
-  const senhaHash = hasValue(config.dashboardSenha)
-    ? bcrypt.hashSync(config.dashboardSenha, 12)
-    : isDashboardPasswordHash(existing.apiEnv.DASHBOARD_SENHA_HASH)
-      ? existing.apiEnv.DASHBOARD_SENHA_HASH
-      : ''
+  const dashboardSenha = chooseSecret(config.dashboardSenha, existing.apiEnv.DASHBOARD_SENHA)
   const jwtSecret = existing.apiEnv.JWT_SECRET_KEY || crypto.randomBytes(32).toString('hex')
   writeEnvFile(p.envApi, {
     DASHBOARD_USUARIO: config.dashboardUsuario || 'admin',
-    DASHBOARD_SENHA_HASH: senhaHash,
+    DASHBOARD_SENHA: dashboardSenha,
     JWT_SECRET_KEY: jwtSecret,
     FRONTEND_URL: dashboardUrlForPort(config.httpPort || existing.composeEnv.SOG_HTTP_PORT || '80'),
     DB_PATH: '/dados/custas.db',

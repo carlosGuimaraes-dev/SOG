@@ -95,7 +95,7 @@ assert(main.includes('latestAgentLog'), 'main.js deve anexar trecho do log do ag
 assert(main.includes('packageDir'), 'main.js deve gerar pacote/diretorio de diagnostico')
 assert(main.includes('agente-ultimas-linhas.log'), 'main.js deve separar log recente no pacote de diagnostico')
 assert(main.includes('shell.openPath(packageDir)'), 'main.js deve abrir pasta do pacote de diagnostico')
-assert(main.includes('DASHBOARD_SENHA_HASH'), 'main.js deve mascarar segredos do dashboard no diagnostico')
+assert(main.includes('DASHBOARD_SENHA'), 'main.js deve mascarar segredos do dashboard no diagnostico')
 
 const smoke = read('desktop/scripts/smoke-windows.ps1')
 const smokeUpgrade = read('desktop/scripts/smoke-upgrade-preservation.ps1')

@@ -131,10 +131,10 @@ Paralelismo permitido:
 
 **Backend (paralelo, não depende de DevOps):**
 7. **CR-003:** Em `api/src/auth.py`:
-   - Remover `SECRET_KEY = DASHBOARD_SENHA_HASH or "dev-secret-change-in-production"`.
+   - Remover `SECRET_KEY` derivado de senha do dashboard.
    - Criar `JWT_SECRET_KEY` via `os.getenv("JWT_SECRET_KEY")`; falhar no startup se ausente ou < 32 chars.
-   - Remover modo "dev sem senha" em `authenticate_user` (linha 99-100); sempre exigir hash bcrypt válido.
-   - Adicionar validação de hash no lifespan do app.
+   - Remover modo "dev sem senha" em `authenticate_user`; sempre validar usuario/senha persistidos no SQLite.
+   - Persistir a credencial do dashboard no banco a partir da configuração do SOG Desktop.
 8. **CR-014:** Em `api/src/rotas/auth.py`:
    - Criar tabela `refresh_tokens` no schema SQLite (`token_jti`, `user_id`, `expires_at`, `revoked_at`, `created_at`).
    - Ao emitir refresh token, gerar `jti` (uuid4) e persistir.
@@ -158,7 +158,7 @@ Paralelismo permitido:
 - [ ] `nmap` ou `curl` na porta 8000 do host retorna "Connection refused".
 - [ ] Headers de segurança presentes em TODAS as respostas do nginx (`curl -I http://localhost` mostra `X-Frame-Options`, `CSP`, `HSTS`).
 - [ ] `docker inspect` mostra `User=appuser` para containers api e frontend.
-- [ ] Tentativa de login com senha errada retorna 401 mesmo se `DASHBOARD_SENHA_HASH` estiver vazio.
+- [ ] Tentativa de login com senha errada retorna 401 usando a credencial do dashboard salva no SQLite.
 - [ ] JWT decode falha se `JWT_SECRET_KEY` não for configurado no startup.
 - [ ] Refresh token usado uma segunda vez retorna 401 (teste de rotação).
 - [ ] Inserção com coluna inexistente em `dados_processo` levanta `ValueError` (teste unitário).

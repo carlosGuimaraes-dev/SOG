@@ -24,7 +24,7 @@ DATAJUD_URL = os.getenv(
 
 # Dashboard
 DASHBOARD_USUARIO = os.getenv("DASHBOARD_USUARIO", "admin")
-DASHBOARD_SENHA_HASH = os.getenv("DASHBOARD_SENHA_HASH", "")
+DASHBOARD_SENHA = os.getenv("DASHBOARD_SENHA", "")
 
 # Notificação
 SMTP_HOST = os.getenv("SMTP_HOST", "")

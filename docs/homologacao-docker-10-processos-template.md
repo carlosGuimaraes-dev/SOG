@@ -55,7 +55,7 @@ Marcar apenas o que foi efetivamente validado.
 |---|---|---|
 | `.env.api` preenchido | referência do arquivo usado | `[] ok [] n/a [] falha` |
 | `.env.agente` preenchido | referência do arquivo usado | `[] ok [] n/a [] falha` |
-| `DASHBOARD_SENHA_HASH` válido | comando ou evidência de login | `[] ok [] falha` |
+| `DASHBOARD_USUARIO`/`DASHBOARD_SENHA` válidos | comando ou evidência de login | `[] ok [] falha` |
 | `JWT_SECRET_KEY` configurado | evidência de startup da API | `[] ok [] falha` |
 | `TELEGRAM_BOT_TOKEN` configurado | evidência de startup do agente ou notificação | `[] ok [] falha` |
 | `TELEGRAM_CHAT_ID` configurado | evidência de startup do agente ou notificação | `[] ok [] falha` |
