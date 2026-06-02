@@ -1,0 +1,23 @@
+{
+  "name": "isog",
+  "version": "0.1.0",
+  "description": "Instalador via npx para o iSOG.",
+  "bin": {
+    "isog": "bin/isog.js"
+  },
+  "files": [
+    "bin/isog.js",
+    "README.md"
+  ],
+  "keywords": [
+    "isog",
+    "sog",
+    "custas",
+    "tjdf"
+  ],
+  "license": "UNLICENSED",
+  "private": false,
+  "engines": {
+    "node": ">=18"
+  }
+}

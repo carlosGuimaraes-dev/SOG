@@ -51,6 +51,7 @@ desktop/vendor/python-build/
 !desktop/vendor/agent/README.md
 !desktop/vendor/ms-playwright/.gitkeep
 !desktop/vendor/ms-playwright/README.md
+sog-desktop-windows.zip
 
 # Dados do projeto
 dados/screenshots/

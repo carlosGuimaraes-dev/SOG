@@ -30,11 +30,59 @@ O caminho recomendado para usuario final e o SOG Desktop:
 - `docker-compose.desktop.yml` remove o container `agente` do fluxo de usuario
   final e preserva os dados em `%LOCALAPPDATA%/SOG/dados`.
 
+## Instalar no Windows com npx
+
+Este e o caminho recomendado para instalar o iSOG/SOG Desktop em uma maquina
+Windows de usuario final. O comando `npx` baixa e abre o instalador oficial; o
+instalador configura o aplicativo local, que sobe o sistema em containers Docker
+e abre o dashboard no navegador.
+
+### Requisitos do usuario
+
+- Windows 11 com acesso de usuario para instalar aplicativos.
+- Internet liberada para baixar o instalador, Docker Desktop e imagens Docker.
+- Node.js LTS instalado, para disponibilizar o comando `npx`.
+- Docker Desktop instalado ou permissao para instala-lo durante o assistente do
+  iSOG/SOG Desktop.
+- Chrome instalado se o usuario quiser usar o dashboard especificamente no
+  Chrome. Por padrao, o aplicativo abre o navegador padrao do Windows.
+
+### Passo a passo
+
+1. Abra o PowerShell no Windows.
+2. Execute:
+
+   ```powershell
+   npx -y isog
+   ```
+
+3. Aguarde o download e a abertura do instalador do iSOG/SOG Desktop.
+4. Siga o assistente de instalacao e mantenha a criacao do atalho quando
+   oferecida.
+5. Abra o iSOG/SOG Desktop pelo Menu Iniciar ou pelo atalho criado.
+6. Se o Docker Desktop ainda nao estiver instalado, use a acao indicada pelo
+   aplicativo para instalar o Docker Desktop. Depois da instalacao, abra o
+   Docker Desktop e aguarde ele ficar em execucao.
+7. No iSOG/SOG Desktop, confirme as configuracoes iniciais e inicie a stack do
+   sistema.
+8. O aplicativo subira os containers Docker locais do SOG, incluindo API,
+   frontend e nginx.
+9. Quando a stack estiver pronta, o dashboard sera aberto no navegador padrao em
+   `http://localhost` ou na porta configurada no assistente.
+10. Se quiser usar o Chrome e ele nao abrir automaticamente, defina o Chrome
+    como navegador padrao do Windows ou copie a URL do dashboard para o Chrome.
+
+Os dados locais do usuario ficam em `%LOCALAPPDATA%/SOG/dados`. O dashboard e a
+API rodam localmente dentro dos containers Docker; o agente Playwright roda pelo
+aplicativo desktop para permitir login manual nos sistemas externos quando
+necessario.
+
 ## Documentação canônica
 
 - [docs/README.md](docs/README.md): mapa da documentação e classificação de artefatos históricos
 - [docs/architecture.md](docs/architecture.md): componentes, fluxo e persistência
 - [docs/api.md](docs/api.md): autenticação, rotas principais e estados
+- [docs/distribuicao-npx-isog.md](docs/distribuicao-npx-isog.md): distribuição do iSOG via `npx`
 - [docs/operacao-local-docker.md](docs/operacao-local-docker.md): execução local em Docker e limitações
 - [docs/instalador-desktop.md](docs/instalador-desktop.md): instalador gráfico, runtime desktop e fluxo do operador
 - [frontend/README.md](frontend/README.md): visão do dashboard e experiência atual de frontend
