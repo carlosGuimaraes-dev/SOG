@@ -7,8 +7,8 @@ npx -y sogtj
 ```
 
 O pacote npm `sogtj` deve permanecer pequeno. Ele nao carrega o instalador
-inteiro no npm; ele baixa o asset versionado da release, valida o SHA256 e abre
-o instalador Windows.
+inteiro no npm; ele baixa o asset versionado da release, confere a integridade
+automaticamente e abre o instalador Windows.
 
 Em termos de experiencia do usuario:
 
@@ -28,7 +28,7 @@ Windows versionado.
 1. Gerar o instalador Windows pelo fluxo existente do desktop.
 2. Publicar o instalador no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.1/` com o nome
    `SOG.Desktop.Setup.0.1.1.exe`.
-3. Confirmar que o SHA256 do instalador publicado corresponde ao hash fixado no
+3. Confirmar que o instalador publicado corresponde a verificacao interna do
    bootstrap da versao.
 4. Publicar `packages/sogtj` no npm.
 5. Testar em um desktop Windows limpo:

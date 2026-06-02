@@ -9,7 +9,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { pipeline } = require("node:stream/promises");
 
-const PACKAGE_VERSION = "0.1.2";
+const PACKAGE_VERSION = "0.1.4";
 const INSTALLER_VERSION = "0.1.1";
 const DISPLAY_NAME = "iSOG";
 const DOWNLOAD_BASE = "https://sog.carlosguimaraes.us/sogtj";
@@ -32,7 +32,6 @@ Variaveis:
   ISOG_VERSION     Versao do instalador. Padrao: ${INSTALLER_VERSION}
   ISOG_ASSET_URL   URL direta do instalador Windows.
   ISOG_ASSET_NAME  Nome do asset na release. Padrao: ${DEFAULT_ASSET_NAME}
-  ISOG_SHA256      SHA256 esperado do instalador. Padrao: hash de ${INSTALLER_VERSION}
 `);
 }
 
@@ -140,7 +139,7 @@ async function ensureInstaller(config) {
     const actual = await sha256(config.installerPath);
     if (actual.toLowerCase() !== config.expectedSha256.toLowerCase()) {
       await fs.promises.rm(config.installerPath, { force: true });
-      throw new Error(`SHA256 invalido para ${config.assetName}. Esperado ${config.expectedSha256}, obtido ${actual}.`);
+      throw new Error('O instalador baixado nao passou na verificacao de integridade. Tente executar o comando novamente.');
     }
   }
 }
@@ -167,7 +166,8 @@ async function main() {
   const config = getInstallConfig();
 
   if (args.dryRun) {
-    console.log(JSON.stringify(config, null, 2));
+    const { expectedSha256, ...publicConfig } = config;
+    console.log(JSON.stringify({ ...publicConfig, integrityCheck: 'enabled' }, null, 2));
     return;
   }
 

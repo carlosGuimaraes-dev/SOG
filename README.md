@@ -63,8 +63,8 @@ e abre o dashboard no navegador.
 6. Se o Docker Desktop ainda nao estiver instalado, use a acao indicada pelo
    aplicativo para instalar o Docker Desktop. Depois da instalacao, abra o
    Docker Desktop e aguarde ele ficar em execucao.
-7. No iSOG/SOG Desktop, confirme as configuracoes iniciais e inicie a stack do
-   sistema.
+7. No iSOG/SOG Desktop, crie o usuario e a senha do dashboard no assistente,
+   confirme as demais configuracoes iniciais e inicie a stack do sistema.
 8. O aplicativo subira os containers Docker locais do SOG, incluindo API,
    frontend e nginx.
 9. Quando a stack estiver pronta, o dashboard sera aberto no navegador padrao em
@@ -110,19 +110,13 @@ cp .env.example .env.agente
 Revise os blocos correspondentes dentro do próprio `.env.example` antes de subir
 o Compose. Em especial:
 
-- No SOG Desktop, preencha a senha normal no instalador; ele gera
-  `DASHBOARD_SENHA_HASH` automaticamente.
-- Em execução manual fora do instalador, `DASHBOARD_SENHA_HASH` precisa ser um
-  hash bcrypt válido.
+- No SOG Desktop, o usuario e a senha do dashboard sao criados no assistente do
+  aplicativo; o usuario final nao precisa editar `.env` nem gerar chaves.
+- Em execução manual fora do instalador, a configuração técnica do dashboard
+  precisa ser preenchida no `.env.api`.
 - `JWT_SECRET_KEY` precisa ter pelo menos 32 caracteres
 - PJe e SISTJWEB usam login interativo; não há usuário/senha desses sistemas no `.env`
 - Telegram é tratado como obrigatório para homologação local do agente
-
-Para gerar o hash bcrypt apenas em execução manual:
-
-```bash
-python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"
-```
 
 ## Subir com Docker
 
