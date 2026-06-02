@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs')
 const {
   chooseSecret,
   hasValue,
+  isDashboardPasswordHash,
   missingConfigLabels,
   runtimeConfigMissingLabels,
   secretConfigured,
@@ -337,7 +338,9 @@ async function saveConfig(input) {
   fs.mkdirSync(path.join(dataDir, 'auth'), { recursive: true })
   const senhaHash = hasValue(config.dashboardSenha)
     ? bcrypt.hashSync(config.dashboardSenha, 12)
-    : existing.apiEnv.DASHBOARD_SENHA_HASH
+    : isDashboardPasswordHash(existing.apiEnv.DASHBOARD_SENHA_HASH)
+      ? existing.apiEnv.DASHBOARD_SENHA_HASH
+      : ''
   const jwtSecret = existing.apiEnv.JWT_SECRET_KEY || crypto.randomBytes(32).toString('hex')
   writeEnvFile(p.envApi, {
     DASHBOARD_USUARIO: config.dashboardUsuario || 'admin',

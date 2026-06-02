@@ -1,5 +1,6 @@
 const {
   chooseSecret,
+  isDashboardPasswordHash,
   missingConfigLabels,
   runtimeConfigMissingLabels,
   secretConfigured,
@@ -14,7 +15,7 @@ function assert(condition, message) {
 
 const existing = {
   apiEnv: {
-    DASHBOARD_SENHA_HASH: '$2b$12$hash-existente',
+    DASHBOARD_SENHA_HASH: '$2b$12$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuuabcdefghijk',
     JWT_SECRET_KEY: 'jwt-existente',
   },
   agentEnv: {
@@ -36,6 +37,9 @@ const partialInput = {
 assert(missingConfigLabels(partialInput, existing).length === 0, 'config parcial deveria preservar segredos existentes')
 assert(chooseSecret('', existing.agentEnv.DATAJUD_API_KEY) === existing.agentEnv.DATAJUD_API_KEY, 'segredo vazio deve preservar existente')
 assert(chooseSecret('novo', existing.agentEnv.DATAJUD_API_KEY) === 'novo', 'segredo preenchido deve substituir existente')
+assert(isDashboardPasswordHash(existing.apiEnv.DASHBOARD_SENHA_HASH), 'hash bcrypt valido deve ser reconhecido')
+assert(!isDashboardPasswordHash('$2b$12$hash-existente'), 'hash bcrypt curto nao deve ser aceito')
+assert(!isDashboardPasswordHash('senha-em-texto'), 'senha em texto nao deve ser aceita como hash configurado')
 
 const flags = secretConfigured(existing.apiEnv, existing.agentEnv)
 assert(flags.dashboardSenha, 'dashboardSenha deveria aparecer como configurado')
@@ -57,7 +61,7 @@ for (const label of ['URL do PJe', 'URL do SISTJWEB', 'Senha do dashboard', 'Cha
 }
 
 const runtimeMissing = runtimeConfigMissingLabels(
-  { DASHBOARD_SENHA_HASH: '$2b$12$hash-existente' },
+  { DASHBOARD_SENHA_HASH: existing.apiEnv.DASHBOARD_SENHA_HASH },
   {
     PJE_URL: 'https://pje.tjdft.jus.br/pje/login.seam',
     SISTJ_URL: 'https://sistj.tjdft.jus.br/sistj/sistj',
@@ -72,6 +76,12 @@ const runtimeMissing = runtimeConfigMissingLabels(
   },
 )
 assert(runtimeMissing.length === 0, 'runtime completo nao deveria reportar pendencia')
+
+const invalidDashboardHashMissing = missingConfigLabels(partialInput, {
+  ...existing,
+  apiEnv: { DASHBOARD_SENHA_HASH: 'senha-em-texto' },
+})
+assert(invalidDashboardHashMissing.includes('Senha do dashboard'), 'hash invalido existente deve exigir senha nova')
 
 const runtimeBroken = runtimeConfigMissingLabels({}, {}, { SOG_HTTP_PORT: '99999' })
 for (const label of ['URL do PJe', 'URL do SISTJWEB', 'Senha do dashboard', 'Pasta de dados', 'Configuração da API para Docker', 'Porta HTTP válida']) {
