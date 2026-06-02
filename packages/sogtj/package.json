@@ -1,6 +1,6 @@
 {
   "name": "sogtj",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Instalador via npx para o iSOG.",
   "bin": {
     "sogtj": "bin/sogtj.js"
