@@ -18,6 +18,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(desktopRoot, 'package.json'), '
 const resources = pkg.build.extraResources.map((entry) => `${entry.from}->${entry.to}`)
 
 assert(pkg.build.icon === 'build/icon.png', 'Electron Builder deve usar icone proprio do SOG Desktop')
+assert(pkg.build.nsis.runAfterFinish === false, 'NSIS nao deve executar atalho do Start Menu ao finalizar')
 assert(fs.existsSync(path.join(desktopRoot, 'build', 'icon.png')), 'build/icon.png deve existir')
 assert(resources.includes('vendor/agent->agent'), 'extraResources deve incluir vendor/agent -> agent')
 assert(resources.includes('vendor/ms-playwright->ms-playwright'), 'extraResources deve incluir vendor/ms-playwright -> ms-playwright')
