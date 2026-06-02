@@ -78,21 +78,38 @@ def _desktop_login_smoke() -> int:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=False)
-        page = browser.new_page()
-        _goto_login_smoke_page(page, PJE_URL)
-        page = browser.new_page()
-        _goto_login_smoke_page(page, SISTJ_URL)
-        print(json.dumps({
-            "status": "ok",
-            "message": "Chromium aberto para login PJe/SISTJWEB.",
-            "pje_url": PJE_URL,
-            "sistj_url": SISTJ_URL,
-        }, ensure_ascii=False))
-        page.wait_for_timeout(int(os.getenv("SOG_LOGIN_SMOKE_HOLD_MS", "15000")))
-        browser.close()
+        browsers = []
+        pages = []
+        try:
+            for url in (PJE_URL, SISTJ_URL):
+                browser, page = _open_login_smoke_browser(playwright, url)
+                browsers.append(browser)
+                pages.append(page)
+
+            print(json.dumps({
+                "status": "ok",
+                "message": "Chromium aberto para login PJe/SISTJWEB.",
+                "pje_url": PJE_URL,
+                "sistj_url": SISTJ_URL,
+            }, ensure_ascii=False))
+            pages[-1].wait_for_timeout(int(os.getenv("SOG_LOGIN_SMOKE_HOLD_MS", "15000")))
+        finally:
+            for browser in browsers:
+                browser.close()
 
     return 0
+
+
+def _open_login_smoke_browser(playwright, url: str):
+    """Abre uma janela Chromium separada para cada sistema validado visualmente."""
+    browser = playwright.chromium.launch(headless=False)
+    try:
+        page = browser.new_page()
+        _goto_login_smoke_page(page, url)
+        return browser, page
+    except Exception:
+        browser.close()
+        raise
 
 
 def _goto_login_smoke_page(page, url: str) -> None:

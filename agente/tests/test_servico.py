@@ -1,6 +1,8 @@
 """
 Testes do loop de processamento de tarefas do serviço longo.
 """
+import types
+import sys
 import threading
 import sqlite3
 from contextlib import contextmanager
@@ -9,12 +11,87 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from config import PJE_URL, SISTJ_URL
 from modulos.auth_manager import ReautenticacaoNecessariaError
-from servico import AgenteServico, _goto_login_smoke_page
+from servico import (
+    AgenteServico,
+    _desktop_login_smoke,
+    _goto_login_smoke_page,
+    _open_login_smoke_browser,
+)
 from sog_shared import db
 
 
 SCHEMA_SQL = Path(__file__).parent.parent / "src" / "banco" / "schema.sql"
+
+
+class _FakePlaywrightContext:
+    def __init__(self, playwright):
+        self.playwright = playwright
+
+    def __enter__(self):
+        return self.playwright
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+
+def test_login_smoke_abre_pje_e_sistj_em_janelas_separadas(monkeypatch):
+    playwright = MagicMock()
+    pje_browser = MagicMock()
+    pje_page = MagicMock()
+    sistj_browser = MagicMock()
+    sistj_page = MagicMock()
+    sync_api = types.SimpleNamespace(
+        sync_playwright=MagicMock(return_value=_FakePlaywrightContext(playwright))
+    )
+
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+    monkeypatch.setenv("SOG_LOGIN_SMOKE_HOLD_MS", "1")
+
+    with patch(
+        "servico._open_login_smoke_browser",
+        side_effect=[(pje_browser, pje_page), (sistj_browser, sistj_page)],
+    ) as abrir_mock:
+        assert _desktop_login_smoke() == 0
+
+    assert [call.args[1] for call in abrir_mock.call_args_list] == [PJE_URL, SISTJ_URL]
+    sistj_page.wait_for_timeout.assert_called_once_with(1)
+    pje_browser.close.assert_called_once_with()
+    sistj_browser.close.assert_called_once_with()
+
+
+def test_login_smoke_abre_browser_visivel_para_url():
+    playwright = MagicMock()
+    browser = playwright.chromium.launch.return_value
+    page = browser.new_page.return_value
+
+    retorno_browser, retorno_page = _open_login_smoke_browser(
+        playwright,
+        "https://sistj.tjdft.jus.br/sistj/sistj",
+    )
+
+    assert retorno_browser is browser
+    assert retorno_page is page
+    playwright.chromium.launch.assert_called_once_with(headless=False)
+    browser.new_page.assert_called_once_with()
+    page.goto.assert_called_once_with(
+        "https://sistj.tjdft.jus.br/sistj/sistj",
+        wait_until="domcontentloaded",
+        timeout=30000,
+    )
+
+
+def test_login_smoke_fecha_browser_se_url_falhar():
+    playwright = MagicMock()
+    browser = playwright.chromium.launch.return_value
+    page = browser.new_page.return_value
+    page.goto.side_effect = Exception("Page.goto: net::ERR_NAME_NOT_RESOLVED")
+
+    with pytest.raises(Exception, match="ERR_NAME_NOT_RESOLVED"):
+        _open_login_smoke_browser(playwright, "https://sistj.tjdft.jus.br/sistj/sistj")
+
+    browser.close.assert_called_once_with()
 
 
 def test_login_smoke_tolera_goto_abortado_por_sso():
