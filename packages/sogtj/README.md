@@ -6,9 +6,9 @@ Pacote npm pequeno para iniciar a instalacao do iSOG pelo comando:
 npx -y sogtj
 ```
 
-Na versao `0.1.0`, o bootstrap suporta apenas Windows. O pacote baixa o
-instalador publicado na release do GitHub, valida o SHA256 esperado da versao e
-abre o instalador.
+Na versao `0.1.1`, o bootstrap suporta apenas Windows. O pacote baixa o
+instalador publicado no R2, valida o SHA256 esperado da versao e abre o
+instalador.
 
 O comando `npx -y sogtj` nao substitui o instalador do sistema. Ele apenas
 entrega o usuario ao instalador oficial. Depois da instalacao, o aplicativo
@@ -23,7 +23,7 @@ SOG.Desktop.Setup.0.1.0.exe
 
 ## Publicacao
 
-1. Publique o instalador Windows como asset da release `v0.1.0`.
+1. Publique o instalador Windows no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.0/`.
 2. Calcule o SHA256 do instalador.
 3. Publique este pacote no npm:
 
@@ -35,7 +35,7 @@ npm publish --access public
 ## Teste com URL direta
 
 ```powershell
-$env:ISOG_ASSET_URL="https://exemplo.local/SOG%20Desktop%20Setup%200.1.0.exe"
+$env:ISOG_ASSET_URL="https://exemplo.local/SOG.Desktop.Setup.0.1.0.exe"
 npx -y sogtj --verify-only
 ```
 
