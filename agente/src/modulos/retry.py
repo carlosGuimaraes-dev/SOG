@@ -205,7 +205,7 @@ def retry_on_exception(
                                 info(f"Sessão expirada em {func_name}...")
                                 # NOVO: se o cliente usa AuthManager (serviço longo), não tenta reconectar programaticamente
                                 if hasattr(instance, "_auth") and instance._auth is not None:
-                                    # Lança exceção para o loop principal tratar com fallback interativo
+                                    # Lança exceção para o loop principal entrar em aguardando_login
                                     raise ReautenticacaoNecessariaError(instance.__class__.__name__)
                                 # LEGADO: tenta reconectar (mantido para compatibilidade)
                                 if hasattr(instance, "reconectar"):

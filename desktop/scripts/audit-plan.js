@@ -56,13 +56,13 @@ const results = [
   check('Playwright + Chromium empacotados', prepare.includes('PLAYWRIGHT_BROWSERS_PATH') && pkg.build.extraResources.some((entry) => entry.to === 'ms-playwright'), 'prepare-python-runtime.ps1 + package.json'),
   check('Smoke do agente empacotado', prepare.includes('--desktop-smoke') && read('agente/src/servico.py').includes('sog-agent-smoke'), 'prepare-python-runtime.ps1 + agente/src/servico.py'),
   check('Controle start/stop do agente local', main.includes('startAgent') && main.includes('stopAgent') && preload.includes('startAgent'), 'desktop/main.js + preload.js'),
-  check('Teste gráfico de Chromium sem terminal', main.includes('testChromiumLogin') && html.includes('test-chromium') && read('agente/src/servico.py').includes('--desktop-login-smoke'), 'desktop + agente/src/servico.py'),
+  check('Chrome monitorável para login manual', main.includes('openChromeLogin') && html.includes('open-chrome-login') && read('agente/src/modulos/chrome_login_capture.py').includes('connect_over_cdp'), 'desktop + agente/src/modulos/chrome_login_capture.py'),
   check('URLs PJe/SISTJWEB configuráveis com defaults', main.includes('pje.tjdft.jus.br') && main.includes('sistj.tjdft.jus.br'), 'desktop/main.js'),
   check('Credenciais PJe/SISTJWEB não entram no env', main.includes('O SOG não armazenou credenciais de PJe ou SISTJWEB') && docs.includes('nao armazena usuario ou senha'), 'desktop/main.js + docs'),
   check('Storage state em pasta compartilhada', main.includes('STORAGE_STATE_DIR') && main.includes("path.join(dataDir, 'auth')"), 'desktop/main.js'),
-  check('Login manual salva storage_state', authManager.includes('context.storage_state') && authManager.includes('Aguardando login manual') && authManager.includes('Testar Chromium'), 'agente/src/modulos/auth_manager.py'),
-  check('Login manual preserva downloads PJe', authManager.includes('accept_downloads=accept_downloads') && authManager.includes('new_context('), 'agente/src/modulos/auth_manager.py'),
-  check('Mensagens amigáveis de Docker/API/Chromium/login', dashboard.includes('Docker/API offline') && dashboard.includes('Chromium não abriu') && dashboard.includes('Sessão PJe pendente') && dashboard.includes('Sessão SISTJWEB pendente'), 'AgenteStatusBar.tsx'),
+  check('Login manual salva storage_state', read('agente/src/modulos/chrome_login_capture.py').includes('storage_state'), 'agente/src/modulos/chrome_login_capture.py'),
+  check('Validação PJe preserva downloads', authManager.includes('accept_downloads=accept_downloads') && authManager.includes('new_context('), 'agente/src/modulos/auth_manager.py'),
+  check('Mensagens amigáveis de Docker/API/Chrome/login', dashboard.includes('Docker/API offline') && dashboard.includes('Chrome de login indisponível') && dashboard.includes('Sessão PJe pendente') && dashboard.includes('Sessão SISTJWEB pendente'), 'AgenteStatusBar.tsx'),
   check('Diagnóstico exportável sem PII', main.includes('collectDiagnostics') && main.includes('agente-ultimas-linhas.log') && main.includes('redact('), 'desktop/main.js'),
   check('Build Windows automatizado', workflowWindows.includes('windows-latest') && workflowWindows.includes('npm run build:win') && workflowWindows.includes('verify:win-artifact'), '.github/workflows/sog-desktop-windows.yml'),
   check('CI Windows valida smoke de preservação', workflowWindows.includes('smoke:upgrade') && workflowWindows.includes('baseline') && workflowWindows.includes('verify'), '.github/workflows/sog-desktop-windows.yml'),
@@ -72,7 +72,7 @@ const results = [
   check('Smoke de upgrade preserva dados', smokeUpgrade.includes('custas.db') && smokeUpgrade.includes('pje_storage.json') && smokeUpgrade.includes('sistj_storage.json') && smokeUpgrade.includes('upgrade-preservation.pdf') && smokeUpgrade.includes('sentinel.png'), 'desktop/scripts/smoke-upgrade-preservation.ps1'),
   external('Build NSIS executado em Windows 11', 'exige GitHub Actions/Windows real'),
   external('Instalação do .exe em Windows 11', 'exige Windows real'),
-  external('Chromium visível abrindo PJe/SISTJWEB', 'exige Windows real e acesso operacional aos sistemas'),
+  external('Chrome monitorável abrindo PJe/SISTJWEB', 'exige Windows real e acesso operacional aos sistemas'),
 ]
 
 const ok = results.filter((item) => item.status === 'ok').length

@@ -13,6 +13,12 @@ const {
   validPort,
 } = require('./lib/config-merge')
 const { redact } = require('./lib/redact')
+const {
+  DEFAULT_CHROME_DEBUG_PORT,
+  chromeLoginArgs,
+  chromeLoginProfileDir,
+  findChromeExecutable,
+} = require('./lib/chrome-login')
 
 const DOCKER_DESKTOP_URL = 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe'
 let mainWindow
@@ -590,28 +596,35 @@ function startAgent() {
   return { ok: true, message: 'Agente desktop iniciado.', status: agentStatus() }
 }
 
-async function testChromiumLogin() {
+function openChromeLogin() {
   ensureDirs()
   const config = configurationStatus()
   if (!config.ok) {
-    throw new Error(`Configure o SOG Desktop antes de testar o Chromium: ${config.missing.join(', ')}.`)
+    throw new Error(`Configure o SOG Desktop antes de abrir o Chrome para login: ${config.missing.join(', ')}.`)
   }
-  const agent = agentCommand(['--desktop-login-smoke'])
-  const result = await execPromise(agent.command, agent.args, {
-    cwd: agent.root,
-    env: {
-      ...agentEnv(),
-      SOG_LOGIN_SMOKE_HOLD_MS: process.env.SOG_LOGIN_SMOKE_HOLD_MS || '15000',
-    },
-    timeout: 45000,
+  const chromePath = findChromeExecutable()
+  if (!chromePath) {
+    throw new Error('Google Chrome não encontrado. Instale o Google Chrome para realizar o login monitorável.')
+  }
+  const cfg = loadConfig()
+  const profileDir = chromeLoginProfileDir(paths().data)
+  fs.mkdirSync(profileDir, { recursive: true })
+  const child = spawn(chromePath, chromeLoginArgs({
+    profileDir,
+    pjeUrl: cfg.pjeUrl,
+    sistjUrl: cfg.sistjUrl,
+    remoteDebuggingPort: DEFAULT_CHROME_DEBUG_PORT,
+  }), {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
   })
-  if (!result.ok) {
-    throw new Error(result.stderr || result.error || 'Chromium não abriu para teste de login.')
-  }
+  child.unref()
   return {
     ok: true,
-    message: 'Chromium abriu PJe e SISTJWEB para teste visual.',
-    output: result.stdout,
+    message: 'Chrome aberto para login em PJe e SISTJWEB.',
+    remoteDebuggingPort: DEFAULT_CHROME_DEBUG_PORT,
+    profileDir,
   }
 }
 
@@ -758,7 +771,7 @@ function wireIpc() {
   ipcMain.handle('sog:stop-stack', () => stopStack())
   ipcMain.handle('sog:healthcheck', () => healthcheck())
   ipcMain.handle('sog:start-agent', () => startAgent())
-  ipcMain.handle('sog:test-chromium-login', () => testChromiumLogin())
+  ipcMain.handle('sog:open-chrome-login', () => openChromeLogin())
   ipcMain.handle('sog:stop-agent', () => stopAgent())
   ipcMain.handle('sog:agent-status', () => agentStatus())
   ipcMain.handle('sog:collect-diagnostics', () => collectDiagnostics())

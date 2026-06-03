@@ -172,4 +172,4 @@ try {
   }
 }
 
-Write-Host "Smoke Windows concluido. Valide manualmente: iniciar agente no SOG Desktop, iniciar ciclo e confirmar Chromium abrindo PJe/SISTJWEB."
+Write-Host "Smoke Windows concluido. Valide manualmente: abrir Chrome para login no SOG Desktop, autenticar PJe/SISTJWEB, iniciar agente e confirmar execucao."

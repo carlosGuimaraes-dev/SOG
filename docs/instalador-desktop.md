@@ -2,7 +2,8 @@
 
 O SOG Desktop e o caminho para usuarios finais leigos em Windows 11. Ele evita
 comandos de terminal, guia a instalacao do Docker Desktop e executa o agente
-Playwright fora do container para permitir login interativo em Chromium visivel.
+Playwright fora do container. O login manual acontece no Google Chrome real,
+aberto pelo Desktop com DevTools local para que o agente capture a sessao.
 
 ## Arquitetura
 
@@ -27,12 +28,13 @@ Playwright fora do container para permitir login interativo em Chromium visivel.
 4. Clicar em `Subir Docker`.
 5. Clicar em `Iniciar agente`.
 6. Abrir o dashboard em `http://localhost` ou na porta configurada no wizard.
-7. Ao iniciar um ciclo, o agente abre Chromium local para login manual em PJe e
-   SISTJWEB quando a sessao estiver ausente ou expirada.
+7. Clicar em `Abrir Chrome para login` e autenticar PJe e SISTJWEB nas abas
+   abertas pelo SOG Desktop.
+8. Iniciar ou retomar o ciclo no dashboard; o agente aguardara ate capturar as
+   duas sessoes via Chrome DevTools local.
 
-Antes de rodar um ciclo real, `Testar Chromium` abre uma janela visivel com PJe
-e SISTJWEB por alguns segundos. Use esse teste para confirmar que o Chromium
-local empacotado consegue abrir as paginas corretas.
+O Chrome de login usa uma porta DevTools local e um perfil dedicado em dados do
+SOG. O agente nao captura cookies de um Chrome comum sem DevTools remoto.
 
 Se a stack local precisar ser recriada, use `Reiniciar Docker` no proprio SOG
 Desktop. O operador final nao precisa abrir terminal para subir, parar ou
@@ -110,8 +112,8 @@ npm run smoke:win
 
 O smoke valida Docker, Compose, arquivos de configuracao, dashboard, API,
 executavel do agente e Chromium Playwright, respeitando a porta configurada em
-`SOG_HTTP_PORT`. A confirmacao do login ainda e manual: iniciar o agente pelo
-SOG Desktop, iniciar um ciclo e verificar se Chromium abre PJe/SISTJWEB.
+`SOG_HTTP_PORT`. A confirmacao do login ainda e manual: abrir Chrome para login
+no SOG Desktop, concluir PJe/SISTJWEB e iniciar ou retomar o ciclo.
 
 Para validar preservacao em reinstalacao/upgrade:
 
@@ -128,7 +130,7 @@ sumir ou mudar apos o upgrade.
 
 Este smoke e operacional: ele exige Docker Desktop rodando e o SOG ja
 configurado. O GitHub Actions valida o build do instalador; a maquina do
-operador valida Docker Desktop, dashboard e login visivel.
+operador valida Docker Desktop, dashboard e login no Chrome monitoravel.
 
 ## Diagnostico
 

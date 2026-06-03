@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('sogDesktop', {
   stopStack: () => ipcRenderer.invoke('sog:stop-stack'),
   healthcheck: () => ipcRenderer.invoke('sog:healthcheck'),
   startAgent: () => ipcRenderer.invoke('sog:start-agent'),
-  testChromiumLogin: () => ipcRenderer.invoke('sog:test-chromium-login'),
+  openChromeLogin: () => ipcRenderer.invoke('sog:open-chrome-login'),
   stopAgent: () => ipcRenderer.invoke('sog:stop-agent'),
   agentStatus: () => ipcRenderer.invoke('sog:agent-status'),
   collectDiagnostics: () => ipcRenderer.invoke('sog:collect-diagnostics'),

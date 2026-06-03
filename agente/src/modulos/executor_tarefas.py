@@ -8,6 +8,7 @@ from typing import Dict, Any, Callable
 
 from banco import db
 from config import DEMONSTRATIVOS_DIR
+from modulos.auth_manager import ReautenticacaoNecessariaError
 from modulos.pje import PjeClient
 from modulos.sistjweb import SistjClient
 from pipeline import processar_processo, _construir_payload
@@ -114,8 +115,7 @@ def _baixar_pdf_pje(payload, pje, sistj):
 
 @registrar("reautenticar_pje")
 def _reautenticar_pje(payload, pje, sistj):
-    pje.reautenticar_interativo()
-    return {"logado": True}
+    raise ReautenticacaoNecessariaError("pje")
 
 
 @registrar("verificar_sessao_sistj")
@@ -132,8 +132,7 @@ def _verificar_sessao_sistj(payload, pje, sistj):
 
 @registrar("reautenticar_sistj")
 def _reautenticar_sistj(payload, pje, sistj):
-    sistj.reautenticar_interativo()
-    return {"logado": True}
+    raise ReautenticacaoNecessariaError("sistjweb")
 
 
 @registrar("preencher_sistj")

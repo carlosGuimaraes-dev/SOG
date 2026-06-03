@@ -93,7 +93,7 @@ describe('AgenteStatusBar', () => {
 
     expect(await screen.findByText('Relogin pendente')).toBeInTheDocument()
     expect(screen.getByText('Sessão PJe pendente')).toBeInTheDocument()
-    expect(screen.getByText(/Faça login no Chromium aberto pelo agente desktop/)).toBeInTheDocument()
+    expect(screen.getByText(/Abra o Chrome pelo SOG Desktop, faça login no PJe/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /iniciar agente de automação/i })).toHaveTextContent(
       '▶ Retomar após login'
     )

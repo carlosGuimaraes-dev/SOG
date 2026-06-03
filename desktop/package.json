@@ -1,6 +1,6 @@
 {
   "name": "sog-desktop",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "Instalador grafico e supervisor desktop do SOG.",
   "author": "SOG",
@@ -13,8 +13,9 @@
     "smoke:upgrade": "powershell -ExecutionPolicy Bypass -File scripts/smoke-upgrade-preservation.ps1",
     "build:win": "npm run generate:icon && npm run verify && npm run prepare:python:win && electron-builder --win nsis && npm run verify:packed-runtime && npm run verify:win-artifact",
     "pack:dir": "electron-builder --dir && npm run verify:packed-runtime",
-    "verify": "npm run verify:package && npm run verify:plan && npm run verify:env && npm run verify:config && npm run verify:redaction && npm run check",
+    "verify": "npm run verify:package && npm run verify:chrome-login && npm run verify:plan && npm run verify:env && npm run verify:config && npm run verify:redaction && npm run check",
     "verify:config": "node scripts/verify-config-merge.js",
+    "verify:chrome-login": "node scripts/verify-chrome-login.js",
     "verify:package": "node scripts/verify-package.js",
     "verify:plan": "node scripts/audit-plan.js",
     "verify:env": "node scripts/verify-env-format.js",

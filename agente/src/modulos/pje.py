@@ -26,7 +26,7 @@ from utils.logger import info, erro, aviso
 from banco import db
 from modulos.retry import retry_on_exception
 from modulos.playwright_client import PlaywrightClient
-from modulos.auth_manager import AuthManager
+from modulos.auth_manager import AuthManager, ReautenticacaoNecessariaError
 from modulos.css_escape import escape_for_css
 
 
@@ -241,24 +241,22 @@ class PjeClient(PlaywrightClient):
         self._auth = AuthManager(STORAGE_STATE_PJE, headless_default=HEADLESS)
 
     def garantir_autenticado(self) -> bool:
-        """Verifica autenticação; se necessário, dispara fallback interativo."""
-        return self._auth.verificar_e_autenticar(
+        """Verifica autenticação via storage_state já capturado."""
+        if self._auth.verificar_sessao(
             url=PJE_URL,
             verificar_sucesso_fn=self._esta_logado,
             accept_downloads=True,
-        )
+        ):
+            return True
+        raise ReautenticacaoNecessariaError("pje")
 
     def login(self) -> bool:
         """Alias para garantir_autenticado() — mantido para compatibilidade."""
         return self.garantir_autenticado()
 
     def reautenticar_interativo(self) -> bool:
-        """Força reautenticação com navegador visível."""
-        return self._auth.forcar_reautenticacao_interativa(
-            url=PJE_URL,
-            verificar_sucesso_fn=self._esta_logado,
-            accept_downloads=True,
-        )
+        """Compatibilidade: valida storage capturado; não abre navegador."""
+        return self.garantir_autenticado()
 
     def _esta_logado(self, page: Page) -> bool:
         """Retorna True se a página indicar que o usuário está logado no PJe."""
@@ -305,8 +303,17 @@ class PjeClient(PlaywrightClient):
             except Exception as exc:
                 aviso(f"Erro ao verificar indicadores genéricos de login: {exc}")
 
-            # Último recurso: verifica se a URL mudou para algo diferente de login
-            if "login" not in page.url.lower():
+            # Último recurso: aceita apenas URL final do PJe, nunca telas SSO/login.
+            url = page.url.lower()
+            bloqueadores_login = [
+                "sso.cloud.pje.jus.br",
+                "login",
+                "openid-connect",
+                "auth/realms",
+            ]
+            if any(marcador in url for marcador in bloqueadores_login):
+                return False
+            if "pje.tjdft.jus.br" in url:
                 return True
 
             return False

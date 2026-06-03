@@ -105,15 +105,15 @@ function normalizarMensagemAgente(mensagem: string): string {
     mensagem.includes('Connection reset by peer')
 
   if (erroBrowser) {
-    return 'Chromium não abriu para login. Inicie o agente pelo SOG Desktop para que o navegador local abra PJe e SISTJWEB em janela visível.'
+    return 'Chrome de login indisponível. Abra o SOG Desktop, clique em Abrir Chrome para login e conclua PJe e SISTJWEB.'
   }
 
   if (lower.includes('sessão pje') || lower.includes('sessao pje')) {
-    return 'Sessão PJe pendente. Faça login no Chromium aberto pelo agente desktop e clique em Retomar após login.'
+    return 'Sessão PJe pendente. Abra o Chrome pelo SOG Desktop, faça login no PJe e clique em Retomar após login.'
   }
 
   if (lower.includes('sessão sistj') || lower.includes('sessao sistj')) {
-    return 'Sessão SISTJWEB pendente. Faça login no Chromium aberto pelo agente desktop e clique em Retomar após login.'
+    return 'Sessão SISTJWEB pendente. Abra o Chrome pelo SOG Desktop, faça login no SISTJWEB e clique em Retomar após login.'
   }
 
   return mensagem.length > 280 ? `${mensagem.slice(0, 280)}...` : mensagem

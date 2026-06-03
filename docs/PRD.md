@@ -247,11 +247,11 @@ CREATE TABLE IF NOT EXISTS log_execucao (
 
 ```
 1. Navegar até PJE_URL
-2. Se não houver sessão válida, abrir navegador visível
-3. Usuário realiza SSO/2FA manualmente
-4. Salvar storage_state após login bem-sucedido
+2. Se não houver sessão válida, entrar em `aguardando_login`
+3. Usuário abre o Chrome pelo SOG Desktop e realiza SSO/2FA manualmente
+4. Capturar `storage_state` do Chrome monitorável após login bem-sucedido
 5. Confirmar: nome do usuário visível no topo
-6. Em timeout: solicitar nova autenticação interativa
+6. Enquanto faltar login, permanecer aguardando sem abrir Chromium pelo agente
 ```
 
 #### Coleta da lista de processos

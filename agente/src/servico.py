@@ -28,7 +28,6 @@ if str(SHARED_DIR) not in sys.path:
     sys.path.insert(0, str(SHARED_DIR))
 
 DESKTOP_SMOKE_ARG = "--desktop-smoke"
-DESKTOP_LOGIN_SMOKE_ARG = "--desktop-login-smoke"
 DESKTOP_SMOKE_OUTPUT_ARG = "--desktop-smoke-output"
 
 
@@ -72,61 +71,10 @@ def _desktop_smoke() -> int:
     return 0
 
 
-def _desktop_login_smoke() -> int:
-    """Abre Chromium visível nas URLs de login para validação manual do desktop."""
-    from config import PJE_URL, SISTJ_URL
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as playwright:
-        browsers = []
-        pages = []
-        try:
-            for url in (PJE_URL, SISTJ_URL):
-                browser, page = _open_login_smoke_browser(playwright, url)
-                browsers.append(browser)
-                pages.append(page)
-
-            print(json.dumps({
-                "status": "ok",
-                "message": "Chromium aberto para login PJe/SISTJWEB.",
-                "pje_url": PJE_URL,
-                "sistj_url": SISTJ_URL,
-            }, ensure_ascii=False))
-            pages[-1].wait_for_timeout(int(os.getenv("SOG_LOGIN_SMOKE_HOLD_MS", "15000")))
-        finally:
-            for browser in browsers:
-                browser.close()
-
-    return 0
-
-
-def _open_login_smoke_browser(playwright, url: str):
-    """Abre uma janela Chromium separada para cada sistema validado visualmente."""
-    browser = playwright.chromium.launch(headless=False)
-    try:
-        page = browser.new_page()
-        _goto_login_smoke_page(page, url)
-        return browser, page
-    except Exception:
-        browser.close()
-        raise
-
-
-def _goto_login_smoke_page(page, url: str) -> None:
-    """Navegação visual: SSO pode abortar o frame mesmo com a janela aberta."""
-    try:
-        page.goto(url, wait_until="domcontentloaded", timeout=30000)
-    except Exception as exc:
-        if "ERR_ABORTED" not in str(exc):
-            raise
-
-
 def _run_desktop_cli() -> int | None:
     try:
         if DESKTOP_SMOKE_ARG in sys.argv:
             return _desktop_smoke()
-        if DESKTOP_LOGIN_SMOKE_ARG in sys.argv:
-            return _desktop_login_smoke()
     except Exception as exc:
         if DESKTOP_SMOKE_ARG in sys.argv:
             _write_desktop_smoke_payload({
@@ -146,9 +94,12 @@ from config import (
     PJE_URL,
     SISTJ_URL,
     STORAGE_STATE_DIR,
+    STORAGE_STATE_PJE,
+    STORAGE_STATE_SISTJ,
     init_config,
     validar_requisitos_homologacao_local,
 )
+from modulos.chrome_login_capture import capturar_sessoes_chrome
 from modulos.pje import PjeClient
 from modulos.sistjweb import SistjClient
 from modulos.emissor import emitir_pendentes
@@ -199,6 +150,19 @@ ESTADOS_VALIDOS = frozenset({
 TEMPO_DORMIR_SEGUNDOS = 30
 TEMPO_ERRO_SEGUNDOS = 30
 TEMPO_ESPERA_CURTA_SEGUNDOS = 5
+
+
+def _mensagem_captura_chrome(resultado: dict) -> str:
+    reason = resultado.get("reason")
+    if reason == "chrome_indisponivel":
+        return "Aguardando Chrome de login. Clique em 'Abrir Chrome para login' no SOG Desktop."
+    if reason == "abas_ausentes":
+        faltando = ", ".join(resultado.get("missing", []))
+        return f"Aguardando abas de login no Chrome: {faltando}."
+    if reason == "login_pendente":
+        pendente = ", ".join(resultado.get("pending", []))
+        return f"Aguardando conclusão de login no Chrome: {pendente}."
+    return "Aguardando login no Chrome monitorável."
 
 
 class AgenteServico:
@@ -312,20 +276,20 @@ class AgenteServico:
                 self._pausar_ciclo("erro_pausado", f"Falha na autenticação: {e}")
             return
 
-        # Estado aguardando_login → dispara fallback interativo
+        # Estado aguardando_login → aguarda o Chrome monitorável do usuário
         if status_db == "aguardando_login":
             if comando != "iniciar":
                 self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
                 return
             try:
-                self._autenticar_interativo()
+                if not self._autenticar_interativo():
+                    self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+                    return
                 self._fechar_ciclo_ativo()
-                self._set_status("executando", "Reautenticação OK. Retomando execução.")
-            except TimeoutError:
-                self._pausar_ciclo("erro_pausado", "Timeout aguardando login manual.")
+                self._set_status("executando", "Sessões Chrome capturadas. Retomando execução.")
             except Exception as e:
-                erro(f"Falha na reautenticação interativa: {e}")
-                self._pausar_ciclo("erro_pausado", f"Falha na reautenticação: {e}")
+                erro(f"Falha ao capturar login no Chrome: {e}")
+                self._pausar_ciclo("erro_pausado", f"Falha ao capturar login no Chrome: {e}")
             return
 
         # Estado executando → processa tarefas pendentes primeiro, depois pipeline
@@ -390,7 +354,7 @@ class AgenteServico:
     # ------------------------------------------------------------------
 
     def _autenticar_todos(self) -> None:
-        """Autentica PJe e SISTJWEB usando AuthManager (storage state + fallback interativo)."""
+        """Valida PJe e SISTJWEB usando storage_state já capturado."""
         info("Autenticando no PJE...")
         self.pje.garantir_autenticado()
 
@@ -400,14 +364,21 @@ class AgenteServico:
         info("Autenticação concluída em ambos os sistemas.")
 
     def _autenticar_interativo(self) -> bool:
-        """Chamado quando status='aguardando_login'. Abre navegador visível se necessário."""
-        info("Tentando reautenticação interativa no PJE...")
-        self.pje.garantir_autenticado()
+        """Captura sessões do Google Chrome aberto pelo usuário."""
+        resultado = capturar_sessoes_chrome(
+            self.pje._esta_logado,
+            self.sistj._esta_logado,
+            STORAGE_STATE_PJE,
+            STORAGE_STATE_SISTJ,
+        )
+        if not resultado.get("ok"):
+            self._set_status("aguardando_login", _mensagem_captura_chrome(resultado))
+            return False
 
-        info("Tentando reautenticação interativa no SISTJWEB...")
-        self.sistj.garantir_autenticado()
-
-        info("Reautenticação interativa concluída.")
+        self.pje._auth.fechar()
+        self.sistj._auth.fechar()
+        self._autenticar_todos()
+        info("Sessões Chrome capturadas e validadas.")
         return True
 
     def _fechar_ciclo_ativo(self) -> None:
@@ -618,8 +589,4 @@ class AgenteServico:
 
 
 if __name__ == "__main__":
-    if DESKTOP_SMOKE_ARG in sys.argv:
-        raise SystemExit(_desktop_smoke())
-    if DESKTOP_LOGIN_SMOKE_ARG in sys.argv:
-        raise SystemExit(_desktop_login_smoke())
     AgenteServico().run()

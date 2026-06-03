@@ -29,7 +29,7 @@ from regras import detectar_area, obter_regras_outros_itens
 from modulos.retry import retry_on_exception
 from modulos.css_escape import escape_for_css
 from modulos.playwright_client import PlaywrightClient
-from modulos.auth_manager import AuthManager
+from modulos.auth_manager import AuthManager, ReautenticacaoNecessariaError
 
 # Importa constantes de seletores organizadas por seção do sistema
 from modulos.selectors import (
@@ -193,22 +193,21 @@ class SistjClient(PlaywrightClient):
         self._auth = AuthManager(STORAGE_STATE_SISTJ, headless_default=HEADLESS)
 
     def garantir_autenticado(self) -> bool:
-        """Verifica autenticação; se necessário, dispara fallback interativo."""
-        return self._auth.verificar_e_autenticar(
+        """Verifica autenticação via storage_state já capturado."""
+        if self._auth.verificar_sessao(
             url=SISTJ_URL,
             verificar_sucesso_fn=self._esta_logado,
-        )
+        ):
+            return True
+        raise ReautenticacaoNecessariaError("sistjweb")
 
     def login(self) -> bool:
         """Alias para garantir_autenticado() — mantido para compatibilidade."""
         return self.garantir_autenticado()
 
     def reautenticar_interativo(self) -> bool:
-        """Força reautenticação com navegador visível."""
-        return self._auth.forcar_reautenticacao_interativa(
-            url=SISTJ_URL,
-            verificar_sucesso_fn=self._esta_logado,
-        )
+        """Compatibilidade: valida storage capturado; não abre navegador."""
+        return self.garantir_autenticado()
 
     def _esta_logado(self, page: Page) -> bool:
         """Retorna True se a página indicar que o usuário está logado no SISTJWEB."""
@@ -245,9 +244,19 @@ class SistjClient(PlaywrightClient):
             except Exception:
                 pass
 
-            # Indicador 3: URL não é página de login
+            # Indicador 3: URL final do SISTJWEB; telas SSO ainda exigem ação humana.
             url = page.url.lower()
-            if "login" not in url and "autentica" not in url:
+            bloqueadores_login = [
+                "login.microsoftonline.com",
+                "sso.tjdft.jus.br",
+                "login",
+                "autentica",
+                "openid-connect",
+                "auth/realms",
+            ]
+            if any(marcador in url for marcador in bloqueadores_login):
+                return False
+            if "sistj.tjdft.jus.br" in url:
                 return True
 
             return False

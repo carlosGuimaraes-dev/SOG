@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from modulos.auth_manager import ReautenticacaoNecessariaError
 from modulos.executor_tarefas import registrar, executar_tarefa, tipos_suportados
 
 
@@ -113,22 +114,24 @@ class TestExecutarTarefa:
         assert resultado["url_atual"] == "https://sistj.tjdft.jus.br/"
         sistj_mock._esta_logado.assert_called_once_with(sistj_mock.page)
 
-    def test_executar_reautenticar_pje_forca_fluxo_interativo(self):
+    def test_executar_reautenticar_pje_sinaliza_sessao_pendente(self):
         pje_mock = MagicMock()
         sistj_mock = MagicMock()
 
         tarefa = {"tipo": "reautenticar_pje", "payload": {}}
-        resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
 
-        assert resultado["logado"] is True
-        pje_mock.reautenticar_interativo.assert_called_once()
+        with pytest.raises(ReautenticacaoNecessariaError, match="pje"):
+            executar_tarefa(tarefa, pje_mock, sistj_mock)
 
-    def test_executar_reautenticar_sistj_forca_fluxo_interativo(self):
+        pje_mock.reautenticar_interativo.assert_not_called()
+
+    def test_executar_reautenticar_sistj_sinaliza_sessao_pendente(self):
         pje_mock = MagicMock()
         sistj_mock = MagicMock()
 
         tarefa = {"tipo": "reautenticar_sistj", "payload": {}}
-        resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
 
-        assert resultado["logado"] is True
-        sistj_mock.reautenticar_interativo.assert_called_once()
+        with pytest.raises(ReautenticacaoNecessariaError, match="sistjweb"):
+            executar_tarefa(tarefa, pje_mock, sistj_mock)
+
+        sistj_mock.reautenticar_interativo.assert_not_called()
