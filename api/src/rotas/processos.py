@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from auth import get_current_user
 from sog_shared import db
 from limiter import limiter
-from schemas import ProcessoListResponse, ProcessoDetalheResponse, ProcessoResponse
+from schemas import ProcessoListResponse, ProcessoDetalheResponse
 
 SCREENSHOTS_BASE_DIR = Path("/dados/screenshots")
 

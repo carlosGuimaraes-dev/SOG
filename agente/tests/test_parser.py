@@ -1,7 +1,6 @@
 """
 Testes unitários para o módulo parser.py
 """
-import pytest
 from modulos.parser import (
     extrair_ids,
     parse_sentenca,

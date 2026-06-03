@@ -4,26 +4,7 @@ Schemas Pydantic para response models da API.
 from pydantic import BaseModel
 
 from sog_shared.schemas import (
-    AgenteComandoResponse,
-    AgenteStatusResponse,
-    AprovacaoResponse,
-    BaixarPdfRequest,
-    CicloAgenteResponse,
-    CicloMembroResponse,
-    CriarTarefaRequest,
-    DadosProcessoResponse,
-    DashboardSessoesResponse,
-    DocumentoResponse,
-    HistoricoItemResponse,
-    LogResponse,
-    ProcessoDetalheResponse,
-    ProcessoListResponse,
     ProcessoResponse,
-    RejeicaoRequest,
-    RejeicaoResponse,
-    SessaoStatusResponse,
-    TarefaListResponse,
-    TarefaResponse,
 )
 
 

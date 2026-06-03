@@ -6,7 +6,7 @@ e reconexão, evitando duplicação entre PjeClient e SistjClient.
 """
 from typing import Optional
 
-from playwright.sync_api import Page, Browser, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, Browser
 
 from modulos.auth_manager import AuthManager
 from utils.logger import info, erro

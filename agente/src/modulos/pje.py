@@ -14,7 +14,7 @@ import json
 import os
 import re
 from typing import List, Dict, Any, Optional, Tuple
-from playwright.sync_api import Page, Browser, FrameLocator, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
 
 from config import (
     PJE_URL,
@@ -23,10 +23,9 @@ from config import (
     HEADLESS,
 )
 from utils.logger import info, erro, aviso
-from banco import db
 from modulos.retry import retry_on_exception
 from modulos.playwright_client import PlaywrightClient
-from modulos.auth_manager import AuthManager, ReautenticacaoNecessariaError
+from modulos.auth_manager import AuthManager
 from modulos.css_escape import escape_for_css
 
 
