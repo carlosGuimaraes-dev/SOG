@@ -193,21 +193,23 @@ class SistjClient(PlaywrightClient):
         self._auth = AuthManager(STORAGE_STATE_SISTJ, headless_default=HEADLESS)
 
     def garantir_autenticado(self) -> bool:
-        """Verifica autenticação via storage_state já capturado."""
-        if self._auth.verificar_sessao(
+        """Verifica autenticação; se necessário, dispara fallback interativo."""
+        return self._auth.verificar_e_autenticar(
             url=SISTJ_URL,
             verificar_sucesso_fn=self._esta_logado,
-        ):
-            return True
-        raise ReautenticacaoNecessariaError("sistjweb")
+        )
 
     def login(self) -> bool:
         """Alias para garantir_autenticado() — mantido para compatibilidade."""
         return self.garantir_autenticado()
 
     def reautenticar_interativo(self) -> bool:
-        """Compatibilidade: valida storage capturado; não abre navegador."""
-        return self.garantir_autenticado()
+        """Força reautenticação com navegador visível."""
+        return self._auth.forcar_reautenticacao_interativa(
+            url=SISTJ_URL,
+            verificar_sucesso_fn=self._esta_logado,
+            manter_aberto_apos_login=True,
+        )
 
     def _esta_logado(self, page: Page) -> bool:
         """Retorna True se a página indicar que o usuário está logado no SISTJWEB."""

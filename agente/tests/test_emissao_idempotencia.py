@@ -4,13 +4,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
 from banco import db
 from modulos.emissor import emitir_e_anexar
 from modulos.executor_tarefas import _anexar_demonstrativo_pje
-
-
-SCHEMA_SQL = Path(__file__).parent.parent / "src" / "banco" / "schema.sql"
+from sog_shared.infra_db import SCHEMA_PATH
 
 
 @contextmanager
@@ -21,8 +20,9 @@ def _conn_context(conn):
 def _configurar_db_memoria(monkeypatch):
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA_SQL.read_text(encoding="utf-8"))
+    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
     conn.commit()
+    monkeypatch.setattr("sog_shared.infra_db.get_conn", lambda: _conn_context(conn))
     monkeypatch.setattr("sog_shared.db.get_conn", lambda: _conn_context(conn))
     monkeypatch.setattr(db, "get_conn", lambda: _conn_context(conn))
     return conn
