@@ -69,12 +69,31 @@ def _consultar_etiqueta_pje(payload, pje, sistj):
 def _verificar_sessao_pje(payload, pje, sistj):
     page = getattr(pje, "page", None)
     if not page:
-        return {"logado": False, "url_atual": None}
+        return {
+            "estado": "pending",
+            "logado": False,
+            "url_atual": None,
+            "mensagem": "Login pendente no PJe. Abra a sessao no navegador do SOG para validar.",
+        }
     try:
         logado = pje._esta_logado(page)
-        return {"logado": logado, "url_atual": page.url}
+        return {
+            "estado": "active" if logado else "expired",
+            "logado": logado,
+            "url_atual": page.url,
+            "mensagem": (
+                "Sessao ativa"
+                if logado
+                else "Sessao expirada no PJe. Reabra a sessao no navegador do SOG."
+            ),
+        }
     except Exception:
-        return {"logado": False, "url_atual": None}
+        return {
+            "estado": "unavailable",
+            "logado": False,
+            "url_atual": None,
+            "mensagem": "Validacao do PJe indisponivel no momento.",
+        }
 
 
 @registrar("consultar_documentos_pje")
@@ -122,12 +141,31 @@ def _reautenticar_pje(payload, pje, sistj):
 def _verificar_sessao_sistj(payload, pje, sistj):
     page = getattr(sistj, "page", None)
     if not page:
-        return {"logado": False, "url_atual": None}
+        return {
+            "estado": "pending",
+            "logado": False,
+            "url_atual": None,
+            "mensagem": "Login pendente no SISTJWEB. Abra a sessao no navegador do SOG para validar.",
+        }
     try:
         logado = sistj._esta_logado(page)
-        return {"logado": logado, "url_atual": page.url}
+        return {
+            "estado": "active" if logado else "expired",
+            "logado": logado,
+            "url_atual": page.url,
+            "mensagem": (
+                "Sessao ativa"
+                if logado
+                else "Sessao expirada no SISTJWEB. Reabra a sessao no navegador do SOG."
+            ),
+        }
     except Exception:
-        return {"logado": False, "url_atual": None}
+        return {
+            "estado": "unavailable",
+            "logado": False,
+            "url_atual": None,
+            "mensagem": "Validacao do SISTJWEB indisponivel no momento.",
+        }
 
 
 @registrar("reautenticar_sistj")

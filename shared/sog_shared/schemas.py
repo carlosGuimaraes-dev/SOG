@@ -14,6 +14,9 @@ class ProcessoResponse(BaseModel):
     atualizado_em: Optional[str] = None
     tentativas: Optional[int] = None
     erro_msg: Optional[str] = None
+    reprocessar_solicitado_em: Optional[str] = None
+    reprocessar_solicitado_por: Optional[str] = None
+    reprocessar_motivo: Optional[str] = None
 
 
 class ProcessoListResponse(BaseModel):
@@ -112,38 +115,24 @@ class HistoricoItemResponse(BaseModel):
     obs_operador: Optional[str] = None
 
 
-class LoginResponse(BaseModel):
-    message: str
-
-
-class TokenRefreshResponse(BaseModel):
-    message: str
-
-
-class LogoutResponse(BaseModel):
-    message: str
-
-
-class MeResponse(BaseModel):
-    username: str
-
-
-class HealthResponse(BaseModel):
-    status: str
-    version: str
-    database: str
-
-
 class AgenteStatusResponse(BaseModel):
     status: str
     mensagem: str
     atualizado_em: Optional[str] = None
     online: bool
+    ciclo_uuid: Optional[str] = None
+    ciclo_snapshot: Optional[str] = None
+    pausado_em: Optional[str] = None
+    retomado_em: Optional[str] = None
+    pode_iniciar: bool = True
+    pode_parar: bool = False
+    relogin_required: bool = False
 
 
 class AgenteComandoResponse(BaseModel):
     message: str
     ciclo_uuid: Optional[str] = None
+    resumed: Optional[bool] = None
 
 
 class CicloMembroResponse(BaseModel):
@@ -210,6 +199,7 @@ class TarefaListResponse(BaseModel):
 
 class SessaoStatusResponse(BaseModel):
     sistema: str
+    estado: str
     logado: bool
     mensagem: str
     ultima_verificacao: Optional[str] = None
