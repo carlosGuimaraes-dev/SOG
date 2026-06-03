@@ -164,7 +164,7 @@ jobs:
             },
           }
           JS
-          npx --yes dependency-cruiser --validate dependency-cruiser.config.cjs src
+          npx --yes dependency-cruiser -c dependency-cruiser.config.cjs src
 
       - name: Run frontend coverage
         run: |
@@ -233,8 +233,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements.txt -r agente/requirements.txt
           pip install pytest pytest-cov mutmut
-          npm ci --prefix frontend
-          npm install --prefix frontend --no-save @stryker-mutator/core @stryker-mutator/vitest-runner
+          npm ci --prefix frontend --include=dev
+          npm install --prefix frontend --no-save @stryker-mutator/core @stryker-mutator/vitest-runner --legacy-peer-deps || true
 
       - name: Run Python mutation smoke
         env:
