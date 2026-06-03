@@ -185,6 +185,12 @@ def safe_get_input_value(page: Page, selectors: List[str], timeout: int = 3000) 
     return ""
 
 
+def _registrar_etapa(resultado: Dict[str, Any], codigo: str, detalhe: str, status: str = "ok") -> None:
+    resultado.setdefault("etapas", []).append(
+        {"codigo": codigo, "status": status, "detalhe": detalhe}
+    )
+
+
 class SistjClient(PlaywrightClient):
     """Cliente de automação para o SISTJWEB (planilha de custas TJDFT)."""
 
@@ -256,6 +262,180 @@ class SistjClient(PlaywrightClient):
             aviso(f"Erro ao verificar estado de login no SISTJWEB: {exc}")
             return False
 
+    def _abrir_fluxo_preenchimento(self) -> str:
+        safe_click(self.page, NAV_MENU_CUSTAS, timeout=10000)
+        safe_click(self.page, NAV_SUBMENU_ATUALIZAR, timeout=10000)
+        safe_click(self.page, NAV_BOTAO_PREENCHER, timeout=10000)
+        self.page.wait_for_load_state("networkidle")
+        return "fluxo aberto"
+
+    def _executar_etapa_preenchimento(self, codigo: str, acao):
+        try:
+            return acao()
+        except Exception as exc:
+            raise RuntimeError(f"Falha na etapa {codigo}: {exc}") from exc
+
+    def _preencher_dados_processo(self, dados: Dict[str, Any]) -> Dict[str, str]:
+        safe_click(self.page, RADIO_PROC_ELETRONICO_SIM, timeout=5000)
+
+        instancia = dados.get("instancia", "")
+        if "1" in instancia:
+            safe_click(self.page, RADIO_INSTANCIA_1, timeout=5000)
+        else:
+            safe_click(self.page, RADIO_INSTANCIA_2, timeout=5000)
+
+        numero_sem_mascara = dados.get("numero_sem_mascara", "")
+        safe_fill(self.page, INPUT_NUMERO_PROCESSO, numero_sem_mascara, timeout=5000)
+        safe_click(self.page, BTN_CONSULTAR, timeout=5000)
+        self.page.wait_for_timeout(3000)
+
+        valor_causa_atualizado = safe_get_input_value(
+            self.page, INPUT_VALOR_CAUSA_ATUALIZADO, timeout=3000
+        )
+        safe_fill(self.page, INPUT_VALOR_CAUSA, dados.get("valor_causa", ""), timeout=5000)
+
+        data_distrib = _formatar_data(dados.get("data_distribuicao", ""))
+        safe_fill(self.page, INPUT_DATA_DISTRIBUICAO, data_distrib, timeout=5000)
+        safe_fill(self.page, INPUT_POLO_ATIVO, dados.get("polo_ativo", ""), timeout=5000)
+
+        polo_passivo = dados.get("polo_passivo", "Não Há")
+        if not polo_passivo:
+            polo_passivo = "Não Há"
+        safe_fill(self.page, INPUT_POLO_PASSIVO, polo_passivo, timeout=5000)
+
+        return {
+            "valor_causa_atualizado": valor_causa_atualizado,
+            "detalhe": f"processo consultado; valor_causa_atualizado={valor_causa_atualizado or 'n/d'}",
+        }
+
+    def _preencher_secao_custas(self, dados: Dict[str, Any]) -> str:
+        instancia = dados.get("instancia", "")
+        if "1" in instancia:
+            safe_select_option(
+                self.page, SELECT_TIPO_GUIA, "Guia Final - 1ª Instância", timeout=5000
+            )
+        else:
+            safe_select_option(
+                self.page, SELECT_TIPO_GUIA, "Guia Final - 2ª Instância", timeout=5000
+            )
+
+        sucumbentes = dados.get("sucumbentes", [])
+        if len(sucumbentes) > 1:
+            safe_check(self.page, CHECK_PRO_RATA, timeout=5000)
+
+        for suc in sucumbentes:
+            if suc.get("is_autor"):
+                safe_click(self.page, BTN_ADICIONAR_AUTOR, timeout=5000)
+            else:
+                safe_fill(self.page, INPUT_NOME_PARTE, suc.get("nome", ""), timeout=5000)
+                safe_fill(self.page, INPUT_CPF_CNPJ, suc.get("cpf_cnpj", ""), timeout=5000)
+                safe_select_option(
+                    self.page, SELECT_TIPO_PARTE, suc.get("tipo", "Requerido"), timeout=5000
+                )
+                safe_click(self.page, BTN_ADICIONAR, timeout=5000)
+
+            if dados.get("suspensao_exigibilidade"):
+                safe_check(self.page, CHECK_ISENCAO_CUSTAS, timeout=5000)
+
+        return f"{len(sucumbentes)} sucumbente(s)"
+
+    def _preencher_pecas_processuais(self, dados: Dict[str, Any]) -> str:
+        total_preenchido = 0
+        for campo_id, seletores_peca in MAPEAMENTO_PECAS.items():
+            valor = dados.get(campo_id, "")
+            if not valor:
+                continue
+            try:
+                safe_fill(self.page, seletores_peca, str(valor), timeout=3000)
+                total_preenchido += 1
+            except PlaywrightTimeout:
+                aviso(f"Timeout ao preencher peça {campo_id} — peça opcional, prosseguindo.")
+            except Exception as exc:
+                aviso(f"Erro ao preencher peça {campo_id}: {exc} — peça opcional, prosseguindo.")
+        return f"{total_preenchido} campo(s) de peças preenchido(s)"
+
+    def _preencher_outros_itens(
+        self,
+        dados: Dict[str, Any],
+        valor_causa_atualizado: str,
+    ) -> str:
+        area = detectar_area(dados.get("classe", ""), dados.get("feito", ""))
+        regras = obter_regras_outros_itens(area)
+
+        for item in regras:
+            safe_select_option(self.page, SELECT_ITEM_GUIA, item["item_guia"], timeout=5000)
+            self.page.wait_for_timeout(1000)
+
+            valor_radio = item["item_calculo"]
+            valor_escapado = escape_for_css(valor_radio)
+            seletores_radio = [
+                f"input[value='{valor_escapado}'][name*='itemCalculo']",
+                f"input[value='{valor_escapado}'][name*='item']",
+                f"input[type='radio'][value='{valor_escapado}']",
+            ]
+            safe_click(self.page, seletores_radio, timeout=5000)
+
+            if item.get("usa_ids_oficios") and dados.get("ids_oficios"):
+                safe_fill(self.page, INPUT_NUMERO_FOLHAS_OUTROS, dados["ids_oficios"], timeout=3000)
+
+            if item.get("usa_valor_causa_atualizado") and valor_causa_atualizado:
+                safe_fill(self.page, INPUT_VALOR_ITEM, valor_causa_atualizado, timeout=3000)
+
+            safe_fill(self.page, INPUT_QUANTIDADE, str(item.get("quantidade", 1)), timeout=3000)
+            safe_click(self.page, BTN_ADICIONAR, timeout=5000)
+            self.page.wait_for_timeout(500)
+
+        return f"{len(regras)} outro(s) item(ns)"
+
+    def _preencher_custas_pagas(self, dados: Dict[str, Any]) -> str:
+        custas_pagas = dados.get("custas_pagas", [])
+        for cp in custas_pagas:
+            data_pag = _formatar_data(cp.get("data", ""))
+            safe_fill(self.page, INPUT_DATA_PAGAMENTO, data_pag, timeout=3000)
+            safe_fill(self.page, INPUT_VALOR_CUSTAS_PAGAS, cp.get("valor", ""), timeout=3000)
+            safe_fill(self.page, INPUT_NUMERO_GUIA, cp.get("numero_guia", ""), timeout=3000)
+            safe_click(self.page, BTN_ADICIONAR, timeout=5000)
+            self.page.wait_for_timeout(500)
+        return f"{len(custas_pagas)} custa(s) paga(s)"
+
+    def _salvar_planilha(self, numero_processo: str) -> Dict[str, str]:
+        resultado = {"screenshot_path": "", "valor_total_recolher": ""}
+
+        safe_click(self.page, BTN_AVANCAR, timeout=10000)
+        self.page.wait_for_timeout(3000)
+
+        try:
+            sibling_locator = self.page.locator(VALOR_TOTAL_RECOLHER_SIBLING[0])
+            if sibling_locator.count() > 0:
+                resultado["valor_total_recolher"] = sibling_locator.first.inner_text(timeout=5000)
+        except PlaywrightTimeout:
+            aviso("Timeout ao extrair valor_total_recolher via sibling.")
+        except Exception as exc:
+            aviso(f"Erro ao extrair valor_total_recolher via sibling: {exc}")
+
+        if not resultado["valor_total_recolher"]:
+            try:
+                html = self.page.content()
+                m = re.search(
+                    r"Valor Total a Recolher[\s:]*R?\$?\s*([\d.,]+)", html, re.IGNORECASE
+                )
+                if m:
+                    resultado["valor_total_recolher"] = m.group(1)
+            except Exception as exc:
+                aviso(f"Erro ao extrair valor_total_recolher via regex: {exc}")
+
+        screenshot_path = SCREENSHOTS_DIR / f"{numero_processo}_sistjweb.png"
+        self.page.screenshot(path=str(screenshot_path), full_page=True)
+        resultado["screenshot_path"] = str(screenshot_path)
+
+        safe_click(self.page, BTN_GRAVAR, timeout=10000)
+        self.page.wait_for_timeout(2000)
+
+        resultado["detalhe"] = (
+            f"valor total {resultado['valor_total_recolher'] or 'n/d'}; screenshot salvo"
+        )
+        return resultado
+
     @retry_on_exception(
         exceptions=(PlaywrightTimeout, ConnectionError, TimeoutError),
         max_retries=3,
@@ -269,185 +449,54 @@ class SistjClient(PlaywrightClient):
           - screenshot_path: caminho da captura de tela.
           - valor_total_recolher: valor extraído da tela de resumo.
         """
-        resultado = {"screenshot_path": "", "valor_total_recolher": ""}
+        resultado = {"screenshot_path": "", "valor_total_recolher": "", "etapas": []}
 
         try:
-            # ── Navegação: Custas > Atualizar Planilha > Preencher ──
-            safe_click(self.page, NAV_MENU_CUSTAS, timeout=10000)
-            safe_click(self.page, NAV_SUBMENU_ATUALIZAR, timeout=10000)
-            safe_click(self.page, NAV_BOTAO_PREENCHER, timeout=10000)
-            self.page.wait_for_load_state("networkidle")
-
-            # ── Passo 1: Dados do Processo ──
-            # Marca "Processo Eletrônico = Sim"
-            safe_click(self.page, RADIO_PROC_ELETRONICO_SIM, timeout=5000)
-
-            # Seleção de instância (1ª ou 2ª)
-            instancia = dados.get("instancia", "")
-            if "1" in instancia:
-                safe_click(self.page, RADIO_INSTANCIA_1, timeout=5000)
-            else:
-                safe_click(self.page, RADIO_INSTANCIA_2, timeout=5000)
-
-            # Preenche número do processo e consulta
-            numero_sem_mascara = dados.get("numero_sem_mascara", "")
-            safe_fill(self.page, INPUT_NUMERO_PROCESSO, numero_sem_mascara, timeout=5000)
-            safe_click(self.page, BTN_CONSULTAR, timeout=5000)
-            self.page.wait_for_timeout(3000)
-
-            # Lê Valor da Causa Atualizado retornado pela consulta
-            valor_causa_atualizado = safe_get_input_value(
-                self.page, INPUT_VALOR_CAUSA_ATUALIZADO, timeout=3000
+            detalhe_navegacao = self._executar_etapa_preenchimento(
+                "navegacao",
+                self._abrir_fluxo_preenchimento,
             )
+            _registrar_etapa(resultado, "navegacao", detalhe_navegacao)
 
-            # Preenche Valor da Causa
-            valor_causa = dados.get("valor_causa", "")
-            safe_fill(self.page, INPUT_VALOR_CAUSA, valor_causa, timeout=5000)
+            etapa_dados = self._executar_etapa_preenchimento(
+                "dados_processo",
+                lambda: self._preencher_dados_processo(dados),
+            )
+            _registrar_etapa(resultado, "dados_processo", etapa_dados["detalhe"])
 
-            # Preenche Data de Distribuição (formato DD/MM/AAAA)
-            data_distrib = _formatar_data(dados.get("data_distribuicao", ""))
-            safe_fill(self.page, INPUT_DATA_DISTRIBUICAO, data_distrib, timeout=5000)
+            detalhe_custas = self._executar_etapa_preenchimento(
+                "custas",
+                lambda: self._preencher_secao_custas(dados),
+            )
+            _registrar_etapa(resultado, "custas", detalhe_custas)
 
-            # Polo Ativo
-            safe_fill(self.page, INPUT_POLO_ATIVO, dados.get("polo_ativo", ""), timeout=5000)
+            detalhe_pecas = self._executar_etapa_preenchimento(
+                "pecas_processuais",
+                lambda: self._preencher_pecas_processuais(dados),
+            )
+            _registrar_etapa(resultado, "pecas_processuais", detalhe_pecas)
 
-            # Polo Passivo (default "Não Há" para evitar campo vazio)
-            polo_passivo = dados.get("polo_passivo", "Não Há")
-            if not polo_passivo:
-                polo_passivo = "Não Há"
-            safe_fill(self.page, INPUT_POLO_PASSIVO, polo_passivo, timeout=5000)
+            detalhe_outros_itens = self._executar_etapa_preenchimento(
+                "outros_itens",
+                lambda: self._preencher_outros_itens(
+                    dados, etapa_dados["valor_causa_atualizado"]
+                ),
+            )
+            _registrar_etapa(resultado, "outros_itens", detalhe_outros_itens)
 
-            # ── Passo 2: Custas ──
-            # Seleciona tipo de guia conforme instância
-            if "1" in instancia:
-                safe_select_option(
-                    self.page, SELECT_TIPO_GUIA, "Guia Final - 1ª Instância", timeout=5000
-                )
-            else:
-                safe_select_option(
-                    self.page, SELECT_TIPO_GUIA, "Guia Final - 2ª Instância", timeout=5000
-                )
+            detalhe_custas_pagas = self._executar_etapa_preenchimento(
+                "custas_pagas",
+                lambda: self._preencher_custas_pagas(dados),
+            )
+            _registrar_etapa(resultado, "custas_pagas", detalhe_custas_pagas)
 
-            # Marca pro-rata se houver mais de um sucumbente
-            sucumbentes = dados.get("sucumbentes", [])
-            if len(sucumbentes) > 1:
-                safe_check(self.page, CHECK_PRO_RATA, timeout=5000)
-
-            # Adiciona partes (autores/requeridos)
-            for suc in sucumbentes:
-                if suc.get("is_autor"):
-                    # Botão específico para adicionar autor(es)
-                    safe_click(self.page, BTN_ADICIONAR_AUTOR, timeout=5000)
-                else:
-                    safe_fill(self.page, INPUT_NOME_PARTE, suc.get("nome", ""), timeout=5000)
-                    safe_fill(self.page, INPUT_CPF_CNPJ, suc.get("cpf_cnpj", ""), timeout=5000)
-                    safe_select_option(
-                        self.page, SELECT_TIPO_PARTE, suc.get("tipo", "Requerido"), timeout=5000
-                    )
-                    safe_click(self.page, BTN_ADICIONAR, timeout=5000)
-
-                # Isenção de custas (suspensão de exigibilidade)
-                if dados.get("suspensao_exigibilidade"):
-                    safe_check(self.page, CHECK_ISENCAO_CUSTAS, timeout=5000)
-
-            # ── Passo 3: Peças Processuais (IDs) ──
-            # Cada peça é uma linha de tabela onde cada linha contém o label e um input.
-            # O seletor primário usa :has-text para localizar a linha (tr) e depois o input.
-            # Fallbacks usam id ou name quando previsíveis.
-            for campo_id, seletores_peca in MAPEAMENTO_PECAS.items():
-                valor = dados.get(campo_id, "")
-                if valor:
-                    try:
-                        # Tenta preencher usando a lista completa de seletores da peça
-                        safe_fill(self.page, seletores_peca, str(valor), timeout=3000)
-                    except PlaywrightTimeout:
-                        aviso(f"Timeout ao preencher peça {campo_id} — peça opcional, prosseguindo.")
-                    except Exception as exc:
-                        aviso(f"Erro ao preencher peça {campo_id}: {exc} — peça opcional, prosseguindo.")
-
-            # ── Passo 4: Outros Itens ──
-            area = detectar_area(dados.get("classe", ""), dados.get("feito", ""))
-            regras = obter_regras_outros_itens(area)
-
-            for item in regras:
-                # Seleciona o item no dropdown "itemGuia"
-                safe_select_option(self.page, SELECT_ITEM_GUIA, item["item_guia"], timeout=5000)
-                self.page.wait_for_timeout(1000)
-
-                # Aguarda e seleciona o radio de cálculo correspondente
-                valor_radio = item["item_calculo"]
-                valor_escapado = escape_for_css(valor_radio)
-                seletores_radio = [
-                    f"input[value='{valor_escapado}'][name*='itemCalculo']",
-                    f"input[value='{valor_escapado}'][name*='item']",
-                    f"input[type='radio'][value='{valor_escapado}']",
-                ]
-                safe_click(self.page, seletores_radio, timeout=5000)
-
-                # Campos condicionais
-                if item.get("usa_ids_oficios") and dados.get("ids_oficios"):
-                    safe_fill(
-                        self.page,
-                        INPUT_NUMERO_FOLHAS_OUTROS,
-                        dados["ids_oficios"],
-                        timeout=3000,
-                    )
-
-                if item.get("usa_valor_causa_atualizado") and valor_causa_atualizado:
-                    safe_fill(
-                        self.page, INPUT_VALOR_ITEM, valor_causa_atualizado, timeout=3000
-                    )
-
-                safe_fill(
-                    self.page, INPUT_QUANTIDADE, str(item.get("quantidade", 1)), timeout=3000
-                )
-                safe_click(self.page, BTN_ADICIONAR, timeout=5000)
-                self.page.wait_for_timeout(500)
-
-            # ── Passo 5: Custas Pagas ──
-            for cp in dados.get("custas_pagas", []):
-                data_pag = _formatar_data(cp.get("data", ""))
-                safe_fill(self.page, INPUT_DATA_PAGAMENTO, data_pag, timeout=3000)
-                safe_fill(self.page, INPUT_VALOR_CUSTAS_PAGAS, cp.get("valor", ""), timeout=3000)
-                safe_fill(self.page, INPUT_NUMERO_GUIA, cp.get("numero_guia", ""), timeout=3000)
-                safe_click(self.page, BTN_ADICIONAR, timeout=5000)
-                self.page.wait_for_timeout(500)
-
-            # ── Passo 6: Avançar e capturar resultado ──
-            safe_click(self.page, BTN_AVANCAR, timeout=10000)
-            self.page.wait_for_timeout(3000)
-
-            # Extrai "Valor Total a Recolher"
-            try:
-                # Estratégia 1: locator via texto + sibling
-                sibling_locator = self.page.locator(VALOR_TOTAL_RECOLHER_SIBLING[0])
-                if sibling_locator.count() > 0:
-                    resultado["valor_total_recolher"] = sibling_locator.first.inner_text(timeout=5000)
-            except PlaywrightTimeout:
-                aviso("Timeout ao extrair valor_total_recolher via sibling.")
-            except Exception as exc:
-                aviso(f"Erro ao extrair valor_total_recolher via sibling: {exc}")
-
-            # Estratégia 2: regex no HTML bruto como último recurso
-            if not resultado["valor_total_recolher"]:
-                try:
-                    html = self.page.content()
-                    m = re.search(
-                        r"Valor Total a Recolher[\s:]*R?\$?\s*([\d.,]+)", html, re.IGNORECASE
-                    )
-                    if m:
-                        resultado["valor_total_recolher"] = m.group(1)
-                except Exception as exc:
-                    aviso(f"Erro ao extrair valor_total_recolher via regex: {exc}")
-
-            # Screenshot de resumo
-            screenshot_path = SCREENSHOTS_DIR / f"{numero_processo}_sistjweb.png"
-            self.page.screenshot(path=str(screenshot_path), full_page=True)
-            resultado["screenshot_path"] = str(screenshot_path)
-
-            # Grava a planilha
-            safe_click(self.page, BTN_GRAVAR, timeout=10000)
-            self.page.wait_for_timeout(2000)
+            etapa_salvar = self._executar_etapa_preenchimento(
+                "salvar",
+                lambda: self._salvar_planilha(numero_processo),
+            )
+            resultado["screenshot_path"] = etapa_salvar["screenshot_path"]
+            resultado["valor_total_recolher"] = etapa_salvar["valor_total_recolher"]
+            _registrar_etapa(resultado, "salvar", etapa_salvar["detalhe"])
 
             info(f"Planilha SISTJWEB preenchida para {numero_processo}.")
             return resultado
