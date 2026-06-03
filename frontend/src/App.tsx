@@ -9,6 +9,7 @@ import Skeleton from './components/ui/Skeleton'
 import Login from './pages/Login'
 import CicloAtual from './pages/CicloAtual'
 import Fila from './pages/Fila'
+import Configuracao from './pages/Configuracao'
 
 const Detalhe = React.lazy(() => import('./pages/Detalhe'))
 const Historico = React.lazy(() => import('./pages/Historico'))
@@ -36,6 +37,7 @@ function Layout() {
     { to: '/', label: 'Ciclo atual', active: location.pathname === '/' },
     { to: '/processos', label: 'Processos', active: location.pathname.startsWith('/processos') || location.pathname.startsWith('/detalhe/') },
     { to: '/historico', label: 'Histórico', active: location.pathname.startsWith('/historico') },
+    { to: '/configuracao', label: 'Configuração', active: location.pathname.startsWith('/configuracao') },
   ]
 
   return (
@@ -91,6 +93,7 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="/" element={<CicloAtual />} />
                 <Route path="/processos" element={<Fila />} />
+                <Route path="/configuracao" element={<Configuracao />} />
                 <Route
                   path="/detalhe/:id"
                   element={

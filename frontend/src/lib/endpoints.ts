@@ -16,4 +16,6 @@ export const ENDPOINTS = {
   AGENTE_CICLO_ATUAL: '/agente/ciclos/atual',
   AGENTE_ULTIMO_CICLO: '/agente/ciclos/ultimo',
   DASHBOARD_SESSOES: '/dashboard/sessoes',
+  PJE_REAUTENTICAR: '/pje/reautenticar',
+  SISTJ_REAUTENTICAR: '/sistj/reautenticar',
 } as const
