@@ -11,17 +11,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
 def _instalar_stub_playwright() -> None:
     if importlib.util.find_spec("playwright") is not None:
-        return
+        try:
+            import playwright.sync_api  # noqa: F401
+            return
+        except Exception:
+            pass
 
     sync_api = types.ModuleType("playwright.sync_api")
 
     class _PlaywrightTimeout(Exception):
         pass
 
-    def _sync_playwright():
-        raise RuntimeError("playwright indisponível neste ambiente de teste")
+    class _DummyPlaywrightRunner:
+        def start(self):
+            raise RuntimeError("playwright indisponivel neste ambiente de teste")
 
-    sync_api.sync_playwright = _sync_playwright
+    sync_api.sync_playwright = lambda: _DummyPlaywrightRunner()
     sync_api.Page = object
     sync_api.Browser = object
     sync_api.BrowserContext = object

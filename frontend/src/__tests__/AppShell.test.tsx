@@ -25,6 +25,10 @@ vi.mock('../pages/Historico', () => ({
   default: () => <div>Página Histórico</div>,
 }))
 
+vi.mock('../pages/Configuracao', () => ({
+  default: () => <div>Página Configuração</div>,
+}))
+
 describe('App shell autenticado', () => {
   it('usa Ciclo atual como home e renderiza tabs principais', async () => {
     render(
@@ -37,5 +41,6 @@ describe('App shell autenticado', () => {
     expect(screen.getByRole('link', { name: 'Ciclo atual' })).toHaveAttribute('href', '/')
     expect(screen.getByRole('link', { name: 'Processos' })).toHaveAttribute('href', '/processos')
     expect(screen.getByRole('link', { name: 'Histórico' })).toHaveAttribute('href', '/historico')
+    expect(screen.getByRole('link', { name: 'Configuração' })).toHaveAttribute('href', '/configuracao')
   })
 })
