@@ -1,0 +1,55 @@
+name: SOG Desktop R2 Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "GitHub Actions run id containing the sog-desktop-windows artifact"
+        required: true
+      version:
+        description: "Desktop installer version, for example 0.1.7"
+        required: true
+      sha256:
+        description: "Expected SHA256 of the installer executable"
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  upload-r2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sog-desktop-windows
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: artifact
+
+      - name: Verify SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe="artifact/SOG Desktop Setup ${{ inputs.version }}.exe"
+          actual="$(sha256sum "$exe" | awk '{print $1}')"
+          if [ "$actual" != "${{ inputs.sha256 }}" ]; then
+            echo "expected=${{ inputs.sha256 }}"
+            echo "actual=$actual"
+            exit 1
+          fi
+          printf '%s  %s\n' "$actual" "SOG.Desktop.Setup.${{ inputs.version }}.exe" > "artifact/SOG.Desktop.Setup.${{ inputs.version }}.exe.sha256"
+
+      - name: Upload installer to R2
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          npx wrangler r2 object put "sogtj-releases/sogtj/v${version}/SOG.Desktop.Setup.${version}.exe" --remote --file "artifact/SOG Desktop Setup ${version}.exe" --content-type application/octet-stream --cache-control "public, max-age=31536000, immutable"
+          npx wrangler r2 object put "sogtj-releases/sogtj/v${version}/SOG.Desktop.Setup.${version}.exe.blockmap" --remote --file "artifact/SOG Desktop Setup ${version}.exe.blockmap" --content-type application/octet-stream --cache-control "public, max-age=31536000, immutable"
+          npx wrangler r2 object put "sogtj-releases/sogtj/v${version}/SOG.Desktop.Setup.${version}.exe.sha256" --remote --file "artifact/SOG.Desktop.Setup.${version}.exe.sha256" --content-type text/plain --cache-control "public, max-age=300"
