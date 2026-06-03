@@ -1,5 +1,9 @@
 # Triage Labels
 
-Use Symphony workflow states instead of ad hoc labels.
+Use Paperclip-ready status markers in local issue artifacts.
 
-Standard states include `Todo`, `In Progress`, `Rework`, `Human Review`, `Merging`, and `Done`.
+- `ready-for-agent`
+- `needs-human`
+- `blocked`
+
+Do not use Symphony workflow states or Linear labels in this repository.

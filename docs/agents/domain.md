@@ -1,3 +1,4 @@
 # Domain
 
-Read `SYMPHONY.md` first and keep planning artifacts under `.symphony/initiatives/<slug>/`.
+Read `CONTEXT.md` first and use its vocabulary in planning artifacts. Keep
+Paperclip planning artifacts under `docs/paperclip/<slug>/`.

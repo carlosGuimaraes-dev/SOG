@@ -1,6 +1,8 @@
 # Issue Tracker
 
-This repository uses Linear through Symphony.
+This repository uses Paperclip.
 
-- Project slug: `sog-19e506c6c308`
-- Tracker kind: `linear`
+- Tracker kind: `paperclip`
+- Local issue artifacts live under `docs/paperclip/<slug>/issues/` until they
+  are imported into Paperclip.
+- Do not create `.symphony` artifacts or Linear issues for this repository.
