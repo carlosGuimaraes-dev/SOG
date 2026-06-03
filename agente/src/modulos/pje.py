@@ -258,6 +258,7 @@ class PjeClient(PlaywrightClient):
             url=PJE_URL,
             verificar_sucesso_fn=self._esta_logado,
             accept_downloads=True,
+            manter_aberto_apos_login=True,
         )
 
     def _esta_logado(self, page: Page) -> bool:

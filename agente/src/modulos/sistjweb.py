@@ -208,6 +208,7 @@ class SistjClient(PlaywrightClient):
         return self._auth.forcar_reautenticacao_interativa(
             url=SISTJ_URL,
             verificar_sucesso_fn=self._esta_logado,
+            manter_aberto_apos_login=True,
         )
 
     def _esta_logado(self, page: Page) -> bool:

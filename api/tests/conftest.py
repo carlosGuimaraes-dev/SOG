@@ -14,14 +14,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
 # Variáveis obrigatórias para os testes
-os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-com-mais-de-32-caracteres!")
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-com-mais-de-32-caracteres!"
 
 # Gera um hash bcrypt válido para que a validação de startup não falhe
 _test_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
-os.environ.setdefault("DASHBOARD_SENHA_HASH", _test_hash)
+os.environ["DASHBOARD_SENHA_HASH"] = _test_hash
 
-SCHEMA_SQL = Path(__file__).parent.parent.parent / "agente" / "src" / "banco" / "schema.sql"
-
+from sog_shared.infra_db import SCHEMA_PATH  # noqa: E402
 
 @pytest.fixture
 def mock_db(monkeypatch):
@@ -30,13 +29,15 @@ def mock_db(monkeypatch):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
-    conn.executescript(SCHEMA_SQL.read_text(encoding="utf-8"))
+    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
     conn.commit()
 
     @contextmanager
     def _get_conn():
         yield conn
 
+    monkeypatch.setattr("sog_shared.infra_db.get_conn", _get_conn)
+    monkeypatch.setattr("sog_shared.infra_db.init_db", lambda: None)
     monkeypatch.setattr("sog_shared.db.get_conn", _get_conn)
     monkeypatch.setattr("sog_shared.db.init_db", lambda: None)
     monkeypatch.setattr("sog_shared.config.init_config", lambda: None)

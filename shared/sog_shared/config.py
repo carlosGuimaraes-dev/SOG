@@ -1,9 +1,9 @@
 """
-Configuração compartilhada entre API e Agente.
+Configuracao compartilhada entre API e Agente.
 
-Variáveis de ambiente lidas no import (sem side-effects):
+Variaveis de ambiente lidas no import (sem side-effects):
   - DB_PATH, TIMEOUT_PADRAO, HEADLESS, MAX_TENTATIVAS
-  - DASHBOARD_USUARIO, DASHBOARD_SENHA_HASH
+  - DASHBOARD_USUARIO, DASHBOARD_SENHA_HASH, DASHBOARD_AUTH_ENABLED
 
 A função init_config() deve ser chamada explicitamente no startup
 para criar diretórios necessários.
@@ -26,6 +26,12 @@ else:
 # ---------------------------------------------------------------------------
 DASHBOARD_USUARIO = os.getenv("DASHBOARD_USUARIO", "admin")
 DASHBOARD_SENHA_HASH = os.getenv("DASHBOARD_SENHA_HASH", "")
+DASHBOARD_AUTH_ENABLED = os.getenv("DASHBOARD_AUTH_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 # ---------------------------------------------------------------------------
 # Playwright / Execução
