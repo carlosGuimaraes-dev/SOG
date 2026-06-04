@@ -7,6 +7,7 @@ import uuid
 from typing import Any, Dict, Optional
 
 from sog_shared.agente_ciclo_contadores import (
+    recalcular_contadores_ciclo as _recalcular_contadores_ciclo,
     atualizar_contadores_ciclo,
     atualizar_contadores_ciclo_do_processo,
     finalizar_ciclo,
@@ -331,3 +332,20 @@ def obter_ciclo(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
             (ciclo_uuid,),
         ).fetchone()
         return dict(row) if row else None
+
+
+def _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id: int) -> Optional[str]:
+    row = conn.execute(
+        """
+        SELECT m.ciclo_uuid
+        FROM agente_ciclo_membros m
+        JOIN agente_ciclos c ON c.uuid = m.ciclo_uuid
+        WHERE m.processo_id = ?
+        ORDER BY c.criado_em DESC, m.id DESC
+        LIMIT 1
+        """,
+        (processo_id,),
+    ).fetchone()
+    if not row:
+        return None
+    return row["ciclo_uuid"]
