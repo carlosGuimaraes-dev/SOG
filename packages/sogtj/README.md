@@ -16,15 +16,15 @@ iSOG/SOG Desktop instalado inicia a stack local e abre o dashboard no navegador
 padrao do Windows, que pode ser o Chrome. O dashboard local nao pede senha
 propria; PJe/SISTJWEB continuam exigindo login manual quando o agente precisar.
 
-Asset padrao da versao do instalador `0.1.7`:
+Asset padrao da versao do instalador `0.1.8`:
 
 ```text
-SOG.Desktop.Setup.0.1.7.exe
+SOG.Desktop.Setup.0.1.8.exe
 ```
 
 ## Publicacao
 
-1. Publique o instalador Windows no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.7/`.
+1. Publique o instalador Windows no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.8/`.
 2. Atualize a verificacao de integridade interna do bootstrap.
 3. Publique este pacote no npm:
 
@@ -36,6 +36,6 @@ npm publish --access public
 ## Teste com URL direta
 
 ```powershell
-$env:ISOG_ASSET_URL="https://exemplo.local/SOG.Desktop.Setup.0.1.7.exe"
+$env:ISOG_ASSET_URL="https://exemplo.local/SOG.Desktop.Setup.0.1.8.exe"
 npx -y sogtj --verify-only
 ```
