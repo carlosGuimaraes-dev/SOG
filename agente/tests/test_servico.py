@@ -298,6 +298,19 @@ def test_relogin_retoma_mesmo_ciclo_aguardando_login(mock_db):
     assert servico._ciclo_uuid == "ciclo-login"
 
 
+def test_loop_estado_erro_sem_iniciar_aguarda_curto_sem_recuperar():
+    servico = _servico_fake()
+    servico._atualizar_heartbeat = MagicMock()
+    servico._ler_comando = MagicMock(return_value=("parar", "erro"))
+    servico._stop_event = MagicMock()
+    servico._stop_event.is_set.return_value = False
+
+    servico._loop_iteration()
+
+    servico._stop_event.wait.assert_called_once_with(timeout=5)
+    servico._set_status.assert_not_called()
+
+
 def test_loop_iteration_em_parando_faz_pausa_cooperativa_do_ciclo():
     servico = _servico_fake()
     servico._ler_comando = MagicMock(return_value=("parar", "parando"))
