@@ -3,11 +3,10 @@ Operações de domínio para controle do agente e ciclos.
 """
 from datetime import datetime, timezone
 import json
-import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from sog_shared import infra_db
+from sog_shared import agente_ciclo_contadores, agente_ciclo_snapshot, infra_db
 
 ESTADOS_CICLO_ATIVO = frozenset({
     "iniciando",
@@ -254,75 +253,6 @@ def _rotulo_ciclo(agora: Optional[datetime] = None) -> str:
     return base.strftime("Ciclo %d/%m/%Y %H:%M")
 
 
-def _numero_sem_mascara(numero: str) -> str:
-    return re.sub(r"\D", "", numero)
-
-
-def _recalcular_contadores_ciclo(conn, ciclo_uuid: str) -> None:
-    row = conn.execute(
-        """
-        SELECT
-            COUNT(*) AS total_membros,
-            SUM(CASE WHEN origem = 'novo_pje' THEN 1 ELSE 0 END) AS total_novos,
-            SUM(CASE WHEN origem = 'rearmado' THEN 1 ELSE 0 END) AS total_rearmados
-        FROM agente_ciclo_membros
-        WHERE ciclo_uuid = ?
-        """,
-        (ciclo_uuid,),
-    ).fetchone()
-    status_rows = conn.execute(
-        """
-        SELECT p.status, COUNT(*) AS total
-        FROM agente_ciclo_membros m
-        JOIN processos p ON p.id = m.processo_id
-        WHERE m.ciclo_uuid = ?
-        GROUP BY p.status
-        """,
-        (ciclo_uuid,),
-    ).fetchall()
-    por_status = {r["status"]: r["total"] for r in status_rows}
-    total_concluidos = sum(
-        por_status.get(status, 0)
-        for status in ("aguardando_aprovacao", "aprovado", "emitido")
-    )
-    total_erros = por_status.get("erro", 0)
-    conn.execute(
-        """
-        UPDATE agente_ciclos
-           SET total_membros = ?,
-               total_novos = ?,
-               total_rearmados = ?,
-               total_concluidos = ?,
-               total_erros = ?,
-               atualizado_em = CURRENT_TIMESTAMP
-         WHERE uuid = ?
-        """,
-        (
-            row["total_membros"] or 0,
-            row["total_novos"] or 0,
-            row["total_rearmados"] or 0,
-            total_concluidos,
-            total_erros,
-            ciclo_uuid,
-        ),
-    )
-
-
-def _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id: int) -> Optional[str]:
-    row = conn.execute(
-        """
-        SELECT m.ciclo_uuid
-        FROM agente_ciclo_membros m
-        JOIN agente_ciclos c ON c.uuid = m.ciclo_uuid
-        WHERE m.processo_id = ?
-        ORDER BY c.criado_em DESC, m.id DESC
-        LIMIT 1
-        """,
-        (processo_id,),
-    ).fetchone()
-    return row["ciclo_uuid"] if row else None
-
-
 def criar_ciclo_agente() -> Dict[str, Any]:
     """Cria um ciclo persistido para fluxos que exigem bootstrap explícito."""
     ciclo_uuid = str(uuid.uuid4())
@@ -352,8 +282,6 @@ def criar_ciclo_agente() -> Dict[str, Any]:
     if ciclo is None:
         raise RuntimeError("Ciclo criado não encontrado")
     return ciclo
-
-
 def obter_ciclo_atual() -> Optional[Dict[str, Any]]:
     with infra_db.get_conn() as conn:
         controle = _obter_controle_agente_conn(conn)
@@ -394,221 +322,50 @@ def obter_ciclo(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-def listar_membros_ciclo(ciclo_uuid: str) -> List[Dict[str, Any]]:
-    with infra_db.get_conn() as conn:
-        infra_db._garantir_schema_runtime(conn)
-        rows = conn.execute(
-            """
-            SELECT
-                m.id,
-                m.ciclo_uuid,
-                m.processo_id,
-                m.numero,
-                m.numero_sem_mascara,
-                m.origem,
-                m.status_snapshot,
-                m.processado_em,
-                m.criado_em,
-                p.status AS status_atual
-            FROM agente_ciclo_membros m
-            JOIN processos p ON p.id = m.processo_id
-            WHERE m.ciclo_uuid = ?
-            ORDER BY m.id
-            """,
-            (ciclo_uuid,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+def _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id: int) -> Optional[str]:
+    row = conn.execute(
+        """
+        SELECT m.ciclo_uuid
+        FROM agente_ciclo_membros m
+        JOIN agente_ciclos c ON c.uuid = m.ciclo_uuid
+        WHERE m.processo_id = ?
+        ORDER BY c.criado_em DESC, m.id DESC
+        LIMIT 1
+        """,
+        (processo_id,),
+    ).fetchone()
+    if not row:
+        return None
+    return row["ciclo_uuid"]
+
+
+def listar_membros_ciclo(ciclo_uuid: str):
+    return agente_ciclo_snapshot.listar_membros_ciclo(ciclo_uuid)
 
 
 def marcar_membro_ciclo_processado(ciclo_uuid: str, processo_id: int) -> bool:
-    with infra_db.get_conn() as conn:
-        infra_db._garantir_schema_runtime(conn)
-        cur = conn.execute(
-            """
-            UPDATE agente_ciclo_membros
-               SET processado_em = COALESCE(processado_em, CURRENT_TIMESTAMP)
-             WHERE ciclo_uuid = ? AND processo_id = ?
-            """,
-            (ciclo_uuid, processo_id),
-        )
-        conn.commit()
-        return cur.rowcount > 0
+    return agente_ciclo_snapshot.marcar_membro_ciclo_processado(ciclo_uuid, processo_id)
 
 
-def obter_ciclo_com_membros(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
-    ciclo = obter_ciclo(ciclo_uuid)
-    if not ciclo:
-        return None
-    ciclo["membros"] = listar_membros_ciclo(ciclo_uuid)
-    return ciclo
+def obter_ciclo_com_membros(ciclo_uuid: str):
+    return agente_ciclo_snapshot.obter_ciclo_com_membros(ciclo_uuid)
 
 
-def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje: List[str]) -> Dict[str, Any]:
-    vistos = set()
-    numeros_normalizados = []
-    for numero in numeros_pje:
-        if numero in vistos:
-            continue
-        vistos.add(numero)
-        numeros_normalizados.append(numero)
+def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje):
+    return agente_ciclo_snapshot.fechar_snapshot_ciclo(ciclo_uuid, numeros_pje)
 
-    with infra_db.get_conn() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        infra_db._garantir_schema_runtime(conn)
-        ciclo = conn.execute(
-            "SELECT * FROM agente_ciclos WHERE uuid = ?",
-            (ciclo_uuid,),
-        ).fetchone()
-        if not ciclo:
-            conn.rollback()
-            raise ValueError(f"Ciclo não encontrado: {ciclo_uuid}")
-        if ciclo["fechado_em"]:
-            membros = listar_membros_ciclo(ciclo_uuid)
-            ciclo_atual = dict(ciclo)
-            ciclo_atual["membros"] = membros
-            conn.rollback()
-            return ciclo_atual
 
-        rearmados = conn.execute(
-            """
-            SELECT id, numero, numero_sem_mascara, status
-            FROM processos
-            WHERE reprocessar_solicitado_em IS NOT NULL
-            ORDER BY reprocessar_solicitado_em, criado_em
-            """
-        ).fetchall()
-        rearmados_consumidos = []
-        for rearmado in rearmados:
-            rearmados_consumidos.append(rearmado["id"])
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO agente_ciclo_membros (
-                    ciclo_uuid,
-                    processo_id,
-                    numero,
-                    numero_sem_mascara,
-                    origem,
-                    status_snapshot
-                ) VALUES (?, ?, ?, ?, 'rearmado', ?)
-                """,
-                (
-                    ciclo_uuid,
-                    rearmado["id"],
-                    rearmado["numero"],
-                    rearmado["numero_sem_mascara"],
-                    rearmado["status"],
-                ),
-            )
-
-        if rearmados_consumidos:
-            placeholders = ",".join("?" for _ in rearmados_consumidos)
-            conn.execute(
-                f"""
-                UPDATE processos
-                   SET reprocessar_solicitado_em = NULL,
-                       reprocessar_solicitado_por = NULL,
-                       reprocessar_motivo = NULL,
-                       atualizado_em = CURRENT_TIMESTAMP
-                 WHERE id IN ({placeholders})
-                """,
-                rearmados_consumidos,
-            )
-
-        for numero in numeros_normalizados:
-            existente = conn.execute(
-                "SELECT id, status, numero_sem_mascara FROM processos WHERE numero = ?",
-                (numero,),
-            ).fetchone()
-            if existente is None:
-                numero_sem_mascara = _numero_sem_mascara(numero)
-                cur = conn.execute(
-                    "INSERT INTO processos (numero, numero_sem_mascara) VALUES (?, ?)",
-                    (numero, numero_sem_mascara),
-                )
-                processo_id = cur.lastrowid
-                origem = "novo_pje"
-                status_snapshot = "pendente"
-            elif existente["status"] != "pendente":
-                continue
-            else:
-                continue
-
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO agente_ciclo_membros (
-                    ciclo_uuid,
-                    processo_id,
-                    numero,
-                    numero_sem_mascara,
-                    origem,
-                    status_snapshot
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    ciclo_uuid,
-                    processo_id,
-                    numero,
-                    numero_sem_mascara,
-                    origem,
-                    status_snapshot,
-                ),
-            )
-
-        conn.execute(
-            """
-            UPDATE agente_ciclos
-               SET status = 'executando',
-                   fechado_em = COALESCE(fechado_em, CURRENT_TIMESTAMP),
-                   atualizado_em = CURRENT_TIMESTAMP
-             WHERE uuid = ?
-            """,
-            (ciclo_uuid,),
-        )
-        _recalcular_contadores_ciclo(conn, ciclo_uuid)
-        conn.commit()
-
-    ciclo = obter_ciclo_com_membros(ciclo_uuid)
-    if ciclo is None:
-        raise RuntimeError("Ciclo fechado não encontrado")
-    return ciclo
+def _recalcular_contadores_ciclo(conn, ciclo_uuid: str) -> None:
+    agente_ciclo_contadores.recalcular_contadores_ciclo(conn, ciclo_uuid)
 
 
 def atualizar_contadores_ciclo(ciclo_uuid: str) -> None:
-    with infra_db.get_conn() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        _recalcular_contadores_ciclo(conn, ciclo_uuid)
-        conn.commit()
+    agente_ciclo_contadores.atualizar_contadores_ciclo(ciclo_uuid)
 
 
 def atualizar_contadores_ciclo_do_processo(processo_id: int) -> None:
-    """Recalcula contadores dos ciclos que contêm o processo informado."""
-    with infra_db.get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT ciclo_uuid
-            FROM agente_ciclo_membros
-            WHERE processo_id = ?
-            """,
-            (processo_id,),
-        ).fetchall()
-
-    for row in rows:
-        atualizar_contadores_ciclo(row["ciclo_uuid"])
+    agente_ciclo_contadores.atualizar_contadores_ciclo_do_processo(processo_id)
 
 
 def finalizar_ciclo(ciclo_uuid: str, status: str = "concluido", erro_msg: str = "") -> None:
-    with infra_db.get_conn() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        _recalcular_contadores_ciclo(conn, ciclo_uuid)
-        conn.execute(
-            """
-            UPDATE agente_ciclos
-               SET status = ?,
-                   erro_msg = ?,
-                   finalizado_em = CURRENT_TIMESTAMP,
-                   atualizado_em = CURRENT_TIMESTAMP
-             WHERE uuid = ?
-            """,
-            (status, erro_msg, ciclo_uuid),
-        )
-        conn.commit()
+    agente_ciclo_contadores.finalizar_ciclo(ciclo_uuid, status=status, erro_msg=erro_msg)
