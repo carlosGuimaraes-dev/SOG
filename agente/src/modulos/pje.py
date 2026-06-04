@@ -39,6 +39,12 @@ _RE_CNJ_FORMATADO = re.compile(
     r"\b(\d{7})[-.]?(\d{2})[-.]?(\d{4})[-.]?(\d)[-.]?(\d{2})[-.]?(\d{4})\b"
 )
 _RE_CNJ_CRU = re.compile(r"\b(\d{20})\b")
+_TIPOS_DOCUMENTO_RELEVANTES = (
+    "Sentença",
+    "Decisão",
+    "Comprovante de Pagamento de Custas",
+    "Despacho",
+)
 
 
 def _formatar_numero_processo(numero: str) -> str:
@@ -60,6 +66,91 @@ def _extrair_numeros_processo(html: str) -> List[str]:
         if cru not in encontrados:
             encontrados.add(cru)
     return sorted(encontrados)
+
+
+def _extrair_metadados_documentos(page: Page) -> List[Dict[str, str]]:
+    docs: List[Dict[str, str]] = []
+    linhas = page.locator(".rich-table-row, table tbody tr, .documento-item").all()
+    for linha in linhas:
+        try:
+            celulas = linha.locator(".rich-table-cell, td").all_inner_texts()
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"Erro ao extrair células de linha da tabela de documentos: {exc}")
+            continue
+        if len(celulas) < 4:
+            continue
+        docs.append({
+            "doc_id": re.sub(r"\D", "", celulas[0]) or "",
+            "data_assinatura": celulas[1].strip(),
+            "nome": celulas[2].strip(),
+            "tipo": celulas[3].strip(),
+        })
+    return docs
+
+
+def _ler_texto_em_iframes(page: Page, doc_id: str) -> str:
+    iframe_seletores = [
+        "iframe[id*='visualiz']",
+        "iframe[name*='visualiz']",
+        "iframe[id*='doc']",
+        "iframe[src*='visualiz']",
+        "iframe",
+    ]
+    for if_sel in iframe_seletores:
+        try:
+            if page.locator(if_sel).count() > 0:
+                iframe = page.frame_locator(if_sel).first
+                texto = iframe.locator("body").inner_text(timeout=8000)
+                if texto.strip():
+                    return texto
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"Erro ao ler iframe '{if_sel[:40]}...' do doc {doc_id}: {exc}")
+            continue
+    return ""
+
+
+def _ler_texto_em_modal(page: Page, doc_id: str) -> str:
+    modal_seletores = [
+        ".modal-body",
+        "[role='dialog']",
+        "#visualizadorDocumento",
+        "[class*='visualizador']",
+    ]
+    for m_sel in modal_seletores:
+        try:
+            if page.locator(m_sel).count() > 0:
+                texto = page.locator(m_sel).first.inner_text(timeout=8000)
+                if texto.strip():
+                    return texto
+        except PlaywrightTimeout:
+            continue
+        except Exception as exc:
+            aviso(f"Erro ao ler modal '{m_sel[:40]}...' do doc {doc_id}: {exc}")
+            continue
+    return ""
+
+
+def _coletar_texto_documento(page: Page, doc: Dict[str, str]) -> Optional[str]:
+    if not _clicar_por_texto_exato(page, doc["nome"]):
+        aviso(f"Não foi possível abrir o documento {doc['doc_id']} ({doc['nome']}).")
+        return None
+
+    page.wait_for_timeout(3000)
+
+    texto = _ler_texto_em_iframes(page, doc["doc_id"])
+    if not texto.strip():
+        texto = _ler_texto_em_modal(page, doc["doc_id"])
+    if not texto.strip():
+        texto = page.locator("body").inner_text()
+
+    page.go_back()
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(2000)
+    return texto.strip()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -417,95 +508,20 @@ class PjeClient(PlaywrightClient):
             ]
             _safe_wait(self.page, seletores_tabela_docs, timeout=20000)
 
-            # Extrai linhas da tabela — prioriza rich-table-row, depois tbody tr
-            linhas = self.page.locator(".rich-table-row, table tbody tr, .documento-item").all()
-            for linha in linhas:
-                try:
-                    # Células podem ter classe .rich-table-cell ou ser <td> comuns
-                    celulas = linha.locator(".rich-table-cell, td").all_inner_texts()
-                except PlaywrightTimeout:
-                    continue
-                except Exception as exc:
-                    aviso(f"Erro ao extrair células de linha da tabela de documentos: {exc}")
-                    continue
-                if len(celulas) >= 4:
-                    doc_id = re.sub(r"\D", "", celulas[0]) or ""
-                    data_assinatura = celulas[1].strip()
-                    nome_doc = celulas[2].strip()
-                    tipo = celulas[3].strip()
-                    docs.append({
-                        "doc_id": doc_id,
-                        "tipo": tipo,
-                        "data_assinatura": data_assinatura,
-                        "nome": nome_doc,
-                    })
+            docs = _extrair_metadados_documentos(self.page)
 
             # Lê conteúdo de documentos relevantes
             for doc in docs:
-                if doc["tipo"] in ("Sentença", "Decisão", "Comprovante de Pagamento de Custas", "Despacho"):
-                    try:
-                        # Clica no nome do documento
-                        _clicar_por_texto_exato(self.page, doc["nome"])
-                        self.page.wait_for_timeout(3000)
-
-                        texto = ""
-                        # Estratégia 1: iframe de visualização (PDF ou HTML)
-                        iframe_seletores = [
-                            "iframe[id*='visualiz']",
-                            "iframe[name*='visualiz']",
-                            "iframe[id*='doc']",
-                            "iframe[src*='visualiz']",
-                            "iframe",  # último recurso
-                        ]
-                        for if_sel in iframe_seletores:
-                            try:
-                                if self.page.locator(if_sel).count() > 0:
-                                    iframe = self.page.frame_locator(if_sel).first
-                                    # Tenta body ou embed/pdf
-                                    texto = iframe.locator("body").inner_text(timeout=8000)
-                                    if texto.strip():
-                                        break
-                            except PlaywrightTimeout:
-                                continue
-                            except Exception as exc:
-                                aviso(f"Erro ao ler iframe '{if_sel[:40]}...' do doc {doc['doc_id']}: {exc}")
-                                continue
-
-                        # Estratégia 2: popup / nova aba (menos comum)
-                        if not texto.strip():
-                            # O PJE às vezes abre visualizador em modal/popup
-                            modal_seletores = [
-                                ".modal-body",
-                                "[role='dialog']",
-                                "#visualizadorDocumento",
-                                "[class*='visualizador']",
-                            ]
-                            for m_sel in modal_seletores:
-                                try:
-                                    if self.page.locator(m_sel).count() > 0:
-                                        texto = self.page.locator(m_sel).first.inner_text(timeout=8000)
-                                        if texto.strip():
-                                            break
-                                except PlaywrightTimeout:
-                                    continue
-                                except Exception as exc:
-                                    aviso(f"Erro ao ler modal '{m_sel[:40]}...' do doc {doc['doc_id']}: {exc}")
-                                    continue
-
-                        # Estratégia 3: conteúdo direto na página
-                        if not texto.strip():
-                            texto = self.page.locator("body").inner_text()
-
-                        textos[doc["doc_id"]] = texto.strip()
-
-                        # Volta para lista de documentos
-                        self.page.go_back()
-                        self.page.wait_for_load_state("networkidle")
-                        self.page.wait_for_timeout(2000)
-                    except (PlaywrightTimeout, TimeoutError) as exc:
-                        aviso(f"Timeout ao ler documento {doc['doc_id']} ({doc['nome']}): {exc}")
-                    except Exception as exc:
-                        erro(f"Erro inesperado ao ler documento {doc['doc_id']} ({doc['nome']}): {exc}")
+                if doc["tipo"] not in _TIPOS_DOCUMENTO_RELEVANTES:
+                    continue
+                try:
+                    texto = _coletar_texto_documento(self.page, doc)
+                    if texto is not None:
+                        textos[doc["doc_id"]] = texto
+                except (PlaywrightTimeout, TimeoutError) as exc:
+                    aviso(f"Timeout ao ler documento {doc['doc_id']} ({doc['nome']}): {exc}")
+                except Exception as exc:
+                    erro(f"Erro inesperado ao ler documento {doc['doc_id']} ({doc['nome']}): {exc}")
 
             info(f"Coletados {len(docs)} documentos do processo {numero_processo}.")
             return docs, textos
