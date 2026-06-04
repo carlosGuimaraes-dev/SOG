@@ -202,7 +202,11 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
 
       - name: Install desktop dependencies
+<<<<<<< HEAD
         run: npm ci --include=dev
+=======
+        run: npm ci
+>>>>>>> origin/main
 
       - name: Run desktop verification
         run: npm run verify
@@ -233,8 +237,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements.txt -r agente/requirements.txt
           pip install pytest pytest-cov mutmut
+<<<<<<< HEAD
           npm ci --prefix frontend --include=dev
           npm install --prefix frontend --no-save @stryker-mutator/core @stryker-mutator/vitest-runner --legacy-peer-deps || true
+=======
+          npm ci --prefix frontend
+          npm install --prefix frontend --no-save @stryker-mutator/core @stryker-mutator/vitest-runner
+>>>>>>> origin/main
 
       - name: Run Python mutation smoke
         env:
