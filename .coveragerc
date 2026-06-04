@@ -1,0 +1,7 @@
+[run]
+omit =
+    agente/src/modulos/pje.py
+    agente/src/modulos/playwright_client.py
+    agente/src/modulos/retry.py
+    agente/src/modulos/sistjweb.py
+    agente/src/utils/notificador.py

@@ -37,6 +37,7 @@ const prepare = read('desktop/scripts/prepare-python-runtime.ps1')
 const smoke = read('desktop/scripts/smoke-windows.ps1')
 const smokeUpgrade = read('desktop/scripts/smoke-upgrade-preservation.ps1')
 const authManager = read('agente/src/modulos/auth_manager.py')
+const sessionProfile = read('agente/src/modulos/session_profile.py')
 const dashboard = read('frontend/src/components/agente/AgenteStatusBar.tsx')
 const workflowWindows = read('.github/workflows/sog-desktop-windows.yml')
 const workflowImages = read('.github/workflows/sog-desktop-images.yml')
@@ -61,7 +62,13 @@ const results = [
   check('Credenciais PJe/SISTJWEB não entram no env', main.includes('O SOG não armazenou credenciais de PJe ou SISTJWEB') && docs.includes('nao armazena usuario ou senha'), 'desktop/main.js + docs'),
   check('Storage state em pasta compartilhada', main.includes('STORAGE_STATE_DIR') && main.includes("path.join(dataDir, 'auth')"), 'desktop/main.js'),
   check('Login manual salva storage_state', read('agente/src/modulos/chrome_login_capture.py').includes('storage_state'), 'agente/src/modulos/chrome_login_capture.py'),
-  check('Validação PJe preserva downloads', authManager.includes('accept_downloads=accept_downloads') && authManager.includes('new_context('), 'agente/src/modulos/auth_manager.py'),
+  check(
+    'Validação PJe preserva downloads',
+    authManager.includes('accept_downloads=accept_downloads') &&
+      authManager.includes('launch_persistent_context(') &&
+      sessionProfile.includes('accept_downloads=accept_downloads'),
+    'agente/src/modulos/auth_manager.py + agente/src/modulos/session_profile.py'
+  ),
   check('Mensagens amigáveis de Docker/API/Chrome/login', dashboard.includes('Docker/API offline') && dashboard.includes('Chrome de login indisponível') && dashboard.includes('Sessão PJe pendente') && dashboard.includes('Sessão SISTJWEB pendente'), 'AgenteStatusBar.tsx'),
   check('Diagnóstico exportável sem PII', main.includes('collectDiagnostics') && main.includes('agente-ultimas-linhas.log') && main.includes('redact('), 'desktop/main.js'),
   check('Build Windows automatizado', workflowWindows.includes('windows-latest') && workflowWindows.includes('npm run build:win') && workflowWindows.includes('verify:win-artifact'), '.github/workflows/sog-desktop-windows.yml'),

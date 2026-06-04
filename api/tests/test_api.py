@@ -404,7 +404,6 @@ class TestAprovacao:
 
     def test_aprovar_race_condition_apenas_uma_aprovacao(self, client, mock_db):
         """Teste de carga: 10 requests concorrentes, apenas 1 deve aprovar."""
-        from concurrent.futures import ThreadPoolExecutor
         from auth import create_access_token
 
         # Insere processo aguardando aprovação
@@ -678,7 +677,6 @@ class TestAgente:
 
 class TestRateLimit:
     def test_login_rate_limit_6_req_429(self, client, mock_db):
-        from auth import create_access_token
         from unittest.mock import patch
 
         # Usar um token para autenticar nas rotas protegidas (não no login)

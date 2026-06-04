@@ -5,7 +5,6 @@ Versão adaptada para serviço longo: recebe clients já instanciados
 em vez de criar novos a cada emissão.
 """
 from pathlib import Path
-from typing import Optional
 from sog_shared import db
 from utils.logger import info, erro
 from modulos.sistjweb import SistjClient

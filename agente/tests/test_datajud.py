@@ -1,7 +1,6 @@
 """
 Testes unitários para o módulo datajud.py
 """
-import pytest
 from unittest.mock import patch, MagicMock
 from modulos.datajud import consultar
 

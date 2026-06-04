@@ -6,7 +6,7 @@ todos os tribunais (ex: TJDFT). Esses campos devem ser obtidos via
 capa do processo no PJE (PDF).
 """
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from config import DATAJUD_API_KEY, DATAJUD_URL
 from modulos.retry import retry_on_exception
 

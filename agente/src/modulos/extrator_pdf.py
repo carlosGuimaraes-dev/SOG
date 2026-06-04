@@ -246,7 +246,7 @@ def extrair_documentos_capa(caminho: str) -> List[Dict[str, str]]:
     try:
         for page_idx in range(min(MAX_PAGINAS_CAPA, len(doc))):
             texto = doc[page_idx].get_text()
-            linhas = [l.strip() for l in texto.split("\n")]
+            linhas = [linha_texto.strip() for linha_texto in texto.split("\n")]
 
             i = 0
             while i < len(linhas):

@@ -13,9 +13,9 @@ Regras de seletor aplicadas:
 """
 
 import re
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 
-from playwright.sync_api import Page, Browser, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
 
 from config import (
     SISTJ_URL,
@@ -29,7 +29,7 @@ from regras import detectar_area, obter_regras_outros_itens
 from modulos.retry import retry_on_exception
 from modulos.css_escape import escape_for_css
 from modulos.playwright_client import PlaywrightClient
-from modulos.auth_manager import AuthManager, ReautenticacaoNecessariaError
+from modulos.auth_manager import AuthManager
 
 # Importa constantes de seletores organizadas por seção do sistema
 from modulos.selectors import (
@@ -66,7 +66,6 @@ from modulos.selectors import (
     BTN_AVANCAR,
     BTN_GRAVAR,
     BTN_GRAVAR_APROVAR,
-    LABEL_VALOR_TOTAL_RECOLHER,
     VALOR_TOTAL_RECOLHER_SIBLING,
 )
 

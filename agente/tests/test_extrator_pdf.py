@@ -5,7 +5,6 @@ Testes unitários para o extrator de PDFs judiciais.
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from modulos.extrator_pdf import (
     extrair_texto_pdf,

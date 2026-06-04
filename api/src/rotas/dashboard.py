@@ -11,6 +11,10 @@ from schemas import DashboardSessoesResponse
 from sog_shared import db
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+_ESTADO_PENDING = "pending"
+_ESTADO_ACTIVE = "active"
+_ESTADO_EXPIRED = "expired"
+_ESTADO_UNAVAILABLE = "unavailable"
 
 
 def _sincronizar_tarefas_stale() -> None:
@@ -42,6 +46,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
     if not items:
         return {
             "sistema": sistema,
+            "estado": _ESTADO_PENDING,
             "logado": False,
             "mensagem": "Desconhecido",
             "ultima_verificacao": None,
@@ -53,6 +58,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
         logado = bool(resultado.get("logado"))
         return {
             "sistema": sistema,
+            "estado": _ESTADO_ACTIVE if logado else _ESTADO_EXPIRED,
             "logado": logado,
             "mensagem": "Sessão ativa" if logado else "Sessão inativa",
             "ultima_verificacao": tarefa.get("concluido_em") or tarefa.get("atualizado_em"),
@@ -60,6 +66,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
     if tarefa["status"] == "erro":
         return {
             "sistema": sistema,
+            "estado": _ESTADO_UNAVAILABLE,
             "logado": False,
             "mensagem": tarefa.get("mensagem_erro") or "Falha na verificação",
             "ultima_verificacao": tarefa.get("concluido_em") or tarefa.get("atualizado_em"),
@@ -67,6 +74,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
 
     return {
         "sistema": sistema,
+        "estado": _ESTADO_PENDING,
         "logado": False,
         "mensagem": f"Última verificação em {tarefa['status']}",
         "ultima_verificacao": tarefa.get("iniciado_em") or tarefa.get("atualizado_em"),

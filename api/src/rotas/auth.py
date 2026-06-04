@@ -6,7 +6,6 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from fastapi import Request
 
 from limiter import limiter
 from auth import (

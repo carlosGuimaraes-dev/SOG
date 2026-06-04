@@ -1,8 +1,7 @@
 """
 Testes unitários para o módulo regras.py
 """
-import pytest
-from regras import detectar_area, obter_regras_outros_itens, REGRAS_OUTROS_ITENS
+from regras import detectar_area, obter_regras_outros_itens
 
 
 class TestDetectarArea:

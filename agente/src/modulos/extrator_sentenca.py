@@ -26,6 +26,13 @@ try:
 except ImportError:
     from agente.src.config import OPENAI_API_KEY, OPENAI_MODEL, LLM_MAX_TOKENS, LLM_TEMPERATURE
 
+try:
+    from utils.logger import erro
+except ImportError:
+
+    def erro(mensagem: str, **kwargs: Any) -> None:
+        pass
+
 
 # ========================================================================
 # CAMADA 1: Extração do Sumário/Capa
@@ -261,7 +268,7 @@ def _chamar_llm(texto: str, area: str) -> Dict[str, Any]:
         conteudo = resposta.choices[0].message.content or "{}"
         try:
             llm_json = json.loads(conteudo)
-        except json.JSONDecodeError as exc:
+        except json.JSONDecodeError:
             erro(f"Resposta LLM inválida (JSONDecodeError): {conteudo[:200]!r}")
             return {}
 

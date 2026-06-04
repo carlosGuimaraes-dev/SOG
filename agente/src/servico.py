@@ -89,24 +89,20 @@ _desktop_exit_code = _run_desktop_cli()
 if _desktop_exit_code is not None:
     raise SystemExit(_desktop_exit_code)
 
-from config import (
-    DB_PATH,
-    PJE_URL,
-    SISTJ_URL,
-    STORAGE_STATE_DIR,
+from config import (  # noqa: E402
     STORAGE_STATE_PJE,
     STORAGE_STATE_SISTJ,
     init_config,
     validar_requisitos_homologacao_local,
 )
-from modulos.chrome_login_capture import capturar_sessoes_chrome
-from modulos.pje import PjeClient
-from modulos.sistjweb import SistjClient
-from modulos.emissor import emitir_pendentes
-from modulos.executor_tarefas import executar_tarefa
-from modulos.auth_manager import ReautenticacaoNecessariaError
-from pipeline import rodar_pipeline
-from sog_shared.db import (
+from modulos.chrome_login_capture import capturar_sessoes_chrome  # noqa: E402
+from modulos.pje import PjeClient  # noqa: E402
+from modulos.sistjweb import SistjClient  # noqa: E402
+from modulos.emissor import emitir_pendentes  # noqa: E402
+from modulos.executor_tarefas import executar_tarefa  # noqa: E402
+from modulos.auth_manager import ReautenticacaoNecessariaError  # noqa: E402
+from pipeline import rodar_pipeline  # noqa: E402
+from sog_shared.db import (  # noqa: E402
     ESTADOS_CICLO_ATIVO,
     ESTADOS_CICLO_RETOMAVEL,
     init_db,
@@ -122,8 +118,8 @@ from sog_shared.db import (
     obter_ciclo,
     finalizar_ciclo,
 )
-from utils.logger import info, erro, aviso
-from utils.telegram import (
+from utils.logger import info, erro, aviso  # noqa: E402
+from utils.telegram import (  # noqa: E402
     notificar_ciclo_concluido,
     notificar_erro_fatal,
     notificar_relogin_required,
