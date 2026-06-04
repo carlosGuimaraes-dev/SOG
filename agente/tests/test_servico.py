@@ -296,3 +296,13 @@ def test_relogin_retoma_mesmo_ciclo_aguardando_login(mock_db):
     assert controle["ciclo_uuid"] == "ciclo-login"
     assert controle["ciclo_snapshot"] == '{"offset": 3}'
     assert servico._ciclo_uuid == "ciclo-login"
+
+
+def test_loop_iteration_em_parando_faz_pausa_cooperativa_do_ciclo():
+    servico = _servico_fake()
+    servico._ler_comando = MagicMock(return_value=("parar", "parando"))
+    servico._atualizar_heartbeat = MagicMock()
+
+    servico._loop_iteration()
+
+    servico._pausar_ciclo.assert_called_once_with("interrompido", "Ciclo pausado.")
