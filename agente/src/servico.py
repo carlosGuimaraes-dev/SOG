@@ -100,8 +100,8 @@ from modulos.pje import PjeClient  # noqa: E402
 from modulos.sistjweb import SistjClient  # noqa: E402
 from modulos.emissor import emitir_pendentes  # noqa: E402
 from modulos.executor_tarefas import executar_tarefa  # noqa: E402
-from modulos.auth_manager import ReautenticacaoNecessariaError  # noqa: E402
 from pipeline import rodar_pipeline  # noqa: E402
+from servico_estados import mensagem_captura_chrome, tratar_loop_iteration  # noqa: E402
 from sog_shared.db import (  # noqa: E402
     ESTADOS_CICLO_ATIVO,
     ESTADOS_CICLO_RETOMAVEL,
@@ -146,20 +146,6 @@ ESTADOS_VALIDOS = frozenset({
 TEMPO_DORMIR_SEGUNDOS = 30
 TEMPO_ERRO_SEGUNDOS = 30
 TEMPO_ESPERA_CURTA_SEGUNDOS = 5
-
-
-def _mensagem_captura_chrome(resultado: dict) -> str:
-    reason = resultado.get("reason")
-    if reason == "chrome_indisponivel":
-        return "Aguardando Chrome de login. Clique em 'Abrir Chrome para login' no SOG Desktop."
-    if reason == "abas_ausentes":
-        faltando = ", ".join(resultado.get("missing", []))
-        return f"Aguardando abas de login no Chrome: {faltando}."
-    if reason == "login_pendente":
-        pendente = ", ".join(resultado.get("pending", []))
-        return f"Aguardando conclusão de login no Chrome: {pendente}."
-    return "Aguardando login no Chrome monitorável."
-
 
 class AgenteServico:
     """Serviço longo com máquina de estados e graceful shutdown."""
@@ -225,146 +211,14 @@ class AgenteServico:
         """Uma iteração da máquina de estados."""
         self._atualizar_heartbeat()
         comando, status_db = self._ler_comando()
-        if self._tratar_interrupcao_imediata(comando, status_db):
-            return
-        if self._tratar_estado(comando, status_db):
-            return
-        aviso(f"Estado desconhecido no banco: {status_db}")
-        self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-
-    def _tratar_interrupcao_imediata(self, comando: str, status_db: str) -> bool:
-        if self._stop_event.is_set():
-            if status_db != "parando":
-                self._set_status("parando", "Encerramento do processo recebido.")
-            return True
-        if comando == "parar" and status_db in {
-            "iniciando",
-            "autenticando",
-            "executando",
-            "dormindo",
-        }:
-            self._pausar_ciclo("interrompido", "Ciclo pausado por solicitação do dashboard.")
-            return True
-        return False
-
-    def _tratar_estado(self, comando: str, status_db: str) -> bool:
-        handlers = {
-            "parado": self._tratar_estado_parado,
-            "pausado": self._tratar_estado_pausado,
-            "interrompido": self._tratar_estado_pausado,
-            "erro_pausado": self._tratar_estado_pausado,
-            "iniciando": self._tratar_estado_iniciando,
-            "autenticando": self._tratar_estado_autenticando,
-            "aguardando_login": self._tratar_estado_aguardando_login,
-            "executando": self._tratar_estado_executando,
-            "dormindo": self._tratar_estado_dormindo,
-            "erro": self._tratar_estado_erro,
-            "parando": self._tratar_estado_parando,
-        }
-        handler = handlers.get(status_db)
-        return handler(comando) if handler else False
-
-    def _tratar_estado_parado(self, comando: str) -> bool:
-        if comando == "iniciar":
-            self._set_status("autenticando", "Iniciando autenticação...")
-        else:
-            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-        return True
-
-    def _tratar_estado_pausado(self, comando: str) -> bool:
-        if comando == "iniciar":
-            self._set_status("autenticando", "Iniciando autenticação...")
-        else:
-            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-        return True
-
-    def _tratar_estado_iniciando(self, comando: str) -> bool:
-        if comando != "iniciar":
-            return False
-        self._set_status("autenticando", "Iniciando autenticação...")
-        return True
-
-    def _tratar_estado_autenticando(self, _comando: str) -> bool:
-        try:
-            self._autenticar_todos()
-            self._fechar_ciclo_ativo()
-            self._set_status("executando", "Autenticação OK. Iniciando execução.")
-        except ReautenticacaoNecessariaError as e:
-            self._pausar_ciclo(
-                "aguardando_login",
-                f"Sessão {e.sistema} expirada. Faça login no navegador.",
-            )
-        except Exception as e:
-            erro(f"Falha na autenticação: {e}")
-            self._pausar_ciclo("erro_pausado", f"Falha na autenticação: {e}")
-        return True
-
-    def _tratar_estado_aguardando_login(self, comando: str) -> bool:
-        if comando != "iniciar":
-            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-            return True
-        try:
-            if not self._autenticar_interativo():
-                self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-                return True
-            self._fechar_ciclo_ativo()
-            self._set_status("executando", "Sessões Chrome capturadas. Retomando execução.")
-        except Exception as e:
-            erro(f"Falha ao capturar login no Chrome: {e}")
-            self._pausar_ciclo("erro_pausado", f"Falha ao capturar login no Chrome: {e}")
-        return True
-
-    def _tratar_estado_executando(self, _comando: str) -> bool:
-        try:
-            tarefas_processadas = self._processar_tarefas_pendentes(
-                max_tarefas=self._tarefas_por_iteracao
-            )
-            if self._status_atual == "aguardando_login":
-                return True
-            if self._pausar_apos_etapa_segura("Ciclo pausado após tarefa segura."):
-                return True
-            if tarefas_processadas > 0 and self._ha_mais_tarefas_pendentes():
-                return True
-
-            self._processar_iteracao()
-            if self._pausar_apos_etapa_segura("Ciclo pausado após etapa segura."):
-                return True
-            self._set_status("dormindo", "Iteração concluída. Aguardando próximo ciclo.")
-        except ReautenticacaoNecessariaError as e:
-            self._pausar_ciclo(
-                "aguardando_login",
-                f"Sessão {e.sistema} expirada durante execução.",
-            )
-        except Exception as e:
-            erro(f"Erro durante execução: {e}")
-            self._pausar_ciclo("erro_pausado", str(e))
-        return True
-
-    def _tratar_estado_dormindo(self, _comando: str) -> bool:
-        if self._aguardar_ou_pausar(TEMPO_DORMIR_SEGUNDOS):
-            return True
-        if not self._stop_event.is_set():
-            self._set_status("executando", "Retomando execução.")
-        return True
-
-    def _tratar_estado_erro(self, comando: str) -> bool:
-        if comando != "iniciar":
-            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-            return True
-        self._stop_event.wait(timeout=TEMPO_ERRO_SEGUNDOS)
-        if not self._stop_event.is_set():
-            self._set_status("executando", "Tentando recuperação após erro.")
-        return True
-
-    def _tratar_estado_parando(self, _comando: str) -> bool:
-        self._pausar_ciclo("interrompido", "Ciclo pausado.")
-        return True
-
-    def _pausar_apos_etapa_segura(self, mensagem: str) -> bool:
-        if not self._deve_pausar_por_comando():
-            return False
-        self._pausar_ciclo("interrompido", mensagem)
-        return True
+        tratar_loop_iteration(
+            self,
+            comando,
+            status_db,
+            TEMPO_DORMIR_SEGUNDOS,
+            TEMPO_ERRO_SEGUNDOS,
+            TEMPO_ESPERA_CURTA_SEGUNDOS,
+        )
 
     # ------------------------------------------------------------------
     # Ações por estado
@@ -389,7 +243,7 @@ class AgenteServico:
             STORAGE_STATE_SISTJ,
         )
         if not resultado.get("ok"):
-            self._set_status("aguardando_login", _mensagem_captura_chrome(resultado))
+            self._set_status("aguardando_login", mensagem_captura_chrome(resultado))
             return False
 
         self.pje._auth.fechar()
