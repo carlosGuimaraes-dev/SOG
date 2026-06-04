@@ -13,7 +13,6 @@ from typing import Any, Dict, Optional
 import sog_shared.agente_ciclos as _agente_ciclos
 from sog_shared import infra_db as _infra_db
 from sog_shared.agente_ciclos import *  # noqa: F401,F403
-from sog_shared.agente_ciclo_contadores import *  # noqa: F401,F403
 from sog_shared.infra_db import *  # noqa: F401,F403
 from sog_shared.processos_aprovacao import *  # noqa: F401,F403
 from sog_shared.tarefas_sessoes import *  # noqa: F401,F403
