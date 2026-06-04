@@ -1,5 +1,6 @@
 import sqlite3
 
+from sog_shared import db as shared_db
 import schemas as api_schemas
 from sog_shared import schemas as shared_schemas
 from sog_shared.infra_db import SCHEMA_PATH
@@ -49,3 +50,26 @@ def test_runtime_preparation_reusa_bootstrap_compartilhado(monkeypatch):
 
     assert chamadas == ["config", "db"]
     assert runtime_preparation.SCHEMA_PATH == SCHEMA_PATH
+
+
+def test_facade_compartilhada_persiste_credenciais_dashboard_na_conexao_monkeypatched(monkeypatch):
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    conn.commit()
+
+    class _ConnCtx:
+        def __enter__(self):
+            return conn
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(shared_db, "get_conn", lambda: _ConnCtx())
+
+    shared_db.salvar_credenciais_dashboard("operador", "segredo")
+    credenciais = shared_db.obter_credenciais_dashboard()
+
+    assert credenciais == {"usuario": "operador", "senha": "segredo"}
+
+    conn.close()

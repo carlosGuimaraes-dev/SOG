@@ -6,6 +6,7 @@ sem expor operações de domínio.
 """
 from contextlib import contextmanager
 from pathlib import Path
+import sys
 import sqlite3
 
 from sog_shared.config import DB_PATH
@@ -55,6 +56,16 @@ def _garantir_colunas_tabela(
 
 
 def _garantir_schema_runtime(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dashboard_credenciais (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            usuario TEXT NOT NULL,
+            senha TEXT NOT NULL,
+            atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
     for tabela, colunas in _COLUNAS_OBRIGATORIAS_POR_TABELA.items():
         _garantir_colunas_tabela(conn, tabela, colunas)
     conn.execute(
@@ -80,8 +91,19 @@ def init_db() -> None:
 
 @contextmanager
 def get_conn():
+    db_module = sys.modules.get("sog_shared.db")
+    db_get_conn = getattr(db_module, "get_conn", None) if db_module else None
+    if db_get_conn is not None and db_get_conn is not get_conn:
+        with db_get_conn() as conn:
+            yield conn
+        return
+
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30)
     _setup_conn(conn)
+    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    _garantir_schema_runtime(conn)
+    conn.commit()
     try:
         yield conn
     finally:

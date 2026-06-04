@@ -3,16 +3,10 @@ Operações de domínio para controle do agente e ciclos.
 """
 from datetime import datetime, timezone
 import json
+import re
 import uuid
 from typing import Any, Dict, Optional
 
-from sog_shared.agente_ciclo_contadores import atualizar_contadores_ciclo, finalizar_ciclo
-from sog_shared.agente_ciclo_snapshot import (
-    fechar_snapshot_ciclo,
-    listar_membros_ciclo,
-    marcar_membro_ciclo_processado,
-    obter_ciclo_com_membros,
-)
 from sog_shared import infra_db
 
 ESTADOS_CICLO_ATIVO = frozenset({
@@ -260,6 +254,56 @@ def _rotulo_ciclo(agora: Optional[datetime] = None) -> str:
     return base.strftime("Ciclo %d/%m/%Y %H:%M")
 
 
+def _numero_sem_mascara(numero: str) -> str:
+    return re.sub(r"\D", "", numero)
+
+
+def _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id: int) -> Optional[str]:
+    row = conn.execute(
+        """
+        SELECT m.ciclo_uuid
+        FROM agente_ciclo_membros m
+        JOIN agente_ciclos c ON c.uuid = m.ciclo_uuid
+        WHERE m.processo_id = ?
+        ORDER BY c.criado_em DESC, m.id DESC
+        LIMIT 1
+        """,
+        (processo_id,),
+    ).fetchone()
+    return row["ciclo_uuid"] if row else None
+
+
+def criar_ciclo_agente() -> Dict[str, Any]:
+    """Cria um ciclo persistido para fluxos que exigem bootstrap explícito."""
+    ciclo_uuid = str(uuid.uuid4())
+    with infra_db.get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        ativo = conn.execute(
+            """
+            SELECT *
+            FROM agente_ciclos
+            WHERE status IN ('iniciando', 'executando')
+            ORDER BY criado_em DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if ativo:
+            conn.rollback()
+            return dict(ativo)
+        conn.execute(
+            """
+            INSERT INTO agente_ciclos (uuid, rotulo, status)
+            VALUES (?, ?, 'iniciando')
+            """,
+            (ciclo_uuid, _rotulo_ciclo()),
+        )
+        conn.commit()
+    ciclo = obter_ciclo(ciclo_uuid)
+    if ciclo is None:
+        raise RuntimeError("Ciclo criado não encontrado")
+    return ciclo
+
+
 def obter_ciclo_atual() -> Optional[Dict[str, Any]]:
     with infra_db.get_conn() as conn:
         controle = _obter_controle_agente_conn(conn)
@@ -299,3 +343,31 @@ def obter_ciclo(ciclo_uuid: str) -> Optional[Dict[str, Any]]:
         ).fetchone()
         return dict(row) if row else None
 
+
+# Compatibilidade pública após o split dos módulos de ciclos.
+from sog_shared.agente_ciclo_contadores import (  # noqa: E402
+    atualizar_contadores_ciclo,
+    finalizar_ciclo,
+)
+from sog_shared.agente_ciclo_snapshot import (  # noqa: E402
+    fechar_snapshot_ciclo,
+    listar_membros_ciclo,
+    marcar_membro_ciclo_processado,
+    obter_ciclo_com_membros,
+)
+
+
+def atualizar_contadores_ciclo_do_processo(processo_id: int) -> None:
+    """Recalcula contadores dos ciclos que contêm o processo informado."""
+    with infra_db.get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT ciclo_uuid
+            FROM agente_ciclo_membros
+            WHERE processo_id = ?
+            """,
+            (processo_id,),
+        ).fetchall()
+
+    for row in rows:
+        atualizar_contadores_ciclo(row["ciclo_uuid"])
