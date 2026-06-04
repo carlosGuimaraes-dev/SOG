@@ -17,6 +17,10 @@ from sog_shared.agente_ciclo_contadores import *  # noqa: F401,F403
 from sog_shared.infra_db import *  # noqa: F401,F403
 from sog_shared.processos_aprovacao import *  # noqa: F401,F403
 from sog_shared.tarefas_sessoes import *  # noqa: F401,F403
+from sog_shared.agente_ciclos import (  # noqa: F401
+    _obter_ciclo_mais_recente_do_processo_conn,
+    _recalcular_contadores_ciclo,
+)
 
 ETAPA_EVIDENCIA_DEMONSTRATIVO_SISTJ = "demonstrativo_emitido_sistj"
 ETAPA_EVIDENCIA_ANEXO_PJE = "demonstrativo_anexado_pje"
@@ -44,7 +48,6 @@ _recalcular_contadores_ciclo = _agente_ciclos._recalcular_contadores_ciclo
 
 
 def salvar_credenciais_dashboard(usuario: str, senha: str) -> None:
-    """Salva a credencial unica do dashboard."""
     with _current_get_conn()() as conn:
         conn.execute(
             """
@@ -66,20 +69,3 @@ def obter_credenciais_dashboard() -> Optional[Dict[str, Any]]:
             "SELECT usuario, senha FROM dashboard_credenciais WHERE id = 1"
         ).fetchone()
         return dict(row) if row else None
-
-
-def _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id: int) -> Optional[str]:
-    row = conn.execute(
-        """
-        SELECT m.ciclo_uuid
-        FROM agente_ciclo_membros m
-        JOIN agente_ciclos c ON c.uuid = m.ciclo_uuid
-        WHERE m.processo_id = ?
-        ORDER BY c.criado_em DESC, m.id DESC
-        LIMIT 1
-        """,
-        (processo_id,),
-    ).fetchone()
-    if not row:
-        return None
-    return row["ciclo_uuid"]

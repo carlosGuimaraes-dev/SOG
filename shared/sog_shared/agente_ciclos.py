@@ -308,6 +308,21 @@ def _recalcular_contadores_ciclo(conn, ciclo_uuid: str) -> None:
     )
 
 
+def _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id: int) -> Optional[str]:
+    row = conn.execute(
+        """
+        SELECT m.ciclo_uuid
+        FROM agente_ciclo_membros m
+        JOIN agente_ciclos c ON c.uuid = m.ciclo_uuid
+        WHERE m.processo_id = ?
+        ORDER BY c.criado_em DESC, m.id DESC
+        LIMIT 1
+        """,
+        (processo_id,),
+    ).fetchone()
+    return row["ciclo_uuid"] if row else None
+
+
 def criar_ciclo_agente() -> Dict[str, Any]:
     """Cria um ciclo persistido para fluxos que exigem bootstrap explícito."""
     ciclo_uuid = str(uuid.uuid4())

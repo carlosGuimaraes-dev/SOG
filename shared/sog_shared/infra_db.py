@@ -6,6 +6,7 @@ sem expor operações de domínio.
 """
 from contextlib import contextmanager
 from pathlib import Path
+import sys
 import sqlite3
 
 from sog_shared.config import DB_PATH
@@ -80,6 +81,13 @@ def init_db() -> None:
 
 @contextmanager
 def get_conn():
+    db_module = sys.modules.get("sog_shared.db")
+    db_get_conn = getattr(db_module, "get_conn", None) if db_module else None
+    if db_get_conn is not None and db_get_conn is not get_conn:
+        with db_get_conn() as conn:
+            yield conn
+        return
+
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30)
     _setup_conn(conn)
