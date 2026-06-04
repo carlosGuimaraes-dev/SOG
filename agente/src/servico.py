@@ -100,6 +100,7 @@ from modulos.pje import PjeClient  # noqa: E402
 from modulos.sistjweb import SistjClient  # noqa: E402
 from modulos.emissor import emitir_pendentes  # noqa: E402
 from modulos.executor_tarefas import executar_tarefa  # noqa: E402
+from modulos.auth_manager import ReautenticacaoNecessariaError  # noqa: E402
 from pipeline import rodar_pipeline  # noqa: E402
 from servico_estados import mensagem_captura_chrome, tratar_loop_iteration  # noqa: E402
 from sog_shared.db import (  # noqa: E402
