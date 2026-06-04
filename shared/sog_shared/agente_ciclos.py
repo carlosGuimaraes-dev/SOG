@@ -6,19 +6,7 @@ import json
 import uuid
 from typing import Any, Dict, Optional
 
-from sog_shared.agente_ciclo_contadores import (
-    recalcular_contadores_ciclo as _recalcular_contadores_ciclo,
-    atualizar_contadores_ciclo,
-    atualizar_contadores_ciclo_do_processo,
-    finalizar_ciclo,
-)
-from sog_shared.agente_ciclo_snapshot import (
-    fechar_snapshot_ciclo,
-    listar_membros_ciclo,
-    marcar_membro_ciclo_processado,
-    obter_ciclo_com_membros,
-)
-from sog_shared import infra_db
+from sog_shared import agente_ciclo_contadores, agente_ciclo_snapshot, infra_db
 
 ESTADOS_CICLO_ATIVO = frozenset({
     "iniciando",
@@ -349,3 +337,35 @@ def _obter_ciclo_mais_recente_do_processo_conn(conn, processo_id: int) -> Option
     if not row:
         return None
     return row["ciclo_uuid"]
+
+
+def listar_membros_ciclo(ciclo_uuid: str):
+    return agente_ciclo_snapshot.listar_membros_ciclo(ciclo_uuid)
+
+
+def marcar_membro_ciclo_processado(ciclo_uuid: str, processo_id: int) -> bool:
+    return agente_ciclo_snapshot.marcar_membro_ciclo_processado(ciclo_uuid, processo_id)
+
+
+def obter_ciclo_com_membros(ciclo_uuid: str):
+    return agente_ciclo_snapshot.obter_ciclo_com_membros(ciclo_uuid)
+
+
+def fechar_snapshot_ciclo(ciclo_uuid: str, numeros_pje):
+    return agente_ciclo_snapshot.fechar_snapshot_ciclo(ciclo_uuid, numeros_pje)
+
+
+def _recalcular_contadores_ciclo(conn, ciclo_uuid: str) -> None:
+    agente_ciclo_contadores.recalcular_contadores_ciclo(conn, ciclo_uuid)
+
+
+def atualizar_contadores_ciclo(ciclo_uuid: str) -> None:
+    agente_ciclo_contadores.atualizar_contadores_ciclo(ciclo_uuid)
+
+
+def atualizar_contadores_ciclo_do_processo(processo_id: int) -> None:
+    agente_ciclo_contadores.atualizar_contadores_ciclo_do_processo(processo_id)
+
+
+def finalizar_ciclo(ciclo_uuid: str, status: str = "concluido", erro_msg: str = "") -> None:
+    agente_ciclo_contadores.finalizar_ciclo(ciclo_uuid, status=status, erro_msg=erro_msg)
