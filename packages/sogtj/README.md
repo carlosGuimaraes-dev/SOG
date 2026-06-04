@@ -6,7 +6,7 @@ Pacote npm pequeno para iniciar a instalacao do iSOG pelo comando:
 npx -y sogtj
 ```
 
-Na versao `0.1.10`, o bootstrap suporta apenas Windows. O pacote baixa o
+Na versao `0.1.11`, o bootstrap suporta apenas Windows. O pacote baixa o
 instalador publicado no R2, confere a integridade automaticamente e abre o
 instalador.
 
