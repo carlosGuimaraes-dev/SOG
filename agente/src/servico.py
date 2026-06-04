@@ -223,127 +223,148 @@ class AgenteServico:
 
     def _loop_iteration(self) -> None:
         """Uma iteração da máquina de estados."""
-        # Sempre atualiza heartbeat para dashboard detectar online
         self._atualizar_heartbeat()
-
         comando, status_db = self._ler_comando()
+        if self._tratar_interrupcao_imediata(comando, status_db):
+            return
+        if self._tratar_estado(comando, status_db):
+            return
+        aviso(f"Estado desconhecido no banco: {status_db}")
+        self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
 
-        # Stop externo do processo encerra; comando do dashboard pausa o ciclo.
+    def _tratar_interrupcao_imediata(self, comando: str, status_db: str) -> bool:
         if self._stop_event.is_set():
             if status_db != "parando":
                 self._set_status("parando", "Encerramento do processo recebido.")
-            return
+            return True
         if comando == "parar" and status_db in {
             "iniciando",
             "autenticando",
             "executando",
             "dormindo",
-            "parando",
         }:
             self._pausar_ciclo("interrompido", "Ciclo pausado por solicitação do dashboard.")
-            return
+            return True
+        return False
 
-        if status_db == "parado":
-            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-            return
+    def _tratar_estado(self, comando: str, status_db: str) -> bool:
+        handlers = {
+            "parado": self._tratar_estado_parado,
+            "pausado": self._tratar_estado_pausado,
+            "interrompido": self._tratar_estado_pausado,
+            "erro_pausado": self._tratar_estado_pausado,
+            "iniciando": self._tratar_estado_iniciando,
+            "autenticando": self._tratar_estado_autenticando,
+            "aguardando_login": self._tratar_estado_aguardando_login,
+            "executando": self._tratar_estado_executando,
+            "dormindo": self._tratar_estado_dormindo,
+            "erro": self._tratar_estado_erro,
+            "parando": self._tratar_estado_parando,
+        }
+        handler = handlers.get(status_db)
+        return handler(comando) if handler else False
 
-        if status_db in {"pausado", "interrompido", "erro_pausado", "erro"} and comando != "iniciar":
-            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-            return
-
-        # Estado inicial/retomado + comando iniciar → autenticar
-        if status_db in {"parado", "pausado", "interrompido", "iniciando"} and comando == "iniciar":
+    def _tratar_estado_parado(self, comando: str) -> bool:
+        if comando == "iniciar":
             self._set_status("autenticando", "Iniciando autenticação...")
-            return
-
-        # Estado autenticando → tenta login nos dois sistemas
-        if status_db == "autenticando":
-            try:
-                self._autenticar_todos()
-                self._fechar_ciclo_ativo()
-                self._set_status("executando", "Autenticação OK. Iniciando execução.")
-            except ReautenticacaoNecessariaError as e:
-                self._pausar_ciclo(
-                    "aguardando_login",
-                    f"Sessão {e.sistema} expirada. Faça login no navegador.",
-                )
-            except Exception as e:
-                erro(f"Falha na autenticação: {e}")
-                self._pausar_ciclo("erro_pausado", f"Falha na autenticação: {e}")
-            return
-
-        # Estado aguardando_login → aguarda o Chrome monitorável do usuário
-        if status_db == "aguardando_login":
-            if comando != "iniciar":
-                self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-                return
-            try:
-                if not self._autenticar_interativo():
-                    self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-                    return
-                self._fechar_ciclo_ativo()
-                self._set_status("executando", "Sessões Chrome capturadas. Retomando execução.")
-            except Exception as e:
-                erro(f"Falha ao capturar login no Chrome: {e}")
-                self._pausar_ciclo("erro_pausado", f"Falha ao capturar login no Chrome: {e}")
-            return
-
-        # Estado executando → processa tarefas pendentes primeiro, depois pipeline
-        if status_db == "executando":
-            try:
-                tarefas_processadas = self._processar_tarefas_pendentes(
-                    max_tarefas=self._tarefas_por_iteracao
-                )
-                if self._status_atual == "aguardando_login":
-                    return
-                if self._deve_pausar_por_comando():
-                    self._pausar_ciclo("interrompido", "Ciclo pausado após tarefa segura.")
-                    return
-                if tarefas_processadas > 0 and self._ha_mais_tarefas_pendentes():
-                    return  # volta ao loop sem dormir para processar mais tarefas
-
-                self._processar_iteracao()
-                if self._deve_pausar_por_comando():
-                    self._pausar_ciclo("interrompido", "Ciclo pausado após etapa segura.")
-                    return
-                self._set_status("dormindo", "Iteração concluída. Aguardando próximo ciclo.")
-            except ReautenticacaoNecessariaError as e:
-                self._pausar_ciclo(
-                    "aguardando_login",
-                    f"Sessão {e.sistema} expirada durante execução.",
-                )
-            except Exception as e:
-                erro(f"Erro durante execução: {e}")
-                self._pausar_ciclo("erro_pausado", str(e))
-            return
-
-        # Estado dormindo → aguarda 30s interrompível
-        if status_db == "dormindo":
-            if self._aguardar_ou_pausar(TEMPO_DORMIR_SEGUNDOS):
-                return
-            if not self._stop_event.is_set():
-                self._set_status("executando", "Retomando execução.")
-            return
-
-        # Estado erro → aguarda 30s e tenta recuperar
-        if status_db == "erro":
-            self._stop_event.wait(timeout=TEMPO_ERRO_SEGUNDOS)
-            if not self._stop_event.is_set():
-                self._set_status("executando", "Tentando recuperação após erro.")
-            return
-
-        # Estado parando → pausa cooperativa no ciclo atual
-        if status_db == "parando":
-            self._pausar_ciclo("interrompido", "Ciclo pausado.")
-            return
-
-        if status_db in {"pausado", "interrompido", "erro_pausado"}:
+        else:
             self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
-            return
+        return True
 
-        # Estado desconhecido — espera curta
-        aviso(f"Estado desconhecido no banco: {status_db}")
-        self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+    def _tratar_estado_pausado(self, comando: str) -> bool:
+        if comando == "iniciar":
+            self._set_status("autenticando", "Iniciando autenticação...")
+        else:
+            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+        return True
+
+    def _tratar_estado_iniciando(self, comando: str) -> bool:
+        if comando != "iniciar":
+            return False
+        self._set_status("autenticando", "Iniciando autenticação...")
+        return True
+
+    def _tratar_estado_autenticando(self, _comando: str) -> bool:
+        try:
+            self._autenticar_todos()
+            self._fechar_ciclo_ativo()
+            self._set_status("executando", "Autenticação OK. Iniciando execução.")
+        except ReautenticacaoNecessariaError as e:
+            self._pausar_ciclo(
+                "aguardando_login",
+                f"Sessão {e.sistema} expirada. Faça login no navegador.",
+            )
+        except Exception as e:
+            erro(f"Falha na autenticação: {e}")
+            self._pausar_ciclo("erro_pausado", f"Falha na autenticação: {e}")
+        return True
+
+    def _tratar_estado_aguardando_login(self, comando: str) -> bool:
+        if comando != "iniciar":
+            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+            return True
+        try:
+            if not self._autenticar_interativo():
+                self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+                return True
+            self._fechar_ciclo_ativo()
+            self._set_status("executando", "Sessões Chrome capturadas. Retomando execução.")
+        except Exception as e:
+            erro(f"Falha ao capturar login no Chrome: {e}")
+            self._pausar_ciclo("erro_pausado", f"Falha ao capturar login no Chrome: {e}")
+        return True
+
+    def _tratar_estado_executando(self, _comando: str) -> bool:
+        try:
+            tarefas_processadas = self._processar_tarefas_pendentes(
+                max_tarefas=self._tarefas_por_iteracao
+            )
+            if self._status_atual == "aguardando_login":
+                return True
+            if self._pausar_apos_etapa_segura("Ciclo pausado após tarefa segura."):
+                return True
+            if tarefas_processadas > 0 and self._ha_mais_tarefas_pendentes():
+                return True
+
+            self._processar_iteracao()
+            if self._pausar_apos_etapa_segura("Ciclo pausado após etapa segura."):
+                return True
+            self._set_status("dormindo", "Iteração concluída. Aguardando próximo ciclo.")
+        except ReautenticacaoNecessariaError as e:
+            self._pausar_ciclo(
+                "aguardando_login",
+                f"Sessão {e.sistema} expirada durante execução.",
+            )
+        except Exception as e:
+            erro(f"Erro durante execução: {e}")
+            self._pausar_ciclo("erro_pausado", str(e))
+        return True
+
+    def _tratar_estado_dormindo(self, _comando: str) -> bool:
+        if self._aguardar_ou_pausar(TEMPO_DORMIR_SEGUNDOS):
+            return True
+        if not self._stop_event.is_set():
+            self._set_status("executando", "Retomando execução.")
+        return True
+
+    def _tratar_estado_erro(self, comando: str) -> bool:
+        if comando != "iniciar":
+            self._stop_event.wait(timeout=TEMPO_ESPERA_CURTA_SEGUNDOS)
+            return True
+        self._stop_event.wait(timeout=TEMPO_ERRO_SEGUNDOS)
+        if not self._stop_event.is_set():
+            self._set_status("executando", "Tentando recuperação após erro.")
+        return True
+
+    def _tratar_estado_parando(self, _comando: str) -> bool:
+        self._pausar_ciclo("interrompido", "Ciclo pausado.")
+        return True
+
+    def _pausar_apos_etapa_segura(self, mensagem: str) -> bool:
+        if not self._deve_pausar_por_comando():
+            return False
+        self._pausar_ciclo("interrompido", mensagem)
+        return True
 
     # ------------------------------------------------------------------
     # Ações por estado
