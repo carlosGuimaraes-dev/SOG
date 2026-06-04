@@ -10,6 +10,7 @@
 - `issues-installer-desktop.md`: slices de implementação e validação do instalador gráfico
 - `paperclip/`: PRDs e issues locais prontos para importação no Paperclip
 - `homologacao-docker-10-processos-template.md`: modelo de coleta de evidências para homologação Docker com lote de 10 processos
+- `sop-entrega-versionada-agentes.md`: procedimento obrigatório para agentes não encerrarem trabalho com alterações apenas locais
 - `../frontend/README.md`: comportamento atual do dashboard
 
 ## Artefatos históricos ou de apoio
