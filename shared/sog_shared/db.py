@@ -22,12 +22,20 @@ ETAPA_EVIDENCIA_DEMONSTRATIVO_SISTJ = "demonstrativo_emitido_sistj"
 ETAPA_EVIDENCIA_ANEXO_PJE = "demonstrativo_anexado_pje"
 
 
+def _current_get_conn():
+    return globals()["get_conn"]
+
+
+def _current_init_db():
+    return globals()["init_db"]
+
+
 class _InfraDbProxy:
     def __getattr__(self, name: str):
         if name == "get_conn":
-            return get_conn
+            return _current_get_conn()
         if name == "init_db":
-            return init_db
+            return _current_init_db()
         return getattr(_infra_db, name)
 
 
@@ -37,7 +45,7 @@ _recalcular_contadores_ciclo = _agente_ciclos._recalcular_contadores_ciclo
 
 def salvar_credenciais_dashboard(usuario: str, senha: str) -> None:
     """Salva a credencial unica do dashboard."""
-    with get_conn() as conn:
+    with _current_get_conn()() as conn:
         conn.execute(
             """
             INSERT INTO dashboard_credenciais (id, usuario, senha, atualizado_em)
@@ -53,7 +61,7 @@ def salvar_credenciais_dashboard(usuario: str, senha: str) -> None:
 
 
 def obter_credenciais_dashboard() -> Optional[Dict[str, Any]]:
-    with get_conn() as conn:
+    with _current_get_conn()() as conn:
         row = conn.execute(
             "SELECT usuario, senha FROM dashboard_credenciais WHERE id = 1"
         ).fetchone()
