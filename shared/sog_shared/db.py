@@ -18,7 +18,6 @@ from sog_shared.processos_aprovacao import *  # noqa: F401,F403
 from sog_shared.tarefas_sessoes import *  # noqa: F401,F403
 from sog_shared.agente_ciclos import (  # noqa: F401
     _obter_ciclo_mais_recente_do_processo_conn,
-    _recalcular_contadores_ciclo,
 )
 
 ETAPA_EVIDENCIA_DEMONSTRATIVO_SISTJ = "demonstrativo_emitido_sistj"
