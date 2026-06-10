@@ -30,6 +30,7 @@ env:
   PYTHON_VERSION: "3.12"
   COVERAGE_THRESHOLD: "80"
   COMPLEXITY_THRESHOLD: "10"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   python-quality:
@@ -55,9 +56,9 @@ jobs:
         run: ruff check agente api shared
 
       - name: Check cyclomatic complexity
-        continue-on-error: true
         run: |
           python - <<'PY'
+          import os
           import subprocess
           import sys
 
@@ -67,18 +68,29 @@ jobs:
               capture_output=True,
               check=False,
           )
+          if result.returncode != 0:
+              if result.stderr.strip():
+                  print(result.stderr)
+              sys.exit(result.returncode)
           if result.stdout.strip():
               print(result.stdout)
-              sys.exit("Python functions above complexity B were found.")
+              summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary_path:
+                  with open(summary_path, "a", encoding="utf-8") as summary_file:
+                      summary_file.write("### Python complexity advisory\n\n")
+                      summary_file.write("```text\n")
+                      summary_file.write(result.stdout.rstrip() + "\n")
+                      summary_file.write("```\n\n")
+              print("::warning::Python functions above complexity B were found. See the job summary for details.")
           PY
 
       - name: Check module sizes
-        continue-on-error: true
         run: |
           python - <<'PY'
-          from pathlib import Path
           import ast
+          import os
           import sys
+          from pathlib import Path
 
           failures = []
           for path in [*Path("agente").rglob("*.py"), *Path("api").rglob("*.py"), *Path("shared").rglob("*.py")]:
@@ -95,8 +107,16 @@ jobs:
                           failures.append(f"{path}:{node.lineno} {node.name}() has {size} lines")
 
           if failures:
-              print("\\n".join(failures))
-              sys.exit(1)
+              details = "\n".join(failures)
+              print(details)
+              summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary_path:
+                  with open(summary_path, "a", encoding="utf-8") as summary_file:
+                      summary_file.write("### Python size advisory\n\n")
+                      summary_file.write("```text\n")
+                      summary_file.write(details + "\n")
+                      summary_file.write("```\n\n")
+              print("::warning::Python files or functions exceeded the advisory size limits. See the job summary for details.")
           PY
 
       - name: Run Python tests with coverage
@@ -112,8 +132,7 @@ jobs:
             --cov-fail-under=${COVERAGE_THRESHOLD}
 
       - name: Upload Python coverage
-        if: always()
-        continue-on-error: true
+        if: ${{ always() && vars.UPLOAD_COVERAGE_ARTIFACTS == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: python-coverage
@@ -177,8 +196,7 @@ jobs:
             --coverage.thresholds.statements=${COVERAGE_THRESHOLD}
 
       - name: Upload frontend coverage
-        if: always()
-        continue-on-error: true
+        if: ${{ always() && vars.UPLOAD_COVERAGE_ARTIFACTS == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
