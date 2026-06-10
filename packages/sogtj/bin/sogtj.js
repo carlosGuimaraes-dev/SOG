@@ -14,7 +14,7 @@ const INSTALLER_VERSION = "0.1.9";
 const DISPLAY_NAME = "iSOG";
 const DOWNLOAD_BASE = "https://sog.carlosguimaraes.us/sogtj";
 const DEFAULT_ASSET_NAME = `SOG.Desktop.Setup.${INSTALLER_VERSION}.exe`;
-const DEFAULT_SHA256 = "__PENDING_RELEASE_SHA256__";
+const DEFAULT_SHA256 = "b44f9eaa4a074e05c399f6d9e8e9fd5d374c4f7c791e4023a28bccc0550fe878";
 
 function usage() {
   console.log(`
