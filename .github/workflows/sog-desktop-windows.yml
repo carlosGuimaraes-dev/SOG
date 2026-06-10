@@ -97,9 +97,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          npm exec --yes wrangler r2 object put "sogtj-releases/sogtj/v$env:INSTALLER_VERSION/SOG.Desktop.Setup.$env:INSTALLER_VERSION.exe" --remote --file="$env:INSTALLER_FILE" --content-type=application/octet-stream --cache-control="public, max-age=31536000, immutable"
-          npm exec --yes wrangler r2 object put "sogtj-releases/sogtj/v$env:INSTALLER_VERSION/SOG.Desktop.Setup.$env:INSTALLER_VERSION.exe.blockmap" --remote --file="$env:INSTALLER_BLOCKMAP_FILE" --content-type=application/octet-stream --cache-control="public, max-age=31536000, immutable"
-          npm exec --yes wrangler r2 object put "sogtj-releases/sogtj/v$env:INSTALLER_VERSION/SOG.Desktop.Setup.$env:INSTALLER_VERSION.exe.sha256" --remote --file="$env:INSTALLER_SHA_FILE" --content-type=text/plain --cache-control="public, max-age=300"
+          npm exec --yes -- wrangler r2 object put "sogtj-releases/sogtj/v$env:INSTALLER_VERSION/SOG.Desktop.Setup.$env:INSTALLER_VERSION.exe" --remote --file="$env:INSTALLER_FILE" --content-type=application/octet-stream --cache-control="public, max-age=31536000, immutable"
+          npm exec --yes -- wrangler r2 object put "sogtj-releases/sogtj/v$env:INSTALLER_VERSION/SOG.Desktop.Setup.$env:INSTALLER_VERSION.exe.blockmap" --remote --file="$env:INSTALLER_BLOCKMAP_FILE" --content-type=application/octet-stream --cache-control="public, max-age=31536000, immutable"
+          npm exec --yes -- wrangler r2 object put "sogtj-releases/sogtj/v$env:INSTALLER_VERSION/SOG.Desktop.Setup.$env:INSTALLER_VERSION.exe.sha256" --remote --file="$env:INSTALLER_SHA_FILE" --content-type=text/plain --cache-control="public, max-age=300"
 
       - name: Upload installer artifact
         if: github.event_name == 'pull_request'
