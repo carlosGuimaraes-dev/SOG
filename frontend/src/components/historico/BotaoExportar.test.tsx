@@ -3,6 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import BotaoExportar from './BotaoExportar'
 import api from '../../lib/api'
 
+const addToast = vi.fn()
+
 vi.mock('../../lib/api', () => ({
   default: {
     get: vi.fn(),
@@ -10,7 +12,7 @@ vi.mock('../../lib/api', () => ({
 }))
 
 vi.mock('../../hooks/useToast', () => ({
-  useToast: () => ({ addToast: vi.fn() }),
+  useToast: () => ({ addToast }),
 }))
 
 describe('BotaoExportar', () => {
@@ -33,6 +35,7 @@ describe('BotaoExportar', () => {
     window.URL.createObjectURL = createObjectURL
     const revokeObjectURL = vi.fn()
     window.URL.revokeObjectURL = revokeObjectURL
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
     render(<BotaoExportar />)
     fireEvent.click(screen.getByRole('button', { name: /exportar histórico em csv/i }))
@@ -42,6 +45,7 @@ describe('BotaoExportar', () => {
       expect(createObjectURL).toHaveBeenCalled()
     })
 
+    clickSpy.mockRestore()
     mockGet.mockRestore()
   })
 
@@ -66,6 +70,7 @@ describe('BotaoExportar', () => {
       resolveGet = resolve
     })
     const mockGet = vi.mocked(api.get).mockReturnValueOnce(promise as unknown as ReturnType<typeof api.get>)
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
     render(<BotaoExportar />)
     const button = screen.getByRole('button', { name: /exportar histórico em csv/i })
@@ -80,6 +85,21 @@ describe('BotaoExportar', () => {
 
     await waitFor(() => {
       expect(button).not.toBeDisabled()
+      expect(screen.getByText('📥 Exportar CSV')).toBeInTheDocument()
+    })
+
+    clickSpy.mockRestore()
+    mockGet.mockRestore()
+  })
+
+  it('mostra toast quando a exportação falha', async () => {
+    const mockGet = vi.mocked(api.get).mockRejectedValueOnce(new Error('falhou'))
+
+    render(<BotaoExportar />)
+    fireEvent.click(screen.getByRole('button', { name: /exportar histórico em csv/i }))
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith('Erro ao exportar histórico', 'error')
       expect(screen.getByText('📥 Exportar CSV')).toBeInTheDocument()
     })
 
