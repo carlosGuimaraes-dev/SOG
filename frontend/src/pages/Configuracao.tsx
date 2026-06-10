@@ -105,8 +105,6 @@ function StatusSessaoCard({
   status: SessaoDashboard
   destacarPendente: boolean
 }) {
-  const ativo = status.logado
-
   return (
     <Card className={destacarPendente ? 'border-warning/50 shadow-sm shadow-warning/20' : undefined}>
       <CardHeader className="space-y-4">

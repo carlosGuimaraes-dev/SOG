@@ -113,6 +113,7 @@ jobs:
 
       - name: Upload Python coverage
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: python-coverage
@@ -176,6 +177,7 @@ jobs:
 
       - name: Upload frontend coverage
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
