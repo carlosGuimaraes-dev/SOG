@@ -29,7 +29,7 @@ def test_aguardando_login_permanece_aguardando_quando_chrome_nao_pronto():
 
     servico._set_status.assert_called_once()
     assert servico._set_status.call_args.args[0] == "aguardando_login"
-    assert "Chrome" in servico._set_status.call_args.args[1]
+    assert servico._set_status.call_args.args[1] == "Falta concluir login no sistema pendente: PJe."
     servico.pje.garantir_autenticado.assert_not_called()
     servico.sistj.garantir_autenticado.assert_not_called()
 

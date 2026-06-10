@@ -9,12 +9,12 @@ const os = require("node:os");
 const path = require("node:path");
 const { pipeline } = require("node:stream/promises");
 
-const PACKAGE_VERSION = "0.1.11";
-const INSTALLER_VERSION = "0.1.8";
+const PACKAGE_VERSION = "0.1.12";
+const INSTALLER_VERSION = "0.1.9";
 const DISPLAY_NAME = "iSOG";
 const DOWNLOAD_BASE = "https://sog.carlosguimaraes.us/sogtj";
 const DEFAULT_ASSET_NAME = `SOG.Desktop.Setup.${INSTALLER_VERSION}.exe`;
-const DEFAULT_SHA256 = "30a07e12375fcfb998fae64e686868b36a9891d8a1a0d61cdb233c4fdf2ad939";
+const DEFAULT_SHA256 = "__PENDING_RELEASE_SHA256__";
 
 function usage() {
   console.log(`

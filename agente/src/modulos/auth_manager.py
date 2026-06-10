@@ -37,6 +37,7 @@ class AuthManager:
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
         self._playwright = None
+        self._shared_session = False
 
     def iniciar(self, accept_downloads: bool = False):
         """Inicializa browser pelo profile persistente da sessao do SOG."""
@@ -44,13 +45,21 @@ class AuthManager:
             return
 
         self._playwright = sync_playwright().start()
-        self.context = self.session_profile.launch_persistent_context(
-            self._playwright.chromium,
-            headless=self.headless_default,
-            accept_downloads=accept_downloads,
-        )
-        self.browser = self.context.browser
-        self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
+        browser, context = self.session_profile.connect_over_cdp(self._playwright.chromium)
+        if browser and context:
+            self._shared_session = True
+            self.browser = browser
+            self.context = context
+            self.page = self.context.new_page()
+        else:
+            self._shared_session = False
+            self.context = self.session_profile.launch_persistent_context(
+                self._playwright.chromium,
+                headless=self.headless_default,
+                accept_downloads=accept_downloads,
+            )
+            self.browser = self.context.browser
+            self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
         self.page.set_default_timeout(TIMEOUT_PADRAO)
 
     def verificar_e_autenticar(
@@ -157,15 +166,24 @@ class AuthManager:
 
     def fechar(self):
         """Fecha context, browser e playwright de forma segura."""
+        if self.page:
+            try:
+                if self._shared_session:
+                    self.page.close()
+            except Exception:
+                pass
+            self.page = None
         if self.context:
             try:
-                self.context.close()
+                if not self._shared_session:
+                    self.context.close()
             except Exception:
                 pass
             self.context = None
         if self.browser:
             try:
-                self.browser.close()
+                if not self._shared_session:
+                    self.browser.close()
             except Exception:
                 pass
             self.browser = None
@@ -175,7 +193,7 @@ class AuthManager:
             except Exception:
                 pass
             self._playwright = None
-        self.page = None
+        self._shared_session = False
 
     def __del__(self):
         self.fechar()

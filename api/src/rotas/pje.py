@@ -19,6 +19,14 @@ _ESTADO_EXPIRED = "expired"
 _ESTADO_UNAVAILABLE = "unavailable"
 
 
+def _mensagem_sessao(logado: bool, *, erro: bool = False) -> str:
+    if erro:
+        return "Falha na validação"
+    if logado:
+        return "Sessão ativa"
+    return "Aguardando login"
+
+
 def _sincronizar_tarefas_stale() -> None:
     db.reenfileirar_tarefas_stale(max_age_minutes=5)
 
@@ -41,7 +49,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
             "sistema": sistema,
             "estado": _ESTADO_PENDING,
             "logado": False,
-            "mensagem": "Nenhuma verificação registrada",
+            "mensagem": _mensagem_sessao(False),
             "ultima_verificacao": None,
         }
 
@@ -53,7 +61,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
             "sistema": sistema,
             "estado": _ESTADO_ACTIVE if logado else _ESTADO_EXPIRED,
             "logado": logado,
-            "mensagem": "Sessão ativa" if logado else "Sessão inativa",
+            "mensagem": _mensagem_sessao(logado),
             "ultima_verificacao": tarefa.get("concluido_em") or tarefa.get("atualizado_em"),
         }
 
@@ -62,7 +70,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
             "sistema": sistema,
             "estado": _ESTADO_UNAVAILABLE,
             "logado": False,
-            "mensagem": tarefa.get("mensagem_erro") or "Falha na verificação",
+            "mensagem": _mensagem_sessao(False, erro=True),
             "ultima_verificacao": tarefa.get("concluido_em") or tarefa.get("atualizado_em"),
         }
 
@@ -70,7 +78,7 @@ def _status_sessao(tipo: str, sistema: str) -> dict:
         "sistema": sistema,
         "estado": _ESTADO_PENDING,
         "logado": False,
-        "mensagem": f"Última verificação em {tarefa['status']}",
+        "mensagem": _mensagem_sessao(False),
         "ultima_verificacao": tarefa.get("iniciado_em") or tarefa.get("atualizado_em"),
     }
 

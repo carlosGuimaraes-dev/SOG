@@ -14,6 +14,10 @@ const {
 } = require('./lib/config-merge')
 const { redact } = require('./lib/redact')
 const {
+  DASHBOARD_BRIDGE_PORT,
+  createDashboardBridgeHandler,
+} = require('./lib/dashboard-bridge')
+const {
   DEFAULT_CHROME_DEBUG_PORT,
   chromeLoginArgs,
   chromeLoginProfileDir,
@@ -24,6 +28,7 @@ const DOCKER_DESKTOP_URL = 'https://desktop.docker.com/win/main/amd64/Docker%20D
 let mainWindow
 let agentProcess = null
 let agentStartedAt = null
+let dashboardBridgeServer = null
 
 function appBaseDir() {
   if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
@@ -756,6 +761,25 @@ function openDashboard() {
   return { ok: true, message: 'Dashboard aberto no navegador.' }
 }
 
+function startDashboardBridge() {
+  if (dashboardBridgeServer) return dashboardBridgeServer
+
+  dashboardBridgeServer = http.createServer(createDashboardBridgeHandler({
+    openChromeLogin,
+  }))
+  dashboardBridgeServer.on('error', (error) => {
+    console.error(`[dashboard-bridge] ${error.message}`)
+  })
+  dashboardBridgeServer.listen(DASHBOARD_BRIDGE_PORT, '127.0.0.1')
+  return dashboardBridgeServer
+}
+
+function stopDashboardBridge() {
+  if (!dashboardBridgeServer) return
+  dashboardBridgeServer.close()
+  dashboardBridgeServer = null
+}
+
 function wireIpc() {
   ipcMain.handle('sog:paths', () => paths())
   ipcMain.handle('sog:configuration-status', () => configurationStatus())
@@ -780,6 +804,7 @@ function wireIpc() {
 
 app.whenReady().then(() => {
   ensureDirs()
+  startDashboardBridge()
   wireIpc()
   createWindow()
 })
@@ -789,5 +814,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  stopDashboardBridge()
   if (agentProcess) agentProcess.kill('SIGTERM')
 })

@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { ToastProvider } from '../components/ToastProvider'
 import Configuracao from '../pages/Configuracao'
 import { ENDPOINTS } from '../lib/endpoints'
+
+const fetchMock = vi.fn()
+
+vi.stubGlobal('fetch', fetchMock)
 
 vi.mock('../lib/api', () => ({
   default: {
@@ -25,7 +29,6 @@ vi.mock('../components/agente/AgenteStatusBar', () => ({
 import api from '../lib/api'
 
 const mockedGet = vi.mocked(api.get)
-const mockedPost = vi.mocked(api.post)
 
 const dashboardResumo = {
   agente_online: true,
@@ -81,7 +84,13 @@ function renderConfiguracao() {
 describe('Configuração', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    fetchMock.mockReset()
     mockApi()
+  })
+
+  afterEach(() => {
+    fetchMock.mockReset()
+    vi.useRealTimers()
   })
 
   it('renderiza a superfície operacional local com status independentes', async () => {
@@ -89,35 +98,94 @@ describe('Configuração', () => {
 
     expect(await screen.findByText('Configuração operacional')).toBeInTheDocument()
     expect(screen.getByText(/dashboard local sem login próprio/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Abrir PJe' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Abrir SISTJWEB' })).toBeInTheDocument()
-    expect(screen.getAllByText(/Solicitar reautenticação/i)).toHaveLength(2)
+    expect(screen.getByText('Conexão com sistemas externos')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Conectar PJe e SISTJWEB' })).toBeInTheDocument()
+    expect(screen.getByText('Status da autenticação assistida')).toBeInTheDocument()
+    expect(screen.getByText('Abrir site externamente')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Abrir PJe externamente' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Abrir SISTJWEB externamente' })).toBeInTheDocument()
+    expect(screen.queryByText(/Solicitar reautenticação/i)).not.toBeInTheDocument()
     expect(screen.getByText('Diagnóstico do runtime local')).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
-    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByText('Tarefas pendentes')).toBeInTheDocument()
+    expect(screen.getByText('Tarefas executando')).toBeInTheDocument()
     expect(screen.getByText('Sessão inativa')).toBeInTheDocument()
     expect(screen.getAllByText('Sessão ativa').length).toBeGreaterThan(0)
+  })
+
+  it('mantém visível o passo a passo da autenticação assistida', async () => {
+    renderConfiguracao()
+
+    expect(await screen.findByRole('button', { name: 'Conectar PJe e SISTJWEB' })).toBeInTheDocument()
+    expect(screen.getByText('Entre no PJe.')).toBeInTheDocument()
+    expect(screen.getByText('Entre no SISTJWEB.')).toBeInTheDocument()
+    expect(screen.getByText('Aguarde validação automática.')).toBeInTheDocument()
   })
 
   it('abre PJe em nova aba quando o operador aciona a ação independente', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     renderConfiguracao()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Abrir PJe' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir PJe externamente' }))
 
     expect(openSpy).toHaveBeenCalledWith('https://pje.tjdft.jus.br/pje/login.seam', '_blank', 'noopener,noreferrer')
     openSpy.mockRestore()
   })
 
-  it('solicita reautenticação do SISTJWEB usando a rota real', async () => {
-    mockedPost.mockResolvedValue({ data: { message: 'ok' } })
+  it('mantém a abertura externa como ação secundária separada do fluxo principal', async () => {
     renderConfiguracao()
 
-    const botoes = await screen.findAllByRole('button', { name: 'Solicitar reautenticação' })
-    fireEvent.click(botoes[1])
+    expect(await screen.findByText('Abrir site externamente')).toBeInTheDocument()
+    expect(screen.getByText(/Use estas ações apenas para revisão manual/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir PJe' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir SISTJWEB' })).not.toBeInTheDocument()
+  })
+
+  it('atualiza o status automaticamente enquanto a autenticação ainda está pendente', async () => {
+    const setIntervalSpy = vi.spyOn(window, 'setInterval')
+    let pollCallback: (() => void) | undefined
+
+    setIntervalSpy.mockImplementation((handler: TimerHandler, timeout?: number) => {
+      if (timeout === 5000 && typeof handler === 'function') {
+        pollCallback = handler as () => void
+      }
+      return 1 as unknown as number
+    })
+
+    renderConfiguracao()
+
+    expect(await screen.findByText('Status da autenticação assistida')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockedGet).toHaveBeenCalledTimes(2)
+    })
+
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5000)
+    await act(async () => {
+      pollCallback?.()
+    })
 
     await waitFor(() => {
-      expect(mockedPost).toHaveBeenCalledWith('/sistj/reautenticar')
+      expect(mockedGet).toHaveBeenCalledTimes(4)
     })
+
+    setIntervalSpy.mockRestore()
+  })
+
+  it('aciona a abertura do Navegador de sessão do SOG pelo CTA principal', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, message: 'Chrome aberto para login em PJe e SISTJWEB.' }),
+    })
+
+    renderConfiguracao()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Conectar PJe e SISTJWEB' }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:47831/sog/session-browser/open', {
+        method: 'POST',
+      })
+    })
+
+    expect(await screen.findByText('Chrome aberto para login em PJe e SISTJWEB.')).toBeInTheDocument()
   })
 })

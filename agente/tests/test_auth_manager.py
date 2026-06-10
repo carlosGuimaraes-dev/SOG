@@ -39,6 +39,7 @@ def test_iniciar_usa_profile_persistente_como_caminho_principal(tmp_path, monkey
     context.new_page.return_value = page
 
     chromium = MagicMock()
+    chromium.connect_over_cdp.side_effect = RuntimeError("ECONNREFUSED")
     chromium.launch_persistent_context.return_value = context
 
     runner = MagicMock()
@@ -67,6 +68,7 @@ def test_iniciar_reusa_primeira_aba_do_profile_existente(tmp_path, monkeypatch):
     context.pages = [page]
 
     chromium = MagicMock()
+    chromium.connect_over_cdp.side_effect = RuntimeError("ECONNREFUSED")
     chromium.launch_persistent_context.return_value = context
 
     runner = MagicMock()
@@ -79,6 +81,35 @@ def test_iniciar_reusa_primeira_aba_do_profile_existente(tmp_path, monkeypatch):
     auth.iniciar()
 
     context.new_page.assert_not_called()
+    assert auth.page is page
+
+
+def test_iniciar_reusa_contexto_do_chrome_monitoravel_quando_disponivel(tmp_path, monkeypatch):
+    page = MagicMock()
+    context = MagicMock()
+    context.pages = [MagicMock()]
+    context.new_page.return_value = page
+
+    browser = MagicMock()
+    browser.contexts = [context]
+
+    chromium = MagicMock()
+    chromium.connect_over_cdp.return_value = browser
+
+    runner = MagicMock()
+    runner.chromium = chromium
+    runner.start.return_value = runner
+
+    monkeypatch.setattr("modulos.auth_manager.sync_playwright", lambda: runner)
+
+    auth = AuthManager(tmp_path / "pje-state.json")
+    auth.iniciar()
+
+    chromium.connect_over_cdp.assert_called_once_with("http://127.0.0.1:9222")
+    chromium.launch_persistent_context.assert_not_called()
+    context.new_page.assert_called_once_with()
+    assert auth.context is context
+    assert auth.browser is browser
     assert auth.page is page
 
 

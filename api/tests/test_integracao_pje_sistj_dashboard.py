@@ -61,7 +61,9 @@ def test_dashboard_sessoes_consolida_estado(client, auth_headers, mock_db):
     assert resp.status_code == 200
     data = resp.json()
     assert data["pje"]["logado"] is True
+    assert data["pje"]["mensagem"] == "Sessão ativa"
     assert data["sistj"]["logado"] is False
+    assert data["sistj"]["mensagem"] == "Aguardando login"
     assert data["tarefas_pendentes"] == 0
     assert data["tarefas_executando"] == 0
 

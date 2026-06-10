@@ -2,17 +2,30 @@ from modulos.auth_manager import ReautenticacaoNecessariaError
 from utils.logger import aviso, erro
 
 
+def _rotulo_sistema(sistema: str) -> str:
+    labels = {
+        "pje": "PJe",
+        "sistj": "SISTJWEB",
+        "sistjweb": "SISTJWEB",
+    }
+    return labels.get((sistema or "").lower(), sistema.upper())
+
+
 def mensagem_captura_chrome(resultado: dict) -> str:
     reason = resultado.get("reason")
     if reason == "chrome_indisponivel":
-        return "Aguardando Chrome de login. Clique em 'Abrir Chrome para login' no SOG Desktop."
+        return "Aguardando login no navegador do SOG."
     if reason == "abas_ausentes":
-        faltando = ", ".join(resultado.get("missing", []))
-        return f"Aguardando abas de login no Chrome: {faltando}."
+        faltando = [_rotulo_sistema(item) for item in resultado.get("missing", [])]
+        if len(faltando) == 1:
+            return f"Falta concluir login no sistema pendente: {faltando[0]}."
+        return "Aguardando login no navegador do SOG."
     if reason == "login_pendente":
-        pendente = ", ".join(resultado.get("pending", []))
-        return f"Aguardando conclusão de login no Chrome: {pendente}."
-    return "Aguardando login no Chrome monitorável."
+        pendente = [_rotulo_sistema(item) for item in resultado.get("pending", [])]
+        if len(pendente) == 1:
+            return f"Falta concluir login no sistema pendente: {pendente[0]}."
+        return "Aguardando login no navegador do SOG."
+    return "Aguardando login no navegador do SOG."
 
 
 def tratar_loop_iteration(
@@ -89,9 +102,9 @@ def _tratar_estado_autenticando(servico, _comando: str, _td: int, _te: int, _tc:
     try:
         servico._autenticar_todos()
         servico._fechar_ciclo_ativo()
-        servico._set_status("executando", "Autenticação OK. Iniciando execução.")
+        servico._set_status("executando", "Sistemas conectados. O agente pode continuar.")
     except ReautenticacaoNecessariaError as e:
-        servico._pausar_ciclo("aguardando_login", f"Sessão {e.sistema} expirada. Faça login no navegador.")
+        servico._pausar_ciclo("aguardando_login", f"Falta concluir login no sistema pendente: {_rotulo_sistema(e.sistema)}.")
     except Exception as e:
         erro(f"Falha na autenticação: {e}")
         servico._pausar_ciclo("erro_pausado", f"Falha na autenticação: {e}")
@@ -107,7 +120,7 @@ def _tratar_estado_aguardando_login(servico, comando: str, _td: int, _te: int, t
             _aguardar_curto(servico, tempo_curto)
             return True
         servico._fechar_ciclo_ativo()
-        servico._set_status("executando", "Sessões Chrome capturadas. Retomando execução.")
+        servico._set_status("executando", "Sistemas conectados. O agente pode continuar.")
     except Exception as e:
         erro(f"Falha ao capturar login no Chrome: {e}")
         servico._pausar_ciclo("erro_pausado", f"Falha ao capturar login no Chrome: {e}")
@@ -120,7 +133,7 @@ def _tratar_estado_executando(servico, _comando: str, _td: int, _te: int, _tc: i
             return True
         _finalizar_iteracao(servico)
     except ReautenticacaoNecessariaError as e:
-        servico._pausar_ciclo("aguardando_login", f"Sessão {e.sistema} expirada durante execução.")
+        servico._pausar_ciclo("aguardando_login", f"Falta concluir login no sistema pendente: {_rotulo_sistema(e.sistema)}.")
     except Exception as e:
         erro(f"Erro durante execução: {e}")
         servico._pausar_ciclo("erro_pausado", str(e))

@@ -12,6 +12,8 @@ import { ENDPOINTS } from '../lib/endpoints'
 
 const PJE_URL = 'https://pje.tjdft.jus.br/pje/login.seam'
 const SISTJWEB_URL = 'https://sistj.tjdft.jus.br/sistj/sistj'
+const SOG_SESSION_BROWSER_URL = 'http://127.0.0.1:47831/sog/session-browser/open'
+const PASSOS_AUTENTICACAO = ['Entre no PJe.', 'Entre no SISTJWEB.', 'Aguarde validação automática.']
 
 interface SessaoDashboard {
   sistema: string
@@ -46,34 +48,74 @@ function formatarData(valor?: string | null): string {
   return data.toLocaleString('pt-BR')
 }
 
+function variantBadgeSessao(status: SessaoDashboard): 'success' | 'warning' | 'destructive' {
+  if (status.logado) return 'success'
+  if (/falha/i.test(status.mensagem)) return 'destructive'
+  return 'warning'
+}
+
+function resumoSessao(status: SessaoDashboard): string {
+  if (status.logado) return 'Sessão ativa'
+  if (/falha/i.test(status.mensagem)) return 'Falha na validação'
+  return 'Aguardando login'
+}
+
+function mensagemPrincipal(dashboard: DashboardSessoesResponse | null) {
+  if (!dashboard) {
+    return {
+      titulo: 'Aguardando leitura da autenticação assistida.',
+      descricao: 'Abra o Navegador de sessão do SOG para iniciar o login do PJe e do SISTJWEB.',
+      variant: 'default' as const,
+    }
+  }
+
+  if (dashboard.pje.logado && dashboard.sistj.logado) {
+    return {
+      titulo: 'Sistemas conectados. O agente pode continuar.',
+      descricao: 'PJe e SISTJWEB estão ativos na mesma sessão do Navegador de sessão do SOG.',
+      variant: 'default' as const,
+    }
+  }
+
+  if (dashboard.pje.logado || dashboard.sistj.logado) {
+    return {
+      titulo: 'Falta concluir o login no sistema pendente.',
+      descricao: dashboard.pje.logado
+        ? 'SISTJWEB ainda precisa ser validado no Navegador de sessão do SOG.'
+        : 'PJe ainda precisa ser validado no Navegador de sessão do SOG.',
+      variant: 'warning' as const,
+    }
+  }
+
+  return {
+    titulo: 'Aguardando login no navegador do SOG.',
+    descricao: 'Entre no PJe e no SISTJWEB no Navegador de sessão do SOG. A validação continua automaticamente.',
+    variant: 'default' as const,
+  }
+}
+
 function StatusSessaoCard({
   titulo,
   descricao,
   status,
-  onAbrir,
-  onReautenticar,
-  reautenticando,
+  destacarPendente,
 }: {
   titulo: string
   descricao: string
   status: SessaoDashboard
-  onAbrir: () => void
-  onReautenticar: () => Promise<void>
-  reautenticando: boolean
+  destacarPendente: boolean
 }) {
   const ativo = status.logado
 
   return (
-    <Card>
+    <Card className={destacarPendente ? 'border-warning/50 shadow-sm shadow-warning/20' : undefined}>
       <CardHeader className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <CardTitle>{titulo}</CardTitle>
             <p className="text-sm text-muted-foreground">{descricao}</p>
           </div>
-          <Badge variant={ativo ? 'success' : 'warning'}>
-            {ativo ? 'Sessão ativa' : 'Sessão pendente'}
-          </Badge>
+          <Badge variant={variantBadgeSessao(status)}>{resumoSessao(status)}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -87,19 +129,11 @@ function StatusSessaoCard({
             <dd className="mt-1 font-medium text-foreground">{formatarData(status.ultima_verificacao)}</dd>
           </div>
         </dl>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button type="button" onClick={onAbrir}>
-            Abrir {titulo}
-          </Button>
-          <Button type="button" variant="outline" onClick={onReautenticar} disabled={reautenticando}>
-            {reautenticando ? 'Solicitando...' : 'Solicitar reautenticação'}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {ativo
-            ? `Use esta ação apenas quando precisar revisar manualmente a sessão do ${titulo}.`
-            : `Abra o ${titulo}, conclua o login manual e retome o ciclo quando o agente sinalizar reautenticação concluída.`}
-        </p>
+        {destacarPendente && (
+          <p className="text-sm font-medium text-warning-foreground">
+            Falta concluir o login do {titulo} no Navegador de sessão do SOG.
+          </p>
+        )}
       </CardContent>
     </Card>
   )
@@ -112,7 +146,7 @@ export default function Configuracao() {
   const [agente, setAgente] = useState<AgenteStatusResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [pendingReauth, setPendingReauth] = useState<'pje' | 'sistj' | null>(null)
+  const [openingSessionBrowser, setOpeningSessionBrowser] = useState(false)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -137,34 +171,61 @@ export default function Configuracao() {
     carregar()
   }, [carregar])
 
+  useEffect(() => {
+    if (!dashboard || (dashboard.pje.logado && dashboard.sistj.logado)) {
+      return undefined
+    }
+
+    const intervalId = window.setInterval(() => {
+      void carregar()
+    }, 5000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [carregar, dashboard])
+
   function abrirSistema(url: string, nome: string) {
     window.open(url, '_blank', 'noopener,noreferrer')
     addToast(`${nome} aberto em nova aba do navegador local.`, 'info')
   }
 
-  async function solicitarReautenticacao(sistema: 'pje' | 'sistj') {
-    const endpoint = sistema === 'pje' ? ENDPOINTS.PJE_REAUTENTICAR : ENDPOINTS.SISTJ_REAUTENTICAR
-    const label = sistema === 'pje' ? 'PJe' : 'SISTJWEB'
-
-    setPendingReauth(sistema)
+  async function abrirNavegadorDeSessao() {
+    setOpeningSessionBrowser(true)
     try {
-      await api.post(endpoint)
-      addToast(`Reautenticação de ${label} solicitada para o agente.`, 'success')
-      await carregar()
+      const response = await fetch(SOG_SESSION_BROWSER_URL, {
+        method: 'POST',
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload?.ok === false) {
+        throw new Error(payload?.message || 'Não foi possível abrir o Navegador de sessão do SOG.')
+      }
+      addToast(payload?.message || 'Navegador de sessão do SOG aberto com sucesso.', 'success')
     } catch (err: any) {
-      const detail = err?.response?.data?.detail
-      addToast(detail || `Não foi possível solicitar reautenticação de ${label}.`, 'error')
+      addToast(
+        err?.message || 'Não foi possível abrir o Navegador de sessão do SOG. Abra o SOG Desktop e tente novamente.',
+        'error',
+      )
     } finally {
-      setPendingReauth(null)
+      setOpeningSessionBrowser(false)
     }
   }
+
+  const resumoAutenticacao = mensagemPrincipal(dashboard)
+  const sistemaPendenteUnico = dashboard
+    ? dashboard.pje.logado === dashboard.sistj.logado
+      ? null
+      : dashboard.pje.logado
+        ? 'SISTJWEB'
+        : 'PJe'
+    : null
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold tracking-tight">Configuração operacional</h2>
         <p className="text-sm text-muted-foreground">
-          Abra sistemas externos, acompanhe o estado do runtime local e conduza reautenticação sem sair do dashboard.
+          Conecte PJe e SISTJWEB no Navegador de sessão do SOG e acompanhe a leitura operacional sem sair do dashboard.
         </p>
       </div>
 
@@ -178,6 +239,45 @@ export default function Configuracao() {
           </AlertDescription>
         </Alert>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Conexão com sistemas externos</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Conecte PJe e SISTJWEB no navegador de sessão do SOG. O agente reutiliza essa mesma sessão para operar.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p>Use este fluxo principal quando precisar autenticar os sistemas externos para o agente.</p>
+              <p>Abra sites externamente apenas para revisão manual fora da operação assistida.</p>
+            </div>
+            <Button type="button" onClick={abrirNavegadorDeSessao} disabled={openingSessionBrowser}>
+              {openingSessionBrowser ? 'Abrindo navegador de sessão...' : 'Conectar PJe e SISTJWEB'}
+            </Button>
+          </div>
+
+          <Alert variant={resumoAutenticacao.variant} aria-live="polite">
+            <AlertTitle>{resumoAutenticacao.titulo}</AlertTitle>
+            <AlertDescription>{resumoAutenticacao.descricao}</AlertDescription>
+          </Alert>
+
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <p className="text-sm font-medium text-foreground">Passo a passo</p>
+            <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
+              {PASSOS_AUTENTICACAO.map((passo, index) => (
+                <li key={passo} className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {index + 1}
+                  </span>
+                  <span>{passo}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
 
       {error && (
         <Alert variant="destructive">
@@ -200,22 +300,45 @@ export default function Configuracao() {
         </div>
       ) : dashboard ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <StatusSessaoCard
-            titulo="PJe"
-            descricao="Abertura e validação independentes da sessão do tribunal."
-            status={dashboard.pje}
-            onAbrir={() => abrirSistema(PJE_URL, 'PJe')}
-            onReautenticar={() => solicitarReautenticacao('pje')}
-            reautenticando={pendingReauth === 'pje'}
-          />
-          <StatusSessaoCard
-            titulo="SISTJWEB"
-            descricao="Sessão operacional separada para preenchimento e emissão."
-            status={dashboard.sistj}
-            onAbrir={() => abrirSistema(SISTJWEB_URL, 'SISTJWEB')}
-            onReautenticar={() => solicitarReautenticacao('sistj')}
-            reautenticando={pendingReauth === 'sistj'}
-          />
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Status da autenticação assistida</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Acompanhe a leitura independente de PJe e SISTJWEB enquanto o SOG valida a sessão do navegador.
+              </p>
+            </CardHeader>
+            <CardContent className="grid gap-4 lg:grid-cols-2">
+              <StatusSessaoCard
+                titulo="PJe"
+                descricao="Sessão de login do tribunal usada pelo agente." 
+                status={dashboard.pje}
+                destacarPendente={sistemaPendenteUnico === 'PJe'}
+              />
+              <StatusSessaoCard
+                titulo="SISTJWEB"
+                descricao="Sessão externa necessária para preenchimento e emissão." 
+                status={dashboard.sistj}
+                destacarPendente={sistemaPendenteUnico === 'SISTJWEB'}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Abrir site externamente</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Use estas ações apenas para revisão manual fora do fluxo principal de autenticação assistida do agente.
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row">
+              <Button type="button" variant="outline" onClick={() => abrirSistema(PJE_URL, 'PJe')}>
+                Abrir PJe externamente
+              </Button>
+              <Button type="button" variant="outline" onClick={() => abrirSistema(SISTJWEB_URL, 'SISTJWEB')}>
+                Abrir SISTJWEB externamente
+              </Button>
+            </CardContent>
+          </Card>
 
           <Card className="lg:col-span-2">
             <CardHeader>
