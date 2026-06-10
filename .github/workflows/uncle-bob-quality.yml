@@ -166,6 +166,7 @@ jobs:
           }
           JS
           npx --yes dependency-cruiser -c dependency-cruiser.config.cjs src
+          rm -f dependency-cruiser.config.cjs
 
       - name: Run frontend coverage
         run: |
