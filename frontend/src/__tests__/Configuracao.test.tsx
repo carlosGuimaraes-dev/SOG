@@ -144,12 +144,14 @@ describe('Configuração', () => {
     const setIntervalSpy = vi.spyOn(window, 'setInterval')
     let pollCallback: (() => void) | undefined
 
-    setIntervalSpy.mockImplementation((handler: TimerHandler, timeout?: number) => {
-      if (timeout === 5000 && typeof handler === 'function') {
-        pollCallback = handler as () => void
-      }
-      return 1 as unknown as number
-    })
+    setIntervalSpy.mockImplementation(
+      ((handler: Parameters<typeof setInterval>[0], timeout?: number) => {
+        if (timeout === 5000 && typeof handler === 'function') {
+          pollCallback = handler as () => void
+        }
+        return 1 as unknown as ReturnType<typeof setInterval>
+      }) as typeof setInterval,
+    )
 
     renderConfiguracao()
 
