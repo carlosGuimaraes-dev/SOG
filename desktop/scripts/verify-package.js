@@ -14,8 +14,21 @@ function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8')
 }
 
+function assertDashboardBridgeCsp(relativePath) {
+  const config = read(relativePath)
+  const cspMatch = config.match(/add_header Content-Security-Policy "([^"]+)"/)
+  assert(cspMatch, `${relativePath} deve definir Content-Security-Policy`)
+  assert(
+    cspMatch[1].includes("connect-src 'self' http://127.0.0.1:47831 http://localhost:47831"),
+    `${relativePath} deve permitir o bridge local do dashboard em connect-src`,
+  )
+}
+
 const pkg = JSON.parse(fs.readFileSync(path.join(desktopRoot, 'package.json'), 'utf8'))
 const resources = pkg.build.extraResources.map((entry) => `${entry.from}->${entry.to}`)
+
+assertDashboardBridgeCsp('nginx/nginx.conf')
+assertDashboardBridgeCsp('nginx/nginx-dev.conf')
 
 assert(pkg.build.icon === 'build/icon.png', 'Electron Builder deve usar icone proprio do SOG Desktop')
 assert(pkg.build.nsis.runAfterFinish === false, 'NSIS nao deve executar atalho do Start Menu ao finalizar')
