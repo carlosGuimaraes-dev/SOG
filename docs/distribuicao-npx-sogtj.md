@@ -27,8 +27,8 @@ Windows versionado.
 ## Fluxo inicial
 
 1. Gerar o instalador Windows pelo fluxo existente do desktop.
-2. Publicar o instalador no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.10/` com o nome
-   `SOG.Desktop.Setup.0.1.10.exe`.
+2. Publicar o instalador no R2 em `sog.carlosguimaraes.us/sogtj/v0.1.11/` com o nome
+   `SOG.Desktop.Setup.0.1.11.exe`.
 3. Confirmar que o instalador publicado corresponde a verificacao interna do
    bootstrap da versao.
 4. Publicar `packages/sogtj` no npm.
