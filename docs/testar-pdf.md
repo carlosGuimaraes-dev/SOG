@@ -8,6 +8,25 @@ Extrai dados de sentença (sucumbente, valor, honorários) e custas iniciais a p
 pip install -r agente/requirements.txt   # instala pymupdf e dependências
 ```
 
+## Runtime QA reproduzível
+
+Quando o host local não tiver wheel compatível do PyMuPDF (por exemplo Python
+3.13 sem toolchain C), rode o smoke/QA do extrator no container Python 3.12:
+
+```bash
+./scripts/qa-extrator-pdf.sh
+```
+
+Para usar outro PDF judicial real:
+
+```bash
+./scripts/qa-extrator-pdf.sh /caminho/processo.pdf
+```
+
+Esse fluxo sobe o alvo `qa` do `agente/Dockerfile`, monta o diretório do PDF em
+`/fixtures` e executa `pytest -q /app/tests/test_extrator_pdf.py` com
+`SOG_EXTRATOR_PDF_REAL` apontando para o arquivo montado.
+
 ## Uso básico
 
 ```bash

@@ -35,29 +35,39 @@ Sistema automatizado para extração, preenchimento e emissão de guias de custa
 ```bash
 git clone git@github.com:carlosGuimaraes-dev/SOG.git
 cd SOG
-cp .env.example .env
-# Edite .env com as chaves de serviço necessárias
+./scripts/prepare-runtime.sh
+python3 ./scripts/prepare-internal-runtime.py
+# Edite .env.api e .env.agente com as chaves de serviço necessárias
+./scripts/start-local.sh
 ```
 
-### 2. Variáveis de ambiente (.env)
+### 2. Variáveis de ambiente
+
+O runtime em Docker usa dois arquivos separados:
+
+- `.env.api` para API/dashboard
+- `.env.agente` para automação, integrações externas e notificações
 
 ```env
-# PJE
+# .env.agente — PJE
 PJE_URL=https://pje.tjdft.jus.br/...
 PJE_ETIQUETA=SHEILA DE DEUS (TREINAMENTO)
 
-# SISTJWEB
+# .env.agente — SISTJWEB
 SISTJ_URL=https://sistj.tjdft.jus.br/sistj/sistj
 
-# Datajud API
+# .env.agente — Datajud API
 DATAJUD_API_KEY=sua_chave
 DATAJUD_URL=https://api-publica.datajud.cnj.jus.br/api_publica_tjdft/_search
 
-# Dashboard
+# .env.api — Dashboard
 DASHBOARD_USUARIO=admin
 DASHBOARD_SENHA_HASH=$2b$12$...  # bcrypt hash
 
-# Notificação (opcional)
+# .env.api — JWT
+JWT_SECRET_KEY=change-me-in-production-min-32-chars-long-key
+
+# .env.agente — Notificação
 SMTP_HOST=smtp.gmail.com
 SMTP_PORTA=587
 SMTP_USUARIO=...
@@ -68,7 +78,7 @@ EMAIL_DESTINO=...
 PJE e SISTJWEB usam SSO com 2FA. O agente abre um navegador visível quando a
 sessão expira; o usuário faz o login manualmente e o sistema salva o
 `storage_state` para reutilizar a sessão. Não configure usuário ou senha desses
-sistemas em arquivos `.env`.
+sistemas em arquivos `.env.agente`.
 
 > Para gerar o hash bcrypt: `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`
 
@@ -115,8 +125,39 @@ npm run dev
 
 ### Docker (Produção local)
 
+Prefira o wrapper operacional, que prepara o runtime, grava o diagnóstico em
+`dados/support/runtime-diagnostic.json` e interrompe com mensagem simples de
+suporte quando detectar falhas bloqueantes:
+
 ```bash
-docker-compose up -d --build
+./scripts/start-local.sh
+```
+
+Para o preparo HITL das dependências do host, rode:
+
+```bash
+python3 ./scripts/prepare-internal-runtime.py
+```
+
+Esse fluxo:
+
+- relata Node.js, npm, Docker CLI e WSL como presentes/ausentes
+- valida pré-requisitos antes do `docker compose up` sem exigir containers já iniciados
+- pede autorização antes de continuar quando houver dependências faltantes
+- explica a etapa elevada antes de qualquer UAC do WSL
+- persiste `dados/support/runtime-preparation-state.json` para retomada após reboot
+
+Para rodar o preparo/startup sem prompt interativo, forneça a autorização no
+ambiente:
+
+```bash
+SOG_RUNTIME_PREP_AUTHORIZATION=approved ./scripts/start-local.sh
+```
+
+Execução direta continua disponível:
+
+```bash
+docker compose up -d --build
 ```
 
 ### Docker Dev (Hot reload)
@@ -133,29 +174,29 @@ docker-compose -f docker-compose.dev.yml up -d --build
 
 ### Login
 
-Como o `DASHBOARD_SENHA_HASH` no `.env` está com placeholder inválido, o sistema entra em **modo desenvolvimento**:
+Como o `DASHBOARD_SENHA_HASH` no `.env.api` está com placeholder inválido, o sistema entra em **modo desenvolvimento**:
 
 - **Usuário:** `admin`
 - **Senha:** qualquer coisa
 
 > Para definir uma senha real, gere o hash:  
 > `python -c "from passlib.hash import bcrypt; print(bcrypt.hash('sua_senha'))"`  
-> e cole no `.env` como `DASHBOARD_SENHA_HASH`.
+> e cole no `.env.api` como `DASHBOARD_SENHA_HASH`.
 
 ### Comandos úteis
 
 ```bash
 # Ver status dos containers
-docker-compose -f docker-compose.dev.yml ps
+docker compose -f docker-compose.dev.yml ps
 
 # Logs em tempo real
-docker-compose -f docker-compose.dev.yml logs -f api
+docker compose -f docker-compose.dev.yml logs -f api
 
 # Parar tudo
-docker-compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.dev.yml down
 
 # Rebuildar só a API
-docker-compose -f docker-compose.dev.yml up -d --build api
+docker compose -f docker-compose.dev.yml up -d --build api
 ```
 
 ## Testes
@@ -171,13 +212,40 @@ pytest agente/tests/ -v
 pytest api/tests/ -v
 ```
 
+Para validar o `extrator_pdf` com PyMuPDF real em runtime reproduzível, prefira
+o container de QA:
+
+```bash
+./scripts/qa-extrator-pdf.sh
+```
+
+## Playwright no runtime Paperclip
+
+Para diagnosticar e abrir o Chromium cacheado no runtime Paperclip, use:
+
+```bash
+./scripts/playwright-runtime.sh
+./scripts/playwright-runtime.sh https://example.com
+```
+
+Para smoke headless alinhado ao runtime atual, prefira:
+
+```bash
+npx playwright screenshot --browser=chromium 'data:text/html,<title>SOG smoke</title><h1>ok</h1>' /tmp/sog-smoke.png
+```
+
+Se o container Paperclip estiver sem as bibliotecas Linux exigidas pelo
+Chromium, o script falha com a lista exata de `.so` ausentes e os pacotes
+Debian/Ubuntu esperados. Detalhes e estado atual em
+`docs/paperclip-playwright-runtime.md`.
+
 ## Estrutura
 
 ```text
 SOG/
 ├── agente/              # Automação Playwright
 │   ├── src/
-│   │   ├── main.py
+│   │   ├── servico.py
 │   │   ├── config.py
 │   │   ├── regras.py
 │   │   ├── modulos/
@@ -236,7 +304,8 @@ SOG/
 │   └── nginx-dev.conf
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
-└── .env
+├── .env.api
+└── .env.agente
 ```
 
 ## API Endpoints

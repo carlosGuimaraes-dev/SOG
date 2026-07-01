@@ -54,22 +54,25 @@ For multi-step tasks, state a brief plan:
 ## Execução
 
 ```bash
-# Preencha o .env antes de iniciar
-cp .env.example .env
+# Prepare os arquivos de ambiente e diretórios persistentes
+./scripts/prepare-runtime.sh
+
+# Fluxo HITL para dependências do host e retomada após reboot
+python3 ./scripts/prepare-internal-runtime.py
 
 # Build e subida
-docker-compose up --build -d
+docker compose up --build -d
 
 # Logs do agente
 docker logs -f custas-agente
 
 # Execução manual do agente
-docker exec custas-agente python /app/src/main.py
+docker exec custas-agente python /app/src/servico.py
 ```
 
 ## Estrutura
 
-- `agente/` — Python + Playwright (cron horário)
+- `agente/` — Python + Playwright (serviço longo)
 - `api/` — FastAPI (dashboard backend)
 - `frontend/` — React + Vite (dashboard UI)
 - `nginx/` — Proxy reverso
@@ -81,6 +84,6 @@ Ver `agente/src/config.py` para lista completa.
 
 ## Notas
 
-- Playwright roda em headless no container; use `HEADLESS=false` no .env para debug
+- Playwright roda em headless no container; use `HEADLESS=false` no `.env.agente` para debug
 - Screenshots em `/dados/screenshots/{numero}/`
-- Nunca commitar `.env`
+- Nunca commitar `.env.api` ou `.env.agente`

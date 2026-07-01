@@ -17,6 +17,8 @@ services:
       dockerfile: agente/Dockerfile
     container_name: custas-agente
     env_file: .env.agente
+    environment:
+      STORAGE_STATE_DIR: /dados/auth
     volumes:
       - ./dados:/dados
     restart: unless-stopped

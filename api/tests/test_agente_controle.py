@@ -1,6 +1,17 @@
 from sog_shared import db
 
 
+def test_status_sem_registro_orienta_runtime_compose(client, auth_headers):
+    resp = client.get("/api/v1/agente/status", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "desconhecido"
+    assert "Docker Compose" in data["mensagem"]
+    assert "desktop" not in data["mensagem"].lower()
+    assert data["online"] is False
+
+
 def test_iniciar_rejeita_ciclo_concorrente(client, auth_headers):
     db.criar_ou_atualizar_controle_agente(
         comando="iniciar",

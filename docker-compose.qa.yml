@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  agente-qa-extrator-pdf:
+    build:
+      context: .
+      dockerfile: agente/Dockerfile
+      target: qa
+    environment:
+      SOG_EXTRATOR_PDF_REAL: ${SOG_EXTRATOR_PDF_REAL:-/fixtures/Primeiro posso é abris PJe e.pdf}
+    volumes:
+      - ${SOG_QA_PDF_DIR:-./image}:/fixtures:ro

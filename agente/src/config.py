@@ -1,6 +1,6 @@
 """
 Configuração do agente de custas processuais TJDFT.
-Lê variáveis de ambiente do .env
+Lê variáveis de ambiente preferencialmente de .env.agente.
 """
 import os
 from pathlib import Path
@@ -64,13 +64,15 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
 
 
 def init_config():
-    """Inicializa configuração: carrega .env e cria diretórios necessários.
+    """Inicializa configuração: carrega .env.agente/.env e cria diretórios necessários.
     
     Deve ser chamada explicitamente no startup da aplicação.
     """
     global DB_PATH, DADOS_DIR, SCREENSHOTS_DIR, DEMONSTRATIVOS_DIR
 
-    load_dotenv(PROJECT_ROOT / ".env")
+    for env_path in (PROJECT_ROOT / ".env.agente", PROJECT_ROOT / ".env"):
+        if env_path.exists():
+            load_dotenv(env_path)
 
     # Recarrega DB_PATH após load_dotenv, pois pode ter mudado
     _db_path_env = os.getenv("DB_PATH", "")

@@ -1,8 +1,7 @@
-"""
-Testes unitários para o extrator de PDFs judiciais.
-"""
+"""Testes unitários para o extrator de PDFs judiciais."""
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,21 +16,31 @@ from modulos.extrator_pdf import (
 )
 
 
-PDF_REAL = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "docs",
-    "processos",
-    "0732384-63.2024.8.07.0001-1778736791355-34616-processo.pdf",
+def _resolver_pdf_real() -> str:
+    env_path = os.getenv("SOG_EXTRATOR_PDF_REAL", "").strip()
+    candidatos = [
+        Path(env_path) if env_path else None,
+        Path(__file__).resolve().parents[2] / "docs" / "processos" / "0732384-63.2024.8.07.0001-1778736791355-34616-processo.pdf",
+        Path(__file__).resolve().parents[2] / "image" / "Primeiro posso é abris PJe e.pdf",
+    ]
+
+    for candidato in candidatos:
+        if candidato and candidato.exists():
+            return str(candidato)
+
+    return ""
+
+
+MOTIVO_PDF_REAL_AUSENTE = (
+    "PDF real ausente para os testes do extrator. "
+    "Defina SOG_EXTRATOR_PDF_REAL apontando para um PDF judicial com texto selecionável."
 )
 
 
-# ========================================================================
-# TESTES — Extração de PDF real
-# ========================================================================
+PDF_REAL = _resolver_pdf_real()
 
 
+@pytest.mark.skipif(not PDF_REAL, reason=MOTIVO_PDF_REAL_AUSENTE)
 def test_extrair_texto_pdf_real():
     """Extrai texto de um PDF judicial real e valida os campos retornados."""
     resultado = extrair_texto_pdf(PDF_REAL)
@@ -51,6 +60,67 @@ def test_extrair_texto_pdf_real():
     assert "documentos_capa" in resultado
     assert len(resultado["documentos_capa"]) > 0
 
+
+@pytest.mark.skipif(not PDF_REAL, reason=MOTIVO_PDF_REAL_AUSENTE)
+def test_extrair_documentos_capa():
+    """Extrai documentos da capa do PDF real e valida estrutura."""
+    documentos = extrair_documentos_capa(PDF_REAL)
+
+    assert len(documentos) > 0, "Esperado pelo menos 1 documento na capa"
+
+    # Verifica estrutura mínima dos documentos extraídos
+    for doc in documentos:
+        assert "doc_id" in doc
+        assert "data_assinatura" in doc
+        assert "nome" in doc
+        assert "tipo" in doc
+        assert doc["doc_id"].isdigit()
+
+    # Deve haver pelo menos um documento com tipo identificado
+    com_tipo = [d for d in documentos if d["tipo"]]
+    assert len(com_tipo) > 0, "Esperado pelo menos 1 documento com tipo identificado"
+
+    # Tipos relevantes que sabemos existir no PDF real
+    tipos_presentes = {d["tipo"] for d in documentos}
+    assert "Mandado" in tipos_presentes or "Petição Inicial" in tipos_presentes
+
+
+@pytest.mark.skipif(not PDF_REAL, reason=MOTIVO_PDF_REAL_AUSENTE)
+def test_extrair_texto_pdf_inclui_custas_iniciais():
+    """extrair_texto_pdf deve incluir 'custas_iniciais' no dict de retorno."""
+    resultado = extrair_texto_pdf(PDF_REAL)
+    assert "custas_iniciais" in resultado
+    custas = resultado["custas_iniciais"]
+    assert custas["encontrado"] is True
+    assert custas["valor_total"] == "266,95"
+    assert custas["valor_total_centavos"] == 26695
+    assert custas["doc_id"] == "206426308"
+
+
+@pytest.mark.skipif(not PDF_REAL, reason=MOTIVO_PDF_REAL_AUSENTE)
+def test_extrair_custas_iniciais_pdf_real():
+    """Extrai valor das custas iniciais do PDF real (guia na página 53)."""
+    resultado = extrair_custas_iniciais(PDF_REAL)
+
+    assert resultado["encontrado"] is True
+    assert resultado["scanned"] is False
+    assert resultado["valor_total"] == "266,95"
+    assert resultado["valor_total_centavos"] == 26695
+    assert resultado["doc_id"] == "206426308"
+    assert resultado["numero_guia"] == "001-9"
+    assert resultado["vencimento"] == "11/08/2024"
+
+    detalhamento = resultado.get("detalhamento", {})
+    # Deve conter ao menos 4 dos 6 itens esperados
+    assert len(detalhamento) >= 4, f"Esperado >= 4 itens, obtido: {detalhamento}"
+
+    # Valida itens específicos
+    assert detalhamento.get("distribuidor") == "10,74"
+    assert detalhamento.get("mandados") == "8,83"
+    assert detalhamento.get("oficios") == "8,83"
+    assert detalhamento.get("contador") == "13,21"
+    assert detalhamento.get("custas") == "203,16"
+    assert detalhamento.get("diligencias") == "22,18"
 
 # ========================================================================
 # TESTES — Erros
@@ -170,29 +240,6 @@ def test_double_close_nao_ocorre(mock_fitz_open, _mock_exists):
 # ========================================================================
 
 
-def test_extrair_documentos_capa():
-    """Extrai documentos da capa do PDF real e valida estrutura."""
-    documentos = extrair_documentos_capa(PDF_REAL)
-
-    assert len(documentos) > 0, "Esperado pelo menos 1 documento na capa"
-
-    # Verifica estrutura mínima dos documentos extraídos
-    for doc in documentos:
-        assert "doc_id" in doc
-        assert "data_assinatura" in doc
-        assert "nome" in doc
-        assert "tipo" in doc
-        assert doc["doc_id"].isdigit()
-
-    # Deve haver pelo menos um documento com tipo identificado
-    com_tipo = [d for d in documentos if d["tipo"]]
-    assert len(com_tipo) > 0, "Esperado pelo menos 1 documento com tipo identificado"
-
-    # Tipos relevantes que sabemos existir no PDF real
-    tipos_presentes = {d["tipo"] for d in documentos}
-    assert "Mandado" in tipos_presentes or "Petição Inicial" in tipos_presentes
-
-
 def test_isolar_dispositivo_com_palavra_dispositivo():
     """Deve isolar o trecho após 'DISPOSITIVO' até o terminador."""
     texto = (
@@ -235,42 +282,6 @@ def test_isolar_dispositivo_fallback_ultimos_25():
 # ========================================================================
 # TESTES — Extração de custas iniciais
 # ========================================================================
-
-
-def test_extrair_texto_pdf_inclui_custas_iniciais():
-    """extrair_texto_pdf deve incluir 'custas_iniciais' no dict de retorno."""
-    resultado = extrair_texto_pdf(PDF_REAL)
-    assert "custas_iniciais" in resultado
-    custas = resultado["custas_iniciais"]
-    assert custas["encontrado"] is True
-    assert custas["valor_total"] == "266,95"
-    assert custas["valor_total_centavos"] == 26695
-    assert custas["doc_id"] == "206426308"
-
-
-def test_extrair_custas_iniciais_pdf_real():
-    """Extrai valor das custas iniciais do PDF real (guia na página 53)."""
-    resultado = extrair_custas_iniciais(PDF_REAL)
-
-    assert resultado["encontrado"] is True
-    assert resultado["scanned"] is False
-    assert resultado["valor_total"] == "266,95"
-    assert resultado["valor_total_centavos"] == 26695
-    assert resultado["doc_id"] == "206426308"
-    assert resultado["numero_guia"] == "001-9"
-    assert resultado["vencimento"] == "11/08/2024"
-
-    detalhamento = resultado.get("detalhamento", {})
-    # Deve conter ao menos 4 dos 6 itens esperados
-    assert len(detalhamento) >= 4, f"Esperado >= 4 itens, obtido: {detalhamento}"
-
-    # Valida itens específicos
-    assert detalhamento.get("distribuidor") == "10,74"
-    assert detalhamento.get("mandados") == "8,83"
-    assert detalhamento.get("oficios") == "8,83"
-    assert detalhamento.get("contador") == "13,21"
-    assert detalhamento.get("custas") == "203,16"
-    assert detalhamento.get("diligencias") == "22,18"
 
 
 def test_extrair_valor_guia_sem_detalhamento():

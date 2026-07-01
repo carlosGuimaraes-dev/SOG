@@ -11,6 +11,7 @@ from auth import get_current_user
 from limiter import limiter
 from schemas import AgenteStatusResponse, AgenteComandoResponse, CicloAgenteResponse
 from sog_shared import db
+from sog_shared.runtime_diagnostics import load_report
 
 router = APIRouter(prefix="/agente", tags=["agente"])
 
@@ -54,12 +55,17 @@ def status_agente(
     user: str = Depends(get_current_user),
 ):
     controle = db.obter_controle_agente()
+    runtime_diagnostic = load_report()
     if not controle:
         return {
             "status": "desconhecido",
-            "mensagem": "Agente não registrado. Execute o aplicativo no desktop.",
+            "mensagem": (
+                "Agente não registrado. Inicie o serviço `agente` no Docker Compose "
+                "e acompanhe os logs do container para diagnosticar a inicialização."
+            ),
             "atualizado_em": None,
             "online": False,
+            "runtime_diagnostic": runtime_diagnostic,
         }
 
     online = False
@@ -98,6 +104,7 @@ def status_agente(
         "pode_iniciar": controle["status"] not in db.ESTADOS_CICLO_ATIVO,
         "pode_parar": controle["status"] in db.ESTADOS_CICLO_ATIVO,
         "relogin_required": controle["status"] == "aguardando_login",
+        "runtime_diagnostic": runtime_diagnostic,
     }
 
 

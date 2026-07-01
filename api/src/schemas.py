@@ -158,6 +158,7 @@ class AgenteStatusResponse(BaseModel):
     pode_iniciar: bool = True
     pode_parar: bool = False
     relogin_required: bool = False
+    runtime_diagnostic: Optional[Dict[str, Any]] = None
 
 
 class AgenteComandoResponse(BaseModel):

@@ -10,6 +10,8 @@ services:
       dockerfile: agente/Dockerfile
     container_name: custas-agente-dev
     env_file: .env.agente
+    environment:
+      STORAGE_STATE_DIR: /dados/auth
     volumes:
       - ./dados:/dados
       - ./agente/src:/app/src:ro
