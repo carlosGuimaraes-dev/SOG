@@ -69,6 +69,11 @@ from modulos.selectors import (
     VALOR_TOTAL_RECOLHER_SIBLING,
 )
 
+_URLS_SSO_PENDENTES = (
+    "sso.tjdft.jus.br",
+    "login.microsoftonline.com",
+)
+
 
 def _formatar_data(data_iso: str) -> str:
     """Converte YYYY-MM-DD para DD/MM/AAAA."""
@@ -258,17 +263,11 @@ class SistjClient(PlaywrightClient):
 
             # Indicador 3: URL final do SISTJWEB; telas SSO ainda exigem ação humana.
             url = page.url.lower()
-            bloqueadores_login = [
-                "login.microsoftonline.com",
-                "sso.tjdft.jus.br",
-                "login",
-                "autentica",
-                "openid-connect",
-                "auth/realms",
-            ]
-            if any(marcador in url for marcador in bloqueadores_login):
+            if any(fragmento in url for fragmento in _URLS_SSO_PENDENTES):
                 return False
-            if "sistj.tjdft.jus.br" in url:
+            if any(marcador in url for marcador in ["login", "autentica", "openid-connect", "auth/realms"]):
+                return False
+            if "sistj.tjdft.jus.br" in url or ("login" not in url and "autentica" not in url):
                 return True
 
             return False

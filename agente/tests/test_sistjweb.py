@@ -16,6 +16,23 @@ class _FakePage:
         self.load_states.append(state)
 
 
+class _FakeLocator:
+    def __init__(self, count=0):
+        self._count = count
+
+    def count(self):
+        return self._count
+
+
+class _FakeLoginPage:
+    def __init__(self, url: str, selectors=None):
+        self.url = url
+        self._selectors = selectors or {}
+
+    def locator(self, selector: str):
+        return _FakeLocator(self._selectors.get(selector, 0))
+
+
 def test_preencher_retorna_etapas_ordenadas_e_dados_de_saida(monkeypatch):
     cliente = SistjClient()
     cliente._auth.page = _FakePage()
@@ -86,3 +103,17 @@ def test_preencher_indica_etapa_que_falhou(monkeypatch):
 
     with pytest.raises(RuntimeError, match="outros_itens"):
         cliente.preencher({}, "0000001-00.2024.8.07.0001")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://sso.tjdft.jus.br/auth/realms/tjdft/protocol/openid-connect/auth",
+        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    ],
+)
+def test_esta_logado_trata_urls_sso_como_login_pendente(url):
+    cliente = SistjClient()
+    page = _FakeLoginPage(url)
+
+    assert cliente._esta_logado(page) is False

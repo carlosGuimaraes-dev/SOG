@@ -1,7 +1,9 @@
 """
 Gerenciador de autenticacao Playwright baseado no profile persistente do SOG.
 """
+import asyncio
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -62,6 +64,21 @@ class AuthManager:
             self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
         self.page.set_default_timeout(TIMEOUT_PADRAO)
 
+    @staticmethod
+    def _tem_loop_asyncio_ativo() -> bool:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        return True
+
+    def _executar_fora_do_loop_asyncio(self, func: Callable, *args, **kwargs):
+        if not self._tem_loop_asyncio_ativo():
+            return func(*args, **kwargs)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(func, *args, **kwargs)
+            return future.result()
+
     def verificar_e_autenticar(
         self,
         url: str,
@@ -70,6 +87,21 @@ class AuthManager:
         interativo_timeout_ms: int = 600_000,
     ) -> bool:
         """Verifica a sessao atual e cai no fluxo interativo se necessario."""
+        return self._executar_fora_do_loop_asyncio(
+            self._verificar_e_autenticar_sync,
+            url,
+            verificar_sucesso_fn,
+            accept_downloads,
+            interativo_timeout_ms,
+        )
+
+    def _verificar_e_autenticar_sync(
+        self,
+        url: str,
+        verificar_sucesso_fn: Callable[[Page], bool],
+        accept_downloads: bool = False,
+        interativo_timeout_ms: int = 600_000,
+    ) -> bool:
         self.iniciar(accept_downloads=accept_downloads)
         self.page.goto(url, wait_until="networkidle")
         self.page.wait_for_timeout(2000)
@@ -95,6 +127,23 @@ class AuthManager:
         manter_aberto_apos_login: bool = False,
     ) -> bool:
         """Sempre abre o fluxo interativo visivel."""
+        return self._executar_fora_do_loop_asyncio(
+            self._forcar_reautenticacao_interativa_sync,
+            url,
+            verificar_sucesso_fn,
+            accept_downloads,
+            interativo_timeout_ms,
+            manter_aberto_apos_login,
+        )
+
+    def _forcar_reautenticacao_interativa_sync(
+        self,
+        url: str,
+        verificar_sucesso_fn: Callable[[Page], bool],
+        accept_downloads: bool = False,
+        interativo_timeout_ms: int = 600_000,
+        manter_aberto_apos_login: bool = False,
+    ) -> bool:
         self.fechar()
         self._fallback_interativo(
             url,
