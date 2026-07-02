@@ -1,5 +1,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock
+import asyncio
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -152,6 +153,7 @@ def test_fallback_interativo_usa_contexto_persistente(tmp_path, monkeypatch):
     context.pages = [page]
 
     chromium = MagicMock()
+    chromium.connect_over_cdp.side_effect = RuntimeError("ECONNREFUSED")
     chromium.launch_persistent_context.return_value = context
 
     runner = MagicMock()
@@ -209,3 +211,40 @@ def test_pje_reautenticacao_interativa_mantem_sessao_aberta():
     _, kwargs = cliente._auth.forcar_reautenticacao_interativa.call_args
     assert kwargs["accept_downloads"] is True
     assert kwargs["manter_aberto_apos_login"] is True
+
+
+def test_sistj_garantir_autenticado_nao_inicia_sync_playwright_no_loop_asyncio(monkeypatch):
+    from modulos.sistjweb import SistjClient
+
+    page = MagicMock()
+    page.url = "https://sistj.example/home"
+
+    context = MagicMock()
+    context.browser = MagicMock()
+    context.pages = [page]
+
+    chromium = MagicMock()
+    chromium.connect_over_cdp.side_effect = RuntimeError("ECONNREFUSED")
+    chromium.launch_persistent_context.return_value = context
+
+    runner = MagicMock()
+    runner.chromium = chromium
+    runner.start.return_value = runner
+
+    def _sync_playwright():
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return runner
+        raise AssertionError("sync_playwright chamado no loop asyncio")
+
+    monkeypatch.setattr("modulos.auth_manager.sync_playwright", _sync_playwright)
+
+    cliente = SistjClient()
+    cliente._esta_logado = MagicMock(return_value=True)
+
+    async def _executar():
+        return cliente.garantir_autenticado()
+
+    assert asyncio.run(_executar()) is True
+    chromium.launch_persistent_context.assert_called_once()
