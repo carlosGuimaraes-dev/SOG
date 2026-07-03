@@ -14,6 +14,7 @@ Regras de seletor aplicadas:
 
 import re
 from typing import Dict, Any, List
+from urllib.parse import urlparse
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
 
@@ -73,6 +74,10 @@ _URLS_SSO_PENDENTES = (
     "sso.tjdft.jus.br",
     "login.microsoftonline.com",
 )
+
+
+def _hostname_sistj_configurado() -> str:
+    return (urlparse(SISTJ_URL).hostname or "").lower()
 
 
 def _formatar_data(data_iso: str) -> str:
@@ -229,6 +234,18 @@ class SistjClient(PlaywrightClient):
     def _esta_logado(self, page: Page) -> bool:
         """Retorna True se a página indicar que o usuário está logado no SISTJWEB."""
         try:
+            url = page.url.lower()
+            if any(fragmento in url for fragmento in _URLS_SSO_PENDENTES):
+                return False
+
+            hostname = (urlparse(url).hostname or "").lower()
+            hostname_configurado = _hostname_sistj_configurado()
+            if hostname_configurado:
+                if hostname != hostname_configurado:
+                    return False
+            elif "sistj" not in hostname:
+                return False
+
             # Indicador 1: ausência de campos de login
             try:
                 user_inputs = page.locator(
@@ -260,16 +277,6 @@ class SistjClient(PlaywrightClient):
                         return True
             except Exception:
                 pass
-
-            # Indicador 3: URL final do SISTJWEB; telas SSO ainda exigem ação humana.
-            url = page.url.lower()
-            if any(fragmento in url for fragmento in _URLS_SSO_PENDENTES):
-                return False
-            if any(marcador in url for marcador in ["login", "autentica", "openid-connect", "auth/realms"]):
-                return False
-            if "sistj.tjdft.jus.br" in url or ("login" not in url and "autentica" not in url):
-                return True
-
             return False
         except Exception as exc:
             aviso(f"Erro ao verificar estado de login no SISTJWEB: {exc}")

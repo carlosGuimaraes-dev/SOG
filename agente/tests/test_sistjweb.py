@@ -117,3 +117,24 @@ def test_esta_logado_trata_urls_sso_como_login_pendente(url):
     page = _FakeLoginPage(url)
 
     assert cliente._esta_logado(page) is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://pje.tjdft.jus.br/pje/Processo/Consulta/listView.seam",
+        "https://example.com/qualquer-coisa",
+    ],
+)
+def test_esta_logado_rejeita_aba_que_nao_e_do_sistjweb(url):
+    cliente = SistjClient()
+    page = _FakeLoginPage(url)
+
+    assert cliente._esta_logado(page) is False
+
+
+def test_esta_logado_nao_considera_sessao_valida_sem_indicador_da_area_logada():
+    cliente = SistjClient()
+    page = _FakeLoginPage("https://sistj.tjdft.jus.br/sistj/sistj")
+
+    assert cliente._esta_logado(page) is False
