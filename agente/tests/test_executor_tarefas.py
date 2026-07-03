@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from modulos.auth_manager import ReautenticacaoNecessariaError
 from modulos.executor_tarefas import registrar, executar_tarefa, tipos_suportados
 
@@ -64,7 +63,6 @@ class TestExecutarTarefa:
         assert resultado["payload_is_dict"] is True
 
     def test_executar_verificar_sessao_pje(self):
-        """Testa o handler placeholder de verificar_sessao_pje."""
         pje_mock = MagicMock()
         pje_mock._esta_logado.return_value = True
         pje_mock.page.url = "https://pje.tjdft.jus.br/"
@@ -74,11 +72,11 @@ class TestExecutarTarefa:
         resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
 
         assert resultado["logado"] is True
+        assert resultado["estado"] == "active"
         assert resultado["url_atual"] == "https://pje.tjdft.jus.br/"
         pje_mock._esta_logado.assert_called_once_with(pje_mock.page)
 
     def test_executar_verificar_sessao_pje_erro(self):
-        """Testa que o handler placeholder trata exceção graciosamente."""
         pje_mock = MagicMock()
         pje_mock._esta_logado.side_effect = Exception("browser fechado")
         sistj_mock = MagicMock()
@@ -87,7 +85,20 @@ class TestExecutarTarefa:
         resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
 
         assert resultado["logado"] is False
+        assert resultado["estado"] == "unavailable"
         assert resultado["url_atual"] is None
+
+    def test_executar_verificar_sessao_pje_independe_do_sistj(self):
+        pje_mock = MagicMock()
+        pje_mock._esta_logado.return_value = False
+        pje_mock.page.url = "https://pje.tjdft.jus.br/login"
+
+        tarefa = {"tipo": "verificar_sessao_pje", "payload": {}}
+        resultado = executar_tarefa(tarefa, pje_mock, None)
+
+        assert resultado["estado"] == "expired"
+        assert resultado["logado"] is False
+        pje_mock._esta_logado.assert_called_once_with(pje_mock.page)
 
     def test_executar_consultar_etiqueta_pje(self):
         pje_mock = MagicMock()
@@ -111,9 +122,32 @@ class TestExecutarTarefa:
         resultado = executar_tarefa(tarefa, pje_mock, sistj_mock)
 
         assert resultado["logado"] is True
+        assert resultado["estado"] == "active"
         assert resultado["url_atual"] == "https://sistj.tjdft.jus.br/"
         sistj_mock._esta_logado.assert_called_once_with(sistj_mock.page)
 
+    def test_executar_verificar_sessao_sistj_expira_quando_a_aba_nao_e_do_sistema(self):
+        from modulos.sistjweb import SistjClient
+
+        class _FakeLocator:
+            def count(self):
+                return 0
+
+        class _FakePage:
+            url = "https://pje.tjdft.jus.br/pje/Processo/Consulta/listView.seam"
+
+            def locator(self, _selector):
+                return _FakeLocator()
+
+        sistj = SistjClient()
+        sistj._auth.page = _FakePage()
+
+        tarefa = {"tipo": "verificar_sessao_sistj", "payload": {}}
+        resultado = executar_tarefa(tarefa, None, sistj)
+
+        assert resultado["estado"] == "expired"
+        assert resultado["logado"] is False
+        assert resultado["url_atual"] == _FakePage.url
     def test_executar_reautenticar_pje_sinaliza_sessao_pendente(self):
         pje_mock = MagicMock()
         sistj_mock = MagicMock()
@@ -124,7 +158,6 @@ class TestExecutarTarefa:
             executar_tarefa(tarefa, pje_mock, sistj_mock)
 
         pje_mock.reautenticar_interativo.assert_not_called()
-
     def test_executar_reautenticar_sistj_sinaliza_sessao_pendente(self):
         pje_mock = MagicMock()
         sistj_mock = MagicMock()
