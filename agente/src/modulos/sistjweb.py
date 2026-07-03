@@ -76,6 +76,10 @@ _URLS_SSO_PENDENTES = (
 )
 
 
+def _hostname_sistj_configurado() -> str:
+    return (urlparse(SISTJ_URL).hostname or "").lower()
+
+
 def _formatar_data(data_iso: str) -> str:
     """Converte YYYY-MM-DD para DD/MM/AAAA."""
     if not data_iso:
@@ -235,7 +239,11 @@ class SistjClient(PlaywrightClient):
                 return False
 
             hostname = (urlparse(url).hostname or "").lower()
-            if "sistj" not in hostname:
+            hostname_configurado = _hostname_sistj_configurado()
+            if hostname_configurado:
+                if hostname != hostname_configurado:
+                    return False
+            elif "sistj" not in hostname:
                 return False
 
             # Indicador 1: ausência de campos de login

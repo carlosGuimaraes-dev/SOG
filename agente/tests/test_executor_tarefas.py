@@ -148,6 +148,44 @@ class TestExecutarTarefa:
         assert resultado["estado"] == "expired"
         assert resultado["logado"] is False
         assert resultado["url_atual"] == _FakePage.url
+    def test_executar_verificar_sessao_sistj_aceita_host_configurado_sem_literal_sistj(
+        self, monkeypatch
+    ):
+        import modulos.sistjweb as sistjweb_module
+        from modulos.sistjweb import SistjClient
+
+        class _FakeLocator:
+            def __init__(self, count):
+                self._count = count
+
+            def count(self):
+                return self._count
+
+        class _FakePage:
+            url = "https://custas.tjdft.jus.br/sistj/atualizarCustas.seam"
+
+            def locator(self, selector):
+                selectors = {
+                    "input[name='j_username'], input[name='username'], #username": 0,
+                    "input[type='password'], input[name='j_password'], #password": 0,
+                    "a:has-text('Custas')": 1,
+                }
+                return _FakeLocator(selectors.get(selector, 0))
+
+        monkeypatch.setattr(
+            sistjweb_module,
+            "SISTJ_URL",
+            "https://custas.tjdft.jus.br/sistj/sistj",
+        )
+        sistj = SistjClient()
+        sistj._auth.page = _FakePage()
+
+        tarefa = {"tipo": "verificar_sessao_sistj", "payload": {}}
+        resultado = executar_tarefa(tarefa, None, sistj)
+
+        assert resultado["estado"] == "active"
+        assert resultado["logado"] is True
+        assert resultado["url_atual"] == _FakePage.url
     def test_executar_reautenticar_pje_sinaliza_sessao_pendente(self):
         pje_mock = MagicMock()
         sistj_mock = MagicMock()
